@@ -1,0 +1,53 @@
+rules_version = '2';
+
+// ============================================================================
+// Security model (docs/ARCHITECTURE.md: "server-side only persistence")
+// ============================================================================
+//
+// The Firebase client SDK is NEVER used for `apologies` or `accessTokens`.
+// Nothing in the browser (or a mobile app, or the REST API) reads these
+// collections directly. Every access goes through this app's own /api route
+// handlers, which run on the server with `firebase-admin` and enforce
+// ownership (`ownerKeyHash`), publication status and token validity before
+// anything is returned.
+//
+// The Admin SDK authenticates with a service account and bypasses these rules
+// entirely — that is exactly why "allow read: if false" is safe here: it closes
+// the data to every direct client while leaving the server path working.
+//
+// Consequences:
+//   * A published letter is still not publicly readable from Firestore. The
+//     recipient reads GET /api/letters/[token], which re-checks that the record
+//     is `published` (revoked tokens answer 410).
+//   * Drafts and their `accessToken`/`ownerKeyHash` never leave the server.
+//   * Uploaded photos/audio live on the app's own filesystem, not in Firestore.
+//
+// Any new collection must be added below with explicit rules; the catch-all at
+// the bottom denies everything that is not listed.
+// ============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Apology records: drafts, published letters and revoked letters alike.
+    // No public read at all — not even for published records. All access is
+    // server-side through the Admin SDK, which bypasses these rules.
+    match /apologies/{id} {
+      allow read: if false;
+      allow write: if false;
+    }
+
+    // Token -> apology document index. Tokens are bearer secrets: a client must
+    // never be able to read them, list them, or probe whether one exists.
+    // Only the server resolves a token, and only for a published record.
+    match /accessTokens/{token} {
+      allow read: if false;
+      allow write: if false;
+    }
+
+    // Default deny. Nothing becomes readable by accident.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

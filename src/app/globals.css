@@ -1,26 +1,153 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-playfair);
+  --font-hand: var(--font-caveat);
+  --font-body: var(--font-nunito);
+  --font-sans: var(--font-inter);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-ink: #2c1e3f;
+  --color-ink-soft: #6b5a7d;
+  --color-lilac: #f3eefb;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  --shell-bg: #f7f4fb;
+  --shell-ink: #2c1e3f;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  color-scheme: light;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  background: var(--shell-bg);
+  color: var(--shell-ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: #d9c7f5;
+  color: #241733;
+}
+
+:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--ring, #7c4ddb) 85%, black);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@keyframes cc-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(var(--r, 0deg));
+  }
+  50% {
+    transform: translate3d(0, calc(var(--float-y, 10px) * -1), 0)
+      rotate(calc(var(--r, 0deg) + 3deg));
+  }
+}
+
+@keyframes cc-sway {
+  0%,
+  100% {
+    transform: rotate(calc(var(--r, 0deg) - 2deg));
+  }
+  50% {
+    transform: rotate(calc(var(--r, 0deg) + 2deg));
+  }
+}
+
+@keyframes cc-twinkle {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes cc-drift {
+  0% {
+    transform: translate3d(-6vw, 0, 0) rotate(0deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: var(--o, 0.7);
+  }
+  85% {
+    opacity: var(--o, 0.7);
+  }
+  100% {
+    transform: translate3d(106vw, -8vh, 0) rotate(18deg);
+    opacity: 0;
+  }
+}
+
+@keyframes cc-rise {
+  0% {
+    transform: translate3d(0, 10vh, 0) scale(0.9);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(var(--dx, 0px), -100vh, 0) scale(1.05);
+    opacity: 0;
+  }
+}
+
+@keyframes cc-blink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(0.08);
+  }
+}
+
+@keyframes cc-breathe {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-1.5%) scale(1.012);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
