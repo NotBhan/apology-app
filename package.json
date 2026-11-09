@@ -22,6 +22,7 @@
     "@aws-sdk/s3-request-presigner": "^3.1164.0",
     "@neon/env": "^2.1.0",
     "@neon/functions": "^0.11.0",
+    "@neondatabase/auth": "^0.7.0-beta",
     "@neondatabase/serverless": "^1.2.0",
     "@rive-app/react-canvas": "^4.38.1",
     "clsx": "^2.1.1",

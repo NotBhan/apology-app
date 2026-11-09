@@ -50,7 +50,9 @@ export function rowToRecord(row: ApologyRow, accessToken = ""): ApologyRecord {
   return {
     id: row.id,
     accessToken,
-    ownerKeyHash: row.ownerKeyHash,
+    // Empty means "no legacy device binding"; rows created under Neon Auth
+    // carry a user id instead.
+    ownerKeyHash: row.ownerKeyHash ?? "",
     recipientName: row.recipientName,
     senderName: row.senderName,
     situation: row.situation as ApologyRecord["situation"],
@@ -426,7 +428,7 @@ export class PostgresRepository implements ApologyRepository {
     if (!row) return undefined;
     return {
       ...rowToAsset(row.asset),
-      ownerKeyHash: row.ownerKeyHash,
+      ownerKeyHash: row.ownerKeyHash ?? "",
       apologyStatus: row.status,
       expiresAt: iso(row.expiresAt) ?? null,
     };

@@ -30,7 +30,17 @@ export const apologies = pgTable(
   "apologies",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    ownerKeyHash: text("owner_key_hash").notNull(),
+    /**
+     * Neon Auth user id. Authoritative when set.
+     *
+     * `owner_key_hash` below is the pre-auth, device-scoped identity. It stays
+     * as a separate nullable column rather than being repurposed: a verified
+     * user id and an unverified cookie hash are not interchangeable, and rows
+     * written before Neon Auth existed keep their original binding until a
+     * signed-in holder of that cookie explicitly claims them.
+     */
+    userId: text("user_id"),
+    ownerKeyHash: text("owner_key_hash"),
 
     recipientName: text("recipient_name").notNull(),
     senderName: text("sender_name").notNull(),
@@ -57,6 +67,7 @@ export const apologies = pgTable(
   },
   (table) => [
     index("apologies_owner_updated_idx").on(table.ownerKeyHash, table.updatedAt.desc()),
+    index("apologies_user_updated_idx").on(table.userId, table.updatedAt.desc()),
     index("apologies_expiry_idx")
       .on(table.expiresAt)
       .where(sql`${table.status} = 'published'`),
