@@ -15,6 +15,7 @@ import type { ApologyAssetRow, ApologyRow } from "@/db/schema";
 import type {
   ApologyRepository,
   AssetRecord,
+  DraftOwner,
   ReserveAssetInput,
   ServingAsset,
 } from "./types";
@@ -92,13 +93,16 @@ export class PostgresRepository implements ApologyRepository {
   }
 
   async createDraft(
-    ownerKeyHash: string,
+    owner: DraftOwner,
     seed: { recipientName: string; senderName: string },
   ): Promise<ApologyRecord> {
     const [row] = await this.db
       .insert(apologies)
       .values({
-        ownerKeyHash,
+        // Ownership is written from the verified session only; there is no
+        // request-supplied path to either column.
+        userId: owner.userId,
+        ownerKeyHash: owner.legacyKey ?? null,
         recipientName: seed.recipientName,
         senderName: seed.senderName,
         situation: "other",

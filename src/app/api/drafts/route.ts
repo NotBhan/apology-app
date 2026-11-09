@@ -47,7 +47,10 @@ export async function POST(request: Request) {
     if (!authz.ok) return authz.response;
 
     const repository = await getRepository();
-    const record = await repository.createDraft(authz.creator.key, parsed.data);
+    const record = await repository.createDraft(
+      { userId: authz.creator.userId, legacyKey: authz.creator.legacyKey },
+      parsed.data,
+    );
     return jsonOk({ draft: toCreatorDraft(record) }, 201);
   } catch (error) {
     return repositoryErrorResponse(error);

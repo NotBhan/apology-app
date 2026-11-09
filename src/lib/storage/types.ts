@@ -40,9 +40,16 @@ export interface ReserveAssetInput {
   maxAssets: number;
 }
 
+export interface DraftOwner {
+  /** Verified Neon Auth user id. Always server-derived. */
+  userId: string;
+  /** Legacy hash, only when the creator still holds a pre-auth cookie. */
+  legacyKey?: string;
+}
+
 export interface ApologyRepository {
   createDraft(
-    ownerKeyHash: string,
+    owner: DraftOwner,
     seed: { recipientName: string; senderName: string },
   ): Promise<ApologyRecord>;
 

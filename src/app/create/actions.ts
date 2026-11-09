@@ -3,7 +3,8 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { getOrCreateOwner, getOwner } from "@/lib/security/owner";
+import { getOwner } from "@/lib/security/owner";
+import { getCreator } from "@/lib/security/creator";
 import { getObjectStore, getRepository } from "@/lib/storage";
 import { sanitiseStorageError } from "@/lib/storage/filebase-errors";
 import {
@@ -43,11 +44,16 @@ export async function startDraftAction(): Promise<void> {
   );
   if (!limit.allowed) redirect("/create?limited=1");
 
-  const owner = await getOrCreateOwner();
-  const record = await getRepository().createDraft(owner.hash, {
-    recipientName: "",
-    senderName: "",
-  });
+  const creator = await getCreator();
+  if (!creator) redirect("/auth/sign-in?callbackURL=%2Fcreate");
+
+  const record = await getRepository().createDraft(
+    { userId: creator.userId, legacyKey: creator.legacyKey },
+    {
+      recipientName: "",
+      senderName: "",
+    },
+  );
   redirect(`/create/${record.id}`);
 }
 
