@@ -40,15 +40,15 @@ observed.
 
 | # | Check | How it is proven | Status |
 | --- | --- | --- | --- |
-| V1 | Function Triggers exist on this project | `neon triggers list --output json` returns the `hourly-cleanup` trigger with a `Next Run At` | ⏳ not run |
-| V2 | The trigger actually fires | `neon logs query --source function --since 2h` shows a cleanup invocation after the scheduled time | ⏳ not run |
-| V3 | Outbound HTTPS to Filebase works from the isolate | acceptance suite `head()` on a real object returns `exists: true` from inside the function's environment; locally it proves credentials + endpoint + region | ⏳ not run |
-| V4 | Trigger delivery authenticates | a delivery carrying `x-neon-trigger-invocation-id` matching body `invocation_id` is accepted; a manual call without `x-cleanup-secret` is rejected `401` | ⏳ not run |
-| E2E | Real deletion end to end | create → upload → publish → expire → `runCleanup` → object gone from Filebase, row gone from Neon, tombstone written | ⏳ not run |
-| RETRY | Retry after a transient failure | first delete call throws `SlowDown`; record and object survive; second run completes | ⏳ not run |
-| PRESIGN | Pre-signed media in a browser-equivalent fetch | `fetch(presignGet(key, 60))` → `200` with bytes; a 1-second URL → `403` after expiry | ⏳ not run |
-| EVENTUAL | Expired records and objects eventually removed | batch of three expired letters; one cleanup run leaves none in either system | ⏳ not run |
-| STRAND | Crash after object deletion cannot strand a job | `finalize` throws after `DeleteObjects`; record and job remain leased; after the lease elapses the next run completes | ✅ hermetic · ⏳ live |
+| V1 | Function Triggers exist on this project | `neon triggers list --output json` returns the `hourly-cleanup` trigger with a `Next Run At` | ✅ 2026-11-09 |
+| V2 | The trigger actually fires | `neon logs query --source function --since 2h` shows a cleanup invocation after the scheduled time | ✅ 2026-11-09, delivery at 12:17:00Z |
+| V3 | Outbound HTTPS to Filebase works from the isolate | acceptance suite `head()` on a real object returns `exists: true` from inside the function's environment; locally it proves credentials + endpoint + region | ✅ 2026-11-09, deployed function deleted a real object |
+| V4 | Trigger delivery authenticates | a delivery carrying `x-neon-trigger-invocation-id` matching body `invocation_id` is accepted; a manual call without `x-cleanup-secret` is rejected `401` | ✅ 2026-11-09, `401` / `401` / `200` |
+| E2E | Real deletion end to end | create → upload → publish → expire → `runCleanup` → object gone from Filebase, row gone from Neon, tombstone written | ✅ 2026-11-09 |
+| RETRY | Retry after a transient failure | first delete call throws `SlowDown`; record and object survive; second run completes | ✅ 2026-11-09 |
+| PRESIGN | Pre-signed media in a browser-equivalent fetch | `fetch(presignGet(key, 60))` → `200` with bytes; a 1-second URL → `403` after expiry | ✅ 2026-11-09, server-side fetch |
+| EVENTUAL | Expired records and objects eventually removed | batch of three expired letters; one cleanup run leaves none in either system | ✅ 2026-11-09 |
+| STRAND | Crash after object deletion cannot strand a job | `finalize` throws after `DeleteObjects`; record and job remain leased; after the lease elapses the next run completes | ✅ hermetic · ✅ live |
 
 ### The stranding check, precisely
 

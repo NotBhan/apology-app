@@ -38,28 +38,34 @@ note "storage bucket: ${FILEBASE_BUCKET}"
 note "storage endpoint: ${FILEBASE_ENDPOINT:-https://s3.filebase.io}"
 note "storage region: ${FILEBASE_REGION:-auto}"
 
+# The gate checks need the Neon CLI. Missing tooling fails the run rather than
+# downgrading V1/V2 to "SKIPPED" and still exiting 0.
+if command -v neon >/dev/null 2>&1; then
+  NEON_CMD=(neon)
+elif command -v npx >/dev/null 2>&1; then
+  NEON_CMD=(npx --yes neon@latest)
+else
+  fail "cannot verify V1/V2: neither 'neon' nor 'npx' is available"
+fi
+
 # -------------------------------------------------------- V1: trigger exists
 echo "== V1: function triggers available on this project =="
-if command -v neon >/dev/null 2>&1; then
-  if neon triggers list --output json > /tmp/triggers.json 2>/tmp/triggers.err; then
-    note "V1 PASS: \`neon triggers list\` succeeded"
-    note "\`\`\`json"
-    sed 's/^/  /' /tmp/triggers.json >> "${OUT}"
-    note "\`\`\`"
-    python3 - <<'PY' >> "${OUT}" 2>/dev/null || true
+if "${NEON_CMD[@]}" triggers list --output json > /tmp/triggers.json 2>/tmp/triggers.err; then
+  note "V1 PASS: \`neon triggers list\` succeeded"
+  note "\`\`\`json"
+  sed 's/^/  /' /tmp/triggers.json >> "${OUT}"
+  note "\`\`\`"
+  python3 - <<'PY' >> "${OUT}" 2>/dev/null || true
 import json
 data = json.load(open("/tmp/triggers.json"))
 items = data if isinstance(data, list) else data.get("triggers", [])
 for t in items:
     print(f"- trigger `{t.get('name')}` next run: {t.get('nextRunAt') or t.get('next_run_at')}")
 PY
-  else
-    note "V1 FAIL: \`neon triggers list\` errored"
-    sed 's/^/  /' /tmp/triggers.err >> "${OUT}"
-    fail "V1 failed — see ${OUT}"
-  fi
 else
-  note "V1 SKIPPED: neon CLI not installed"
+  note "V1 FAIL: \`neon triggers list\` errored"
+  sed 's/^/  /' /tmp/triggers.err >> "${OUT}"
+  fail "V1 failed — see ${OUT}"
 fi
 
 # ------------------------------------------------ V3/V4 + end-to-end deletion
@@ -69,27 +75,40 @@ note "V3/V4/end-to-end PASS: acceptance suite green"
 
 # ------------------------------------------------------- V2/V5: it actually ran
 echo "== V2/V5: trigger fired =="
-if command -v neon >/dev/null 2>&1; then
-  neon logs query --source function --since 2h > /tmp/function-logs.txt 2>&1 || true
-  if grep -qi "cleanup" /tmp/function-logs.txt; then
-    note "V2 PASS: cleanup invocations present in the last 2h"
-  else
-    note "V2 UNVERIFIED: no cleanup invocation in the last 2h (the schedule may not have fired yet)"
-  fi
-  note "\`\`\`"
-  tail -n 40 /tmp/function-logs.txt >> "${OUT}" || true
-  note "\`\`\`"
+"${NEON_CMD[@]}" logs query --branch production --source function --since 2h > /tmp/function-logs.txt 2>&1 || true
+if grep -q "trigger delivery" /tmp/function-logs.txt; then
+  note "V2 PASS: a scheduled delivery reached the function"
+  v2_ok=1
 else
-  note "V2 SKIPPED: neon CLI not installed"
+  note "V2 UNVERIFIED: no scheduled delivery in the last 2h; a manual invocation does not satisfy this gate"
+  v2_ok=0
 fi
+note "\`\`\`"
+tail -n 40 /tmp/function-logs.txt >> "${OUT}" || true
+note "\`\`\`"
+[ "${v2_ok}" = "1" ] || fail "V2 is not verified — see ${OUT}"
 
 # --------------------------------------------------------------- operator path
 echo "== manual invocation is authenticated =="
+# A cold function or a dropped connection can fail before any HTTP status is
+# returned. Retry those; a real status is reported as-is.
+post_cleanup() {
+  local secret="$1" code attempt
+  for attempt in 1 2 3; do
+    code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "${NEON_FUNCTION_URL}" \
+      -H "x-cleanup-secret: ${secret}" 2>/dev/null) || code="000"
+    if [ "${code}" != "000" ]; then
+      printf '%s' "${code}"
+      return 0
+    fi
+    sleep 1
+  done
+  printf '%s' "${code}"
+}
+
 if [ -n "${NEON_FUNCTION_URL:-}" ] && [ -n "${CLEANUP_SECRET:-}" ]; then
-  code_ok=$(curl -s -o /dev/null -w '%{http_code}' -X POST "${NEON_FUNCTION_URL}" \
-    -H "x-cleanup-secret: ${CLEANUP_SECRET}")
-  code_bad=$(curl -s -o /dev/null -w '%{http_code}' -X POST "${NEON_FUNCTION_URL}" \
-    -H "x-cleanup-secret: wrong-secret-value-that-is-long-enough")
+  code_ok=$(post_cleanup "${CLEANUP_SECRET}")
+  code_bad=$(post_cleanup "wrong-secret-value-that-is-long-enough")
   note "manual invocation: correct=${code_ok} wrong=${code_bad}"
   [ "${code_ok}" = "200" ] || fail "manual invocation with the correct secret returned ${code_ok}"
   [ "${code_bad}" = "401" ] || fail "manual invocation with a wrong secret returned ${code_bad}"

@@ -49,6 +49,12 @@ async function isAuthorized(request: Request): Promise<{ ok: true } | { ok: fals
         response: json({ error: parsed.error }, parsed.error === "invalid_body" ? 400 : 401),
       };
     }
+    // Provenance marker for the acceptance harness. Neon strips this header
+    // from client requests, so only a real scheduler delivery carries it.
+    console.log(
+      "[cleanup] trigger delivery",
+      request.headers.get("x-neon-trigger-invocation-id"),
+    );
     return { ok: true };
   }
 

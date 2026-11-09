@@ -62,7 +62,10 @@ const PNG = new Uint8Array(
   ),
 );
 
-suite("production infrastructure acceptance", () => {
+// These tests talk to real Neon and Filebase over the network: a single case
+// can spend seconds on uploads and deletes, and the batch case does three of
+// each. The 5s default is a property of the unit suite, not of this one.
+suite("production infrastructure acceptance", { timeout: 60_000 }, () => {
   const db = READY ? createDb(process.env.DATABASE_URL!) : (null as never);
   const repository = READY ? new PostgresRepository(db) : (null as never);
   const lifecycle = READY ? new PostgresLifecycleStore(db) : (null as never);

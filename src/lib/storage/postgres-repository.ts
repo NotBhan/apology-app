@@ -26,8 +26,18 @@ import { toCreatorDraft, toPublished } from "./types";
  * below are compare-and-set by construction.
  */
 
-function iso(value: Date | null): string | undefined {
-  return value ? value.toISOString() : undefined;
+/**
+ * Raw `db.execute()` rows come back with snake_case column names and with
+ * timestamps as strings, unlike the query-builder rows which are mapped to
+ * camelCase with real `Date` values. Every helper here accepts both shapes.
+ */
+function iso(value: Date | string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+function requiredIso(value: Date | string): string {
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
 
 function rowsOf(result: unknown): Record<string, unknown>[] {
@@ -52,8 +62,8 @@ export function rowToRecord(row: ApologyRow, accessToken = ""): ApologyRecord {
     customization: row.customization as ApologyRecord["customization"],
     linkDurationDays: row.linkDurationDays,
     status: row.status as ApologyRecord["status"],
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
+    createdAt: requiredIso(row.createdAt),
+    updatedAt: requiredIso(row.updatedAt),
     publishedAt: iso(row.publishedAt),
     expiresAt: iso(row.expiresAt),
   };
@@ -68,7 +78,7 @@ function rowToAsset(row: ApologyAssetRow): AssetRecord {
     kind: row.kind as AssetRecord["kind"],
     contentType: row.contentType,
     sizeBytes: row.sizeBytes,
-    createdAt: row.createdAt.toISOString(),
+    createdAt: requiredIso(row.createdAt),
   };
 }
 
@@ -184,7 +194,24 @@ export class PostgresRepository implements ApologyRepository {
           link_duration_days = ${days},
           updated_at = now()
       where a.id in (select id from locked)
-      returning a.*
+      returning a.id,
+                a.owner_key_hash as "ownerKeyHash",
+                a.recipient_name as "recipientName",
+                a.sender_name as "senderName",
+                a.situation,
+                a.situation_custom as "situationCustom",
+                a.language,
+                a.messages,
+                a.personal_note as "personalNote",
+                a.theme_id as "themeId",
+                a.sticker_pack_id as "stickerPackId",
+                a.customization,
+                a.link_duration_days as "linkDurationDays",
+                a.status,
+                a.created_at as "createdAt",
+                a.updated_at as "updatedAt",
+                a.published_at as "publishedAt",
+                a.expires_at as "expiresAt"
     `);
 
     const [raw] = rowsOf(result);
@@ -319,7 +346,14 @@ export class PostgresRepository implements ApologyRepository {
       select locked.id, ${input.objectKey}, ${input.kind},
              ${input.contentType}, ${input.sizeBytes}, 'pending'
       from locked
-      returning *
+      returning id,
+                apology_id as "apologyId",
+                state,
+                object_key as "objectKey",
+                kind,
+                content_type as "contentType",
+                size_bytes as "sizeBytes",
+                created_at as "createdAt"
     `);
 
     const [raw] = rowsOf(result);
@@ -346,7 +380,14 @@ export class PostgresRepository implements ApologyRepository {
               select 1 from ${deletionJobs} j where j.apology_id = a.id
             )
         )
-      returning x.*
+      returning x.id,
+                x.apology_id as "apologyId",
+                x.state,
+                x.object_key as "objectKey",
+                x.kind,
+                x.content_type as "contentType",
+                x.size_bytes as "sizeBytes",
+                x.created_at as "createdAt"
     `);
 
     const [raw] = rowsOf(result);
