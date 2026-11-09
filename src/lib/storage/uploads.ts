@@ -16,8 +16,17 @@ import { sanitiseStorageError } from "./filebase-errors";
 
 const ASSET_ID_PATTERN = /^[0-9a-f-]{36}$/i;
 
-export const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
-export const MAX_AUDIO_BYTES = 8 * 1024 * 1024;
+/**
+ * Upload ceilings.
+ *
+ * Vercel Functions reject request bodies above 4.5 MB with
+ * `FUNCTION_PAYLOAD_TOO_LARGE` before the handler runs, and `/api/uploads`
+ * buffers the whole multipart body. These values therefore stay below that
+ * platform cap with room for multipart overhead; raising them is not a local
+ * decision. A test asserts the headroom.
+ */
+export const MAX_PHOTO_BYTES = 4 * 1024 * 1024;
+export const MAX_AUDIO_BYTES = 4 * 1024 * 1024;
 export const PRESIGN_TTL_SECONDS = 60;
 
 export const PHOTO_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;

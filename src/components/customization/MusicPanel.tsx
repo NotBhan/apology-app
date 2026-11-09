@@ -50,7 +50,7 @@ export function MusicPanel({ value, themeDefaultTrackId, onChange, onUpload }: M
         />
         <ModeRow
           label="My own audio"
-          description="MP3, WAV, OGG or WebM · up to 8 MB"
+          description="MP3, WAV, OGG or WebM · up to 4 MB"
           checked={value.source === "custom" && Boolean(value.assetId)}
           onSelect={() => undefined}
         />

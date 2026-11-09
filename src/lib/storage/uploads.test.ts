@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createFakeBackend, makeRecord } from "@/test/adapters/fake-backend";
 import { createFakeObjectStore } from "@/test/adapters/fake-object-store";
-import { storeUpload, UploadError } from "./uploads";
+import { MAX_AUDIO_BYTES, MAX_PHOTO_BYTES, storeUpload, UploadError } from "./uploads";
 import { runCleanup } from "@/lib/lifecycle/protocol";
 
 const PNG = new Uint8Array([
@@ -220,5 +220,23 @@ describe("upload versus deletion (deterministic interleavings)", () => {
     }).catch(() => undefined);
 
     expect(await ctx.backend.repository.getPublishedByToken(token)).toBeUndefined();
+  });
+});
+
+describe("upload ceilings fit the hosting platform", () => {
+  /**
+   * Vercel Functions reject a request body above 4.5 MB with
+   * `FUNCTION_PAYLOAD_TOO_LARGE` before the handler executes, so the app-level
+   * checks would never run. `/api/uploads` sends multipart, which adds boundary
+   * and header bytes on top of the file itself, so require headroom.
+   */
+  const PLATFORM_BODY_LIMIT = 4.5 * 1024 * 1024;
+  const MULTIPART_OVERHEAD = 64 * 1024;
+
+  it.each([
+    ["photo", MAX_PHOTO_BYTES],
+    ["audio", MAX_AUDIO_BYTES],
+  ])("keeps the %s ceiling under the platform body cap", (_kind, limit) => {
+    expect(limit + MULTIPART_OVERHEAD).toBeLessThan(PLATFORM_BODY_LIMIT);
   });
 });
