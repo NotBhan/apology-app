@@ -2,6 +2,7 @@ import { z } from "zod";
 import { constantTimeEqual } from "@/lib/id";
 import { getOwner } from "@/lib/security/owner";
 import { getRepository } from "@/lib/storage";
+import { deleteDraftForOwner } from "@/lib/storage/delete-draft";
 import { toCreatorDraft } from "@/lib/storage/types";
 import { draftPayloadSchema, formatZodError } from "@/lib/validation/apology";
 import { jsonError, jsonOk, readJsonBody, repositoryErrorResponse } from "@/lib/api/responses";
@@ -88,9 +89,8 @@ export async function DELETE(_request: Request, context: DraftRouteContext) {
     const owner = await getOwner();
     if (!owner) return jsonError(403, "You do not have access to this draft.");
 
-    const repository = await getRepository();
-    await repository.remove(draftId, owner.hash);
-    return jsonOk({ ok: true });
+    const result = await deleteDraftForOwner(draftId, owner.hash);
+    return jsonOk({ ok: true, deleted: result.deleted, assetsRemoved: result.assetsRemoved });
   } catch (error) {
     return repositoryErrorResponse(error);
   }

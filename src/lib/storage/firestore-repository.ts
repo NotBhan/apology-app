@@ -5,34 +5,10 @@ import { constantTimeEqual, createAccessToken } from "@/lib/id";
 import { DEFAULT_LINK_DAYS, computeExpiresAt, isLinkLive, normalizeDurationDays } from "@/lib/expiry";
 import { toCreatorDraft, toPublished } from "./types";
 import type { ApologyRepository } from "./types";
-
-type Firestore = import("firebase-admin/firestore").Firestore;
+import { getDb } from "./firebase-admin";
+import { getPurgeStore } from "@/lib/lifecycle/purge-store";
 
 const COLLECTION = "apologies";
-
-let db: Firestore | null = null;
-
-async function getDb(): Promise<Firestore> {
-  if (db) return db;
-  const { getApps, initializeApp, cert } = await import("firebase-admin/app");
-  const { getFirestore } = await import("firebase-admin/firestore");
-
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
-
-  if (!projectId || !clientEmail || !privateKey) {
-    throw new Error("Firebase is not configured.");
-  }
-
-  if (getApps().length === 0) {
-    initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) });
-  }
-
-  db = getFirestore();
-  db.settings({ ignoreUndefinedProperties: true });
-  return db;
-}
 
 /**
  * Firestore-backed repository.
@@ -124,6 +100,10 @@ export class FirestoreRepository implements ApologyRepository {
     const existing = await this.getDraft(id);
     if (!existing) throw new Error("NOT_FOUND");
     if (!constantTimeEqual(existing.ownerKeyHash, ownerKeyHash)) throw new Error("FORBIDDEN");
+    // Once cleanup has begun the record is on its way out; reviving it would
+    // race the worker and could serve a half-deleted letter.
+    if (await (await getPurgeStore()).hasStarted(id)) throw new Error("DELETED");
+
     const now = new Date();
     const window = normalizeDurationDays(durationDays);
     const updated: ApologyRecord = {
@@ -176,6 +156,23 @@ export class FirestoreRepository implements ApologyRepository {
     const snap = await col.where("accessToken", "==", token).limit(1).get();
     if (snap.empty) return undefined;
     return snap.docs[0].data() as ApologyRecord;
+  }
+
+  async listExpired(nowIso: string, limit: number): Promise<ApologyRecord[]> {
+    const col = await this.collection();
+    // Single-field range query: no composite index required. Status is filtered
+    // in code because this collection is small and mixed-status.
+    const snap = await col.where("expiresAt", "<=", nowIso).limit(limit * 4).get();
+    return snap.docs
+      .map((doc) => doc.data() as ApologyRecord)
+      .filter((record) => record.status === "published")
+      .slice(0, limit);
+  }
+
+  async purge(id: string): Promise<void> {
+    if (!/^[A-Za-z0-9_-]{6,64}$/.test(id)) return;
+    const col = await this.collection();
+    await col.doc(id).delete();
   }
 
   async getPublishedByToken(token: string): Promise<PublishedApology | undefined> {

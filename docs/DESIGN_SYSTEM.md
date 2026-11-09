@@ -82,3 +82,46 @@ Rules:
 - Emoji standing in for character art.
 - Eight themes that differ only by hue rotation.
 - Cards nested inside cards without hierarchy change.
+
+## 8. Symbols, icons and emoji
+
+The product contains **no Unicode emoji**. That is enforced, not aspirational:
+`src/lib/design/symbols.test.ts` scans every source file and fails if one
+appears.
+
+Three categories, kept strictly apart (registry: `src/lib/design/symbols.ts`):
+
+| Category | Backing | Rules |
+| --- | --- | --- |
+| **Functional** | Lucide, via `@/components/ui/icons` | Must be recognisable in every theme. Never decorative. Needs an accessible name when it stands alone. |
+| **Character** | Sticker packs (`art.render(state)`) | Carries the emotional story. Never an icon, never an emoji. |
+| **Decorative** | Theme skins | Owned by the theme, `aria-hidden`, no meaning. |
+
+### Functional icons
+
+`ICONS` in `src/components/ui/icons.tsx` is the allowlist. `<Icon name="play" />`
+renders `aria-hidden` unless a `label` is supplied, so a bare glyph is never read
+out as "image".
+
+Situations map to meaning, not to a mood:
+
+| Situation | Symbol | Why |
+| --- | --- | --- |
+| Said something hurtful | `message-circle-off` | Words that landed badly |
+| We had a fight | `heart-crack` | A rupture between two people |
+| Wasn't there | `clock` | A moment when presence was missing |
+| Broke a promise | `link-off` | A commitment that did not hold |
+| Forgot something special | `calendar-off` | A date that slipped |
+| Anything else | `pen-line` | The sender will describe it |
+
+This mapping appeared once as a proposal to use a heart for the recipient and
+praying hands for the sender. It was rejected: both are *characters* in the
+apology, not "sender" and "recipient" control icons, and a heart in a situation
+picker would read as "romance" rather than "hurt".
+
+### Theme decoration
+
+Decoration is per-theme and never reused as a control: Romantic hearts,
+Friendship confetti, Heartfelt paper, Midnight stars, Cute bubbles, Regret
+petals, Fresh Start butterflies, Minimal rules. `DECORATIVE_BY_THEME` records the
+mapping so a theme cannot silently borrow another's motif.

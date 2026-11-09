@@ -1,6 +1,7 @@
 import { getRepository } from "@/lib/storage";
 import { toPublished } from "@/lib/storage/types";
 import { jsonError, jsonOk, repositoryErrorResponse } from "@/lib/api/responses";
+import { enforceRateLimit, rateLimitHeaders } from "@/lib/security/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -16,8 +17,15 @@ type LetterRouteContext = { params: Promise<{ token: string }> };
  * which never includes `accessToken`, `ownerKeyHash` or any other server-only
  * field. Revoked tokens answer 410, drafts that were never published 404.
  */
-export async function GET(_request: Request, context: LetterRouteContext) {
+export async function GET(request: Request, context: LetterRouteContext) {
   const { token } = await context.params;
+
+  const limit = await enforceRateLimit(request, "readLetter");
+  if (!limit.allowed) {
+    return jsonError(429, "Too many requests. Try again shortly.", undefined, rateLimitHeaders(limit));
+  }
+
+
 
   if (!TOKEN_PATTERN.test(token)) {
     return jsonError(404, "We could not find that letter.");

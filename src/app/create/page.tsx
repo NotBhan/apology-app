@@ -8,7 +8,12 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default function CreatePage() {
+export default async function CreatePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ limited?: string }>;
+}) {
+  const { limited } = await searchParams;
   return (
     <main className="min-h-svh bg-[#faf6ff]">
       <div className="mx-auto flex min-h-svh w-full max-w-[600px] flex-col justify-center px-5 py-14">
@@ -44,6 +49,12 @@ export default function CreatePage() {
             </li>
           ))}
         </ul>
+
+        {limited ? (
+          <p className="mt-6 rounded-2xl bg-[#fff7ed] px-4 py-3 text-[0.8rem] leading-relaxed text-[#9a3412]">
+            That is a lot of new letters in one hour. Give it a little while and try again.
+          </p>
+        ) : null}
 
         <form action={startDraftAction} className="mt-9">
           <button

@@ -6,6 +6,7 @@ import type { EmotionOption, ResponseOption } from "@/types/scene";
 import type { CharacterState } from "@/types/sticker";
 import { RESPONSE_COPY } from "@/lib/api/responses";
 import { cn } from "@/lib/cn";
+import { Icon } from "@/components/ui/icons";
 
 interface ResponsePanelProps {
   senderName: string;
@@ -137,13 +138,11 @@ export function ResponsePanel({
                       {option.hint}
                     </span>
                   </span>
-                  <span
-                    aria-hidden
-                    className="text-lg transition-transform group-hover:translate-x-0.5"
-                    style={{ color: "var(--t-primary)" }}
-                  >
-                    →
-                  </span>
+                  <Icon
+                    name="arrow-right"
+                    size={16}
+                    className="transition-transform group-hover:translate-x-0.5"
+                  />
                 </motion.button>
               ))}
             </div>

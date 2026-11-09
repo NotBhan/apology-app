@@ -13,6 +13,7 @@ import { SceneRenderer } from "./SceneRenderer";
 import { SceneTransition } from "./SceneTransition";
 import { ThemeCanvas } from "./ThemeCanvas";
 import { AudioController } from "./AudioController";
+import { Icon } from "@/components/ui/icons";
 
 export interface PresentationApi {
   next: () => void;
@@ -208,9 +209,7 @@ export function PresentationEngine({
                   backdropFilter: "blur(10px)",
                 }}
               >
-                <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-                  <path d="M8.6 2.6 4.2 7l4.4 4.4" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                <Icon name="chevron-left" size={14} />
               </button>
             ) : null}
             <span

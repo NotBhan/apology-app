@@ -22,14 +22,14 @@ const gateway: WizardGateway = {
     return result.data;
   },
 
-  async uploadAudio(file) {
-    const asset = await uploadFile(file, "audio", file.name || "audio");
+  async uploadAudio(draftId, file) {
+    const asset = await uploadFile(file, "audio", file.name || "audio", draftId);
     return { assetId: asset.id };
   },
 
-  async uploadPhoto(blob, meta): Promise<PhotoAsset> {
+  async uploadPhoto(draftId, blob, meta): Promise<PhotoAsset> {
     const extension = meta.type === "image/png" ? "png" : "jpg";
-    const asset = await uploadFile(blob, "photo", `photo-${Date.now()}.${extension}`);
+    const asset = await uploadFile(blob, "photo", `photo-${Date.now()}.${extension}`, draftId);
     return {
       id: asset.id,
       url: asset.url,

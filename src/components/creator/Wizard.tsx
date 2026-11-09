@@ -28,8 +28,9 @@ export interface WizardGateway {
     id: string,
     durationDays: number,
   ) => Promise<{ token: string; path: string; expiresAt: string; durationDays: number }>;
-  uploadAudio: (file: File) => Promise<{ assetId: string }>;
+  uploadAudio: (draftId: string, file: File) => Promise<{ assetId: string }>;
   uploadPhoto: (
+    draftId: string,
     blob: Blob,
     meta: { width: number; height: number; type: string },
   ) => Promise<PhotoAsset>;
@@ -229,8 +230,8 @@ export function Wizard({ initialDraft, gateway }: WizardProps) {
                 customization={draft.customization}
                 theme={theme}
                 onChange={(patch) => update({ customization: patch })}
-                onUploadAudio={gateway.uploadAudio}
-                onUploadPhoto={gateway.uploadPhoto}
+                onUploadAudio={(file) => gateway.uploadAudio(draft.id, file)}
+                onUploadPhoto={(blob, meta) => gateway.uploadPhoto(draft.id, blob, meta)}
                 onNext={() => setStep(6)}
                 onBack={() => setStep(4)}
               />

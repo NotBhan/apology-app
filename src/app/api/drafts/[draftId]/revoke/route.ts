@@ -2,6 +2,7 @@ import { getOwner } from "@/lib/security/owner";
 import { getRepository } from "@/lib/storage";
 import { toCreatorDraft } from "@/lib/storage/types";
 import { jsonError, jsonOk, repositoryErrorResponse } from "@/lib/api/responses";
+import { enforceRateLimit, rateLimitHeaders } from "@/lib/security/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -12,8 +13,15 @@ type RevokeRouteContext = { params: Promise<{ draftId: string }> };
  * kept for the owner, and `accessToken` is never echoed back in the response.
  * Idempotent — revoking an already revoked letter is a no-op.
  */
-export async function POST(_request: Request, context: RevokeRouteContext) {
+export async function POST(request: Request, context: RevokeRouteContext) {
   const { draftId } = await context.params;
+
+  const limit = await enforceRateLimit(request, "publish");
+  if (!limit.allowed) {
+    return jsonError(429, "Too many requests. Try again shortly.", undefined, rateLimitHeaders(limit));
+  }
+
+
 
   try {
     const owner = await getOwner();

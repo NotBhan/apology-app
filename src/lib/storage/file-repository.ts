@@ -6,6 +6,7 @@ import type { DraftPayload } from "@/lib/validation/apology";
 import { constantTimeEqual, createAccessToken } from "@/lib/id";
 import { DEFAULT_LINK_DAYS, computeExpiresAt, isLinkLive, normalizeDurationDays } from "@/lib/expiry";
 import { toCreatorDraft, toPublished } from "./types";
+import { getPurgeStore } from "@/lib/lifecycle/purge-store";
 import type { ApologyRepository } from "./types";
 
 const ROOT = path.join(process.cwd(), ".data");
@@ -126,6 +127,10 @@ export class FileRepository implements ApologyRepository {
     const existing = await this.getDraft(id);
     if (!existing) throw new Error("NOT_FOUND");
     if (!constantTimeEqual(existing.ownerKeyHash, ownerKeyHash)) throw new Error("FORBIDDEN");
+    // Once cleanup has begun the record is on its way out; reviving it would
+    // race the worker and could serve a half-deleted letter.
+    if (await (await getPurgeStore()).hasStarted(id)) throw new Error("DELETED");
+
     const now = new Date();
     const window = normalizeDurationDays(durationDays);
     const updated: ApologyRecord = {
@@ -172,6 +177,51 @@ export class FileRepository implements ApologyRepository {
       .filter((r): r is ApologyRecord => Boolean(r))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .map(toCreatorDraft);
+  }
+
+  async listExpired(nowIso: string, limit: number): Promise<ApologyRecord[]> {
+    await ensureDirs();
+    const entries = await fs.readdir(RECORDS);
+    const now = Date.parse(nowIso);
+    const expired: ApologyRecord[] = [];
+
+    for (const entry of entries) {
+      if (!entry.endsWith(".json")) continue;
+      const record = await readJson<ApologyRecord>(path.join(RECORDS, entry));
+      if (!record) continue;
+      if (record.status !== "published") continue;
+      const expires = Date.parse(record.expiresAt ?? "");
+      if (!Number.isFinite(expires) || expires > now) continue;
+      expired.push(record);
+      if (expired.length >= limit) break;
+    }
+
+    return expired;
+  }
+
+  async purge(id: string): Promise<void> {
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return;
+
+    const record = await this.getDraft(id);
+    await fs.rm(recordPath(id), { force: true });
+
+    if (!record) return;
+
+    // Drop the token index entry so an old public URL cannot resolve to
+    // anything after the record is gone.
+    await fs.rm(path.join(INDEX, `token-${safeName(record.accessToken)}.json`), {
+      force: true,
+    });
+
+    // And the owner index entry, so Manage stops listing a deleted letter.
+    const ownerFile = path.join(INDEX, `owner-${safeName(record.ownerKeyHash)}.json`);
+    const ids = (await readJson<string[]>(ownerFile)) ?? [];
+    if (ids.includes(id)) {
+      await writeJson(
+        ownerFile,
+        ids.filter((ownerId) => ownerId !== id),
+      );
+    }
   }
 
   async getPublishedByToken(token: string): Promise<PublishedApology | undefined> {

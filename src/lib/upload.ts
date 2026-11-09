@@ -22,10 +22,12 @@ export async function uploadFile(
   blob: Blob,
   kind: "photo" | "audio",
   filename: string,
+  draftId: string,
 ): Promise<UploadedAsset> {
   const form = new FormData();
   form.append("file", blob, filename);
   form.append("kind", kind);
+  form.append("draftId", draftId);
 
   const response = await fetch("/api/uploads", {
     method: "POST",

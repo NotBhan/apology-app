@@ -5,17 +5,23 @@ import Link from "next/link";
 import { getTheme } from "@/themes/registry";
 import { getStickerPack } from "@/sticker-packs/registry";
 import { resolveSituationLabel } from "@/content/situations";
-import {
-  deleteDraftAction,
-  publishDraftAction,
-  revokeDraftAction,
-} from "@/app/create/actions";
+import { deleteDraftAction, publishDraftAction, revokeDraftAction } from "@/app/create/actions";
 import { daysRemaining, formatDuration, formatExpiry, isExpired } from "@/lib/expiry";
 import { useMounted } from "@/hooks/useMounted";
 import type { ApologyDraft } from "@/types/apology";
+import type { DeletionTombstone } from "@/lib/lifecycle/types";
 
-export function ManageList({ drafts }: { drafts: ApologyDraft[] }) {
-  if (drafts.length === 0) {
+export interface ManageListProps {
+  drafts: ApologyDraft[];
+  tombstones: DeletionTombstone[];
+  /** Draft ids whose cleanup has started but not finished. */
+  pendingDeletionIds: string[];
+}
+
+export function ManageList({ drafts, tombstones, pendingDeletionIds }: ManageListProps) {
+  const pending = new Set(pendingDeletionIds);
+
+  if (drafts.length === 0 && tombstones.length === 0) {
     return (
       <div className="rounded-3xl border border-dashed border-[#ddd0ec] px-6 py-14 text-center">
         <p className="text-[0.9rem] text-[#6b5580]">No letters yet.</p>
@@ -32,34 +38,53 @@ export function ManageList({ drafts }: { drafts: ApologyDraft[] }) {
   return (
     <ul className="space-y-3">
       {drafts.map((draft) => (
-        <ManageRow key={draft.id} draft={draft} />
+        <ManageRow key={draft.id} draft={draft} cleanupPending={pending.has(draft.id)} />
+      ))}
+      {tombstones.map((tombstone) => (
+        <DeletedRow key={tombstone.apologyId} tombstone={tombstone} />
       ))}
     </ul>
   );
 }
 
-function ManageRow({ draft }: { draft: ApologyDraft }) {
+function ManageRow({
+  draft,
+  cleanupPending,
+}: {
+  draft: ApologyDraft;
+  cleanupPending: boolean;
+}) {
   const mounted = useMounted();
   const [pending, startTransition] = useTransition();
   const [status, setStatus] = useState(draft.status);
   const [expiresAt, setExpiresAt] = useState(draft.expiresAt);
   const [confirming, setConfirming] = useState<null | "revoke" | "delete">(null);
   const [renewed, setRenewed] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const theme = getTheme(draft.themeId);
   const pack = getStickerPack(draft.stickerPackId);
 
   const expired = status === "published" && isExpired(expiresAt);
   const remaining = daysRemaining(expiresAt);
+  const renewable = expired && !cleanupPending;
 
   function act(kind: "revoke" | "delete") {
     startTransition(async () => {
-      const result =
-        kind === "revoke"
-          ? await revokeDraftAction(draft.id)
-          : await deleteDraftAction(draft.id);
+      if (kind === "revoke") {
+        const result = await revokeDraftAction(draft.id);
+        if (result.ok) {
+          setStatus("revoked");
+          setConfirming(null);
+        }
+        return;
+      }
+
+      const result = await deleteDraftAction(draft.id);
       if (result.ok) {
-        setStatus(kind === "revoke" ? "revoked" : "draft");
         setConfirming(null);
+        setNotice("Deleting… this row will disappear once the files are gone.");
+      } else {
+        setNotice(result.error ?? "Deletion could not start.");
       }
     });
   }
@@ -72,6 +97,8 @@ function ManageRow({ draft }: { draft: ApologyDraft }) {
         setStatus("published");
         setExpiresAt(result.data.expiresAt);
         setRenewed(true);
+      } else {
+        setNotice(result.error ?? "This letter can no longer be renewed.");
       }
     });
   }
@@ -84,7 +111,7 @@ function ManageRow({ draft }: { draft: ApologyDraft }) {
             <h2 className="truncate text-[1rem] font-semibold text-[#33203f]">
               {draft.recipientName || "Untitled letter"}
             </h2>
-            <StatusPill status={status} expired={expired} />
+            <StatusPill status={status} expired={expired} cleanupPending={cleanupPending} />
           </div>
           <p className="mt-0.5 text-[0.74rem] text-[#8a7a9c]">
             {theme.name} · {pack.name} ·{" "}
@@ -103,16 +130,21 @@ function ManageRow({ draft }: { draft: ApologyDraft }) {
                   ? "Link expired"
                   : "Link active"
                 : expired
-                  ? `Link expired ${formatExpiry(expiresAt)}`
-                  : `${remaining === 1 ? "1 day" : `${remaining} days`} left · expires ${formatExpiry(expiresAt)}`}
+                  ? cleanupPending
+                    ? "Expired — files being deleted"
+                    : "Expired — awaiting cleanup"
+                  : remaining <= 1
+                    ? `Expires tomorrow · ${formatExpiry(expiresAt)}`
+                    : `${remaining} days remaining · ${formatExpiry(expiresAt)}`}
             </p>
           ) : (
             <p className="mt-0.5 text-[0.68rem] text-[#b3a5c2]">
-              {mounted ? (
-                <>updated {new Date(draft.updatedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}</>
-              ) : (
-                "updated"
-              )}
+              {mounted
+                ? `updated ${new Date(draft.updatedAt).toLocaleDateString(undefined, {
+                    day: "numeric",
+                    month: "short",
+                  })}`
+                : "updated"}
             </p>
           )}
         </div>
@@ -139,7 +171,7 @@ function ManageRow({ draft }: { draft: ApologyDraft }) {
           Preview
         </Link>
 
-        {expired ? (
+        {renewable ? (
           <button
             type="button"
             disabled={pending}
@@ -167,7 +199,7 @@ function ManageRow({ draft }: { draft: ApologyDraft }) {
           onClick={() => setConfirming("delete")}
           className="inline-flex min-h-9 items-center rounded-full border border-[#ece2f6] px-3 text-[0.74rem] font-semibold text-[#8a7a9c] disabled:opacity-50"
         >
-          Delete
+          Delete now
         </button>
       </div>
 
@@ -177,12 +209,18 @@ function ManageRow({ draft }: { draft: ApologyDraft }) {
         </p>
       ) : null}
 
+      {notice ? (
+        <p className="mt-2 rounded-xl bg-[#faf6ff] px-3 py-2 text-[0.72rem] text-[#5b4a6d]">
+          {notice}
+        </p>
+      ) : null}
+
       {confirming ? (
         <div className="mt-3 rounded-2xl bg-[#faf6ff] p-3">
           <p className="text-[0.76rem] text-[#5b4a6d]">
             {confirming === "revoke"
-              ? "Revoking stops the link from opening for anyone. You can publish again later."
-              : "Deleting removes this letter and its data permanently. This cannot be undone."}
+              ? "Revoking stops the link from opening for anyone. The letter and its files stay until the link expires."
+              : "Deleting removes this letter, its messages and its uploaded photos and audio permanently. This cannot be undone."}
           </p>
           <div className="mt-2 flex gap-2">
             <button
@@ -207,11 +245,55 @@ function ManageRow({ draft }: { draft: ApologyDraft }) {
   );
 }
 
-function StatusPill({ status, expired }: { status: ApologyDraft["status"]; expired: boolean }) {
+/**
+ * A letter that has been physically removed. Only an id, a date and a count
+ * survive — no names, no messages, no media. That is the whole point.
+ */
+function DeletedRow({ tombstone }: { tombstone: DeletionTombstone }) {
+  const mounted = useMounted();
+
+  return (
+    <li className="rounded-3xl border border-[#ece2f6] bg-[#faf8fc] p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-[0.95rem] font-semibold text-[#6b5580]">Deleted letter</h2>
+            <span className="rounded-full bg-[#f1edf5] px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.1em] text-[#8a7a9c]">
+              Deleted
+            </span>
+          </div>
+          <p className="mt-0.5 text-[0.68rem] text-[#a394b4]">
+            {mounted
+              ? `Removed ${new Date(tombstone.deletedAt).toLocaleDateString(undefined, {
+                  day: "numeric",
+                  month: "short",
+                })} · ${tombstone.assetsDeleted} file${
+                  tombstone.assetsDeleted === 1 ? "" : "s"
+                } deleted`
+              : "Removed"}
+          </p>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function StatusPill({
+  status,
+  expired,
+  cleanupPending,
+}: {
+  status: ApologyDraft["status"];
+  expired: boolean;
+  cleanupPending: boolean;
+}) {
   const map = {
     draft: { label: "Draft", className: "bg-[#f4eefb] text-[#7c6892]" },
     published: expired
-      ? { label: "Expired", className: "bg-[#fdf1f3] text-[#a8556b]" }
+      ? {
+          label: cleanupPending ? "Deleting" : "Expired",
+          className: "bg-[#fdf1f3] text-[#a8556b]",
+        }
       : { label: "Live", className: "bg-[#e8f5ec] text-[#3f7a4a]" },
     revoked: { label: "Revoked", className: "bg-[#fdf1f3] text-[#a8556b]" },
   } as const;

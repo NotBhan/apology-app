@@ -4,6 +4,7 @@ import { getRepository } from "@/lib/storage";
 import { draftPayloadSchema, formatZodError, linkDurationDaysSchema } from "@/lib/validation/apology";
 import { DEFAULT_LINK_DAYS, normalizeDurationDays } from "@/lib/expiry";
 import { jsonError, jsonOk, readJsonBody, repositoryErrorResponse } from "@/lib/api/responses";
+import { enforceRateLimit, rateLimitHeaders } from "@/lib/security/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,13 @@ type PublishRouteContext = { params: Promise<{ draftId: string }> };
  */
 export async function POST(request: Request, context: PublishRouteContext) {
   const { draftId } = await context.params;
+
+  const limit = await enforceRateLimit(request, "publish");
+  if (!limit.allowed) {
+    return jsonError(429, "Too many requests. Try again shortly.", undefined, rateLimitHeaders(limit));
+  }
+
+
 
   const body = await readJsonBody(request);
   const requested =

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getOwner } from "@/lib/security/owner";
 import { getRepository } from "@/lib/storage";
+import { getPurgeStore } from "@/lib/lifecycle/purge-store";
+import { isExpired } from "@/lib/expiry";
 import { ManageList } from "@/components/manage/ManageList";
 
 export const metadata: Metadata = {
@@ -13,8 +15,21 @@ export const dynamic = "force-dynamic";
 
 export default async function ManagePage() {
   const owner = await getOwner();
-  const repo = await getRepository();
-  const drafts = owner ? await repo.listByOwner(owner.hash) : [];
+  const repository = await getRepository();
+  const store = await getPurgeStore();
+
+  const drafts = owner ? await repository.listByOwner(owner.hash) : [];
+  const tombstones = owner ? await store.listTombstones(owner.hash) : [];
+
+  // Only expired letters can be mid-cleanup; checking the rest would be N
+  // pointless reads on a page that is already one round-trip per letter.
+  const pendingDeletionIds = (
+    await Promise.all(
+      drafts
+        .filter((draft) => draft.status === "published" && isExpired(draft.expiresAt))
+        .map(async (draft) => ((await store.hasStarted(draft.id)) ? draft.id : null)),
+    )
+  ).filter((id): id is string => Boolean(id));
 
   return (
     <main className="min-h-svh bg-[#faf6ff]">
@@ -34,7 +49,8 @@ export default async function ManagePage() {
               My letters
             </h1>
             <p className="mt-1 text-[0.82rem] text-[#8a7a9c]">
-              Everything here is tied to this browser. Clearing site data removes access.
+              Links last at most seven days. Expired letters are deleted, files and all.
+              Everything here is tied to this browser.
             </p>
           </div>
           <Link
@@ -45,7 +61,19 @@ export default async function ManagePage() {
           </Link>
         </div>
 
-        <ManageList drafts={drafts} />
+        <ManageList
+          drafts={drafts}
+          tombstones={tombstones}
+          pendingDeletionIds={pendingDeletionIds}
+        />
+
+        <p className="mt-6 text-center text-[0.68rem] leading-relaxed text-[#a394b4]">
+          Deletion removes the letter, its messages and every uploaded file.{" "}
+          <Link href="/privacy" className="underline underline-offset-2 hover:text-[#7a4fb0]">
+            What we store
+          </Link>
+          .
+        </p>
       </div>
     </main>
   );

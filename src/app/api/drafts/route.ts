@@ -3,6 +3,7 @@ import { getRepository } from "@/lib/storage";
 import { toCreatorDraft } from "@/lib/storage/types";
 import { createDraftSchema, formatZodError } from "@/lib/validation/apology";
 import { jsonError, jsonOk, readJsonBody, repositoryErrorResponse } from "@/lib/api/responses";
+import { enforceRateLimit, rateLimitHeaders } from "@/lib/security/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,11 @@ export async function GET() {
  * httpOnly cookie (`getOrCreateOwner`) — never from the request body.
  */
 export async function POST(request: Request) {
+  const limit = await enforceRateLimit(request, "createDraft");
+  if (!limit.allowed) {
+    return jsonError(429, "Too many requests. Try again shortly.", undefined, rateLimitHeaders(limit));
+  }
+
   const body = await readJsonBody(request);
   if (!body.ok) return body.response;
 

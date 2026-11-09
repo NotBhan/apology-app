@@ -112,3 +112,76 @@ mounts that chrome.
 
 Payments, accounts, analytics, server-side response storage, public galleries.
 The recipient's answer is never transmitted.
+
+## 6. Deletion lifecycle
+
+Expiry enforcement and data deletion are **separate** concerns, deliberately.
+
+### Access vs. deletion
+
+- **Access** is decided on every read by `isLinkLive(status, expiresAt)`. Nothing
+  is scheduled: at the expiry instant the letter stops resolving, the recipient
+  sees the generic unavailable page, and `/api/uploads/[id]` refuses the media
+  because the owning record is no longer live.
+- **Deletion** is physical removal, performed by a worker. It is eventually
+  consistent and may lag by up to one scheduled run.
+
+### Upload binding
+
+`UploadAsset` carries `apologyId` and `ownerKeyHash`. `canServeAsset()` allows a
+request only when the caller is the owner, or when the owning apology is live.
+An asset with no binding fails closed. This closes the gap where a dead link's
+photo URLs kept resolving.
+
+Media responses are `Cache-Control: private, no-store`, because authorisation
+changes at the expiry instant and a cached copy would outlive the link.
+
+### The worker
+
+`src/lib/lifecycle/purge.ts` — `runPurge()` and `purgeNow()` — is the only
+deletion path. The scheduled job and the Manage "Delete now" button both use it.
+
+Sequence per apology:
+
+1. **Identify** — `listExpired(now)` for published records past their window, plus
+   any job left by a previous run.
+2. **Claim** — a lease (`deletions/<id>.leaseUntil`) is written in a transaction
+   (Firestore) or under a per-id mutex (filesystem). A second worker sees a live
+   lease and skips.
+3. **Manifest** — asset ids come from the record's photos and custom audio, merged
+   with ids already recorded on the job, so a retry cannot lose one.
+4. **Delete assets** — each `remove()` is idempotent; a missing object is not an
+   error.
+5. **Verify** — each id is re-checked with `stat()`. A backend that reports
+   success but leaves the object behind still fails the step.
+6. **Delete the record** — only after storage is verified. Then re-read to confirm
+   it is gone.
+7. **Tombstone** — `{ apologyId, ownerKeyHash, deletedAt, assetsDeleted, reason }`.
+   No names, no messages, no media, no usable token.
+8. **Clear the job.**
+
+Failure handling:
+
+- Storage failure → job kept with `lastError`, record **not** deleted, retried next
+  run. This is what stops silent orphaning.
+- Record deletion failure → job kept, retried.
+- Crash mid-run → the lease expires and the next run resumes.
+- Repeated runs → idempotent; the second finds nothing.
+
+### Renewal
+
+`publish()` refuses with `DELETED` once a job exists, so a letter cannot be
+revived while it is being torn down. A deleted record is gone, so an old token
+cannot resurrect it.
+
+### Scheduled configuration
+
+`vercel.json` schedules `/api/cron/purge` hourly (`17 * * * *`). The route
+requires `CRON_SECRET`; without it the route returns 503 rather than running
+unauthenticated. Vercel sends `Authorization: Bearer $CRON_SECRET`.
+
+### What is not stored in the queue
+
+The job holds an id, asset ids, attempt count, timestamps, a lease and an owner
+hash. The owner hash is present only so a retry can still write the tombstone
+after the record is gone. It is a SHA-256 of a random key, not the key.

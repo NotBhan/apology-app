@@ -1,21 +1,19 @@
 import "server-only";
-import { promises as fs } from "node:fs";
-import path from "node:path";
 import { randomId } from "@/lib/id";
+import { FirebaseUploadStore, FileUploadStore, firebaseStorageConfigured } from "./upload-store";
+import type { UploadStore } from "./upload-store";
 
 /**
- * Upload store (photos + audio) for the filesystem deployment.
+ * Upload validation and the public upload API.
  *
  * Rules this module enforces:
  * - The declared MIME type is never trusted on its own; the bytes are sniffed
  *   and the recorded type comes from the signature, not from the client.
  * - The asset id is generated here with `randomId`, so a client filename can
  *   never become a path (no traversal, no collisions, no overwrites).
- * - Bytes live at `.data/uploads/<assetId>` with a `.json` sidecar holding only
- *   `{ id, kind, mime, size, createdAt }`.
+ * - Storage itself is pluggable: `.data/uploads` locally, Firebase Storage in
+ *   production, where the filesystem is ephemeral.
  */
-
-const UPLOADS_DIR = path.join(process.cwd(), ".data", "uploads");
 
 /** `randomId()` is 22 base64url chars; the pattern is the only id we ever touch. */
 const ASSET_ID_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
@@ -43,6 +41,14 @@ export interface UploadAsset {
   /** Size in bytes, as recorded when the file was accepted. */
   size: number;
   createdAt: string;
+  /**
+   * The apology this asset belongs to. Media is only served while that
+   * apology is live, or to its owner — so an expired letter cannot leave its
+   * photos reachable through a saved URL.
+   */
+  apologyId: string;
+  /** SHA-256 of the creator key, so the owner can always preview their own art. */
+  ownerKeyHash: string;
 }
 
 export interface StoredUpload {
@@ -54,6 +60,9 @@ export interface SaveUploadInput {
   data: Uint8Array;
   /** The `File.type` reported by the browser — a hint we verify, never trust. */
   declaredMime?: string;
+  /** Owning apology; required so media access can follow the link lifetime. */
+  apologyId: string;
+  ownerKeyHash: string;
 }
 
 /** A rejected upload. `status` is the HTTP status the route should return. */
@@ -65,6 +74,28 @@ export class UploadError extends Error {
     this.name = "UploadError";
     this.status = status;
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Store selection                                                            */
+/* -------------------------------------------------------------------------- */
+
+let store: UploadStore | null = null;
+
+/** Firebase Storage when credentials exist, otherwise the local filesystem. */
+export function getUploadStore(): UploadStore {
+  if (store) return store;
+  store = firebaseStorageConfigured() ? new FirebaseUploadStore() : new FileUploadStore();
+  return store;
+}
+
+export function uploadBackend(): UploadStore["backend"] {
+  return getUploadStore().backend;
+}
+
+/** Test seam: drops the memoised store so a suite can swap backends. */
+export function resetUploadStoreForTests() {
+  store = null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -132,67 +163,8 @@ export function kindForMime(mime: UploadMime): UploadKind {
   return mime.startsWith("image/") ? "photo" : "audio";
 }
 
-/* -------------------------------------------------------------------------- */
-/* Paths                                                                      */
-/* -------------------------------------------------------------------------- */
-
 export function isValidAssetId(id: string): boolean {
   return ASSET_ID_PATTERN.test(id);
-}
-
-function assetPath(id: string): string {
-  return path.join(UPLOADS_DIR, id);
-}
-
-function metaPath(id: string): string {
-  return path.join(UPLOADS_DIR, `${id}.json`);
-}
-
-async function ensureDir(): Promise<void> {
-  await fs.mkdir(UPLOADS_DIR, { recursive: true });
-}
-
-function isEnoent(error: unknown): boolean {
-  return (error as NodeJS.ErrnoException)?.code === "ENOENT";
-}
-
-async function readJson<T>(file: string): Promise<T | undefined> {
-  try {
-    const raw = await fs.readFile(file, "utf8");
-    return JSON.parse(raw) as T;
-  } catch (error) {
-    if (isEnoent(error)) return undefined;
-    throw error;
-  }
-}
-
-async function writeJson(file: string, value: unknown): Promise<void> {
-  const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(value, null, 2), "utf8");
-  await fs.rename(tmp, file);
-}
-
-function isUploadAsset(value: unknown): value is UploadAsset {
-  if (!value || typeof value !== "object") return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.id === "string" &&
-    isValidAssetId(record.id) &&
-    (record.kind === "photo" || record.kind === "audio") &&
-    typeof record.mime === "string" &&
-    isAllowedMime(record.mime) &&
-    typeof record.size === "number" &&
-    Number.isFinite(record.size) &&
-    record.size >= 0 &&
-    typeof record.createdAt === "string"
-  );
-}
-
-async function readAssetMeta(id: string): Promise<UploadAsset | undefined> {
-  if (!isValidAssetId(id)) return undefined;
-  const raw = await readJson<unknown>(metaPath(id));
-  if (!isUploadAsset(raw)) return undefined;
-  return raw;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -237,66 +209,39 @@ export async function saveUpload(input: SaveUploadInput): Promise<UploadAsset> {
     throw new UploadError(415, "The file contents do not match the type it claims to be.");
   }
 
-  await ensureDir();
-
   const asset: UploadAsset = {
     id: randomId(),
     kind,
     mime,
     size: data.byteLength,
     createdAt: new Date().toISOString(),
+    apologyId: input.apologyId,
+    ownerKeyHash: input.ownerKeyHash,
   };
 
-  const target = assetPath(asset.id);
-  const tmp = `${target}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(tmp, data);
-  await fs.rename(tmp, target);
-  await writeJson(metaPath(asset.id), asset);
-
+  await getUploadStore().save(asset, data);
   return asset;
 }
 
 /** Reads one asset. Returns `undefined` for unknown or malformed ids. */
 export async function readUpload(id: string): Promise<StoredUpload | undefined> {
-  const asset = await readAssetMeta(id);
-  if (!asset) return undefined;
-
-  try {
-    const file = await fs.readFile(assetPath(id));
-    // Copy into a plain, ArrayBuffer-backed view so the bytes are exactly this
-    // length (no pooled Buffer slack) and cannot be mutated by the caller.
-    const bytes = new Uint8Array(file.byteLength);
-    bytes.set(file);
-    return { asset, bytes };
-  } catch (error) {
-    if (isEnoent(error)) return undefined;
-    throw error;
-  }
+  if (!isValidAssetId(id)) return undefined;
+  return getUploadStore().read(id);
 }
 
 /** Newest first. Asset ids are capability tokens, so this is for the creator. */
 export async function listUploads(): Promise<UploadAsset[]> {
-  await ensureDir();
-  const entries = await fs.readdir(UPLOADS_DIR);
-  const sidecars = entries.filter((name) => name.endsWith(".json"));
-
-  const assets = await Promise.all(
-    sidecars.map(async (name) => {
-      const raw = await readJson<unknown>(path.join(UPLOADS_DIR, name));
-      return isUploadAsset(raw) ? raw : undefined;
-    }),
-  );
-
-  return assets
-    .filter((asset): asset is UploadAsset => Boolean(asset))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return getUploadStore().list();
 }
 
 /** Idempotent: removing something that is already gone is not an error. */
 export async function removeUpload(id: string): Promise<void> {
   if (!isValidAssetId(id)) return;
-  await Promise.all([
-    fs.rm(assetPath(id), { force: true }),
-    fs.rm(metaPath(id), { force: true }),
-  ]);
+  await getUploadStore().remove(id);
+}
+
+/** Cheap existence probe used to verify a purge actually removed the bytes. */
+export async function uploadExists(id: string): Promise<boolean> {
+  if (!isValidAssetId(id)) return false;
+  return getUploadStore().stat(id);
 }

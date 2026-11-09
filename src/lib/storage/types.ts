@@ -14,6 +14,13 @@ export interface ApologyRepository {
   getPublishedByToken(token: string): Promise<PublishedApology | undefined>;
   /** Look up a record by its access token, for the creator's own preview. */
   getByToken(token: string): Promise<ApologyRecord | undefined>;
+  /** Published records whose expiry has passed. Used by the purge worker. */
+  listExpired(nowIso: string, limit: number): Promise<ApologyRecord[]>;
+  /**
+   * Unconditional delete, for the purge worker only. Authorisation has already
+   * been decided by expiry, so this deliberately does not check ownership.
+   */
+  purge(id: string): Promise<void>;
 }
 
 export function toPublished(record: ApologyRecord): PublishedApology {

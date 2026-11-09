@@ -54,6 +54,21 @@ storage may define components, timing functions or selectors.
 3. Every pack must render **all eleven** `CHARACTER_STATES`, with a distinct pose
    per state, prefixed CSS/SVG ids, and a static path when `animate === false`.
 
+## Deletion lifecycle
+
+- Expiry enforcement and deletion are separate responsibilities. Access stops
+  from `isLinkLive()`; physical removal is the purge worker.
+- `src/lib/lifecycle/purge.ts` is the only deletion path. Manual delete and the
+  scheduled cron both call it — never delete a record directly.
+- Order is fixed: **assets first, then the record**. A record pointing at
+  missing photos is worse than a leftover file.
+- Every step is idempotent and the job lease prevents concurrent workers from
+  double-processing. A failed storage delete keeps the job for retry.
+- The deletion job holds ids and an owner hash only. Never add names, messages
+  or media to it.
+- Uploads are bound to `apologyId` + `ownerKeyHash`. Media access is decided by
+  `canServeAsset()` — do not bypass it with a bare id lookup.
+
 ## Rendering rules that exist for a reason
 
 - Theme skins render **only** decoration: `absolute inset-0`, `aria-hidden`,
@@ -67,6 +82,9 @@ storage may define components, timing functions or selectors.
   hydration.
 - Ambient motion stops when `paused` is true (inactive scene, hidden tab, reduced
   motion).
+- No Unicode emoji in source. Controls use `@/components/ui/icons`; storytelling
+  uses sticker packs; decoration belongs to theme skins. The registry in
+  `src/lib/design/symbols.ts` is the reference, and a test enforces the ban.
 - Recipient responses are never transmitted. Do not add an endpoint for them.
 
 ## Before finishing work

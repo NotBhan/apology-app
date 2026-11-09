@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import type { PhotoAsset } from "@/types/apology";
 import { cn } from "@/lib/cn";
+import { Icon } from "@/components/ui/icons";
 
 interface MemoryGalleryProps {
   photos: PhotoAsset[];
@@ -225,7 +226,7 @@ function Slideshow({
           className="grid h-9 w-9 place-items-center rounded-full border text-sm"
           style={{ borderColor: "var(--t-border)", color: "var(--t-text)" }}
         >
-          <Chevron direction="left" />
+          <Icon name="chevron-left" size={14} />
         </button>
         <div className="flex gap-1.5" aria-hidden>
           {photos.map((item, dot) => (
@@ -246,21 +247,9 @@ function Slideshow({
           className="grid h-9 w-9 place-items-center rounded-full border text-sm"
           style={{ borderColor: "var(--t-border)", color: "var(--t-text)" }}
         >
-          <Chevron direction="right" />
+          <Icon name="chevron-right" size={14} />
         </button>
       </div>
     </div>
-  );
-}
-
-function Chevron({ direction }: { direction: "left" | "right" }) {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-      <path
-        d={direction === "left" ? "M8.6 2.6 4.2 7l4.4 4.4" : "M5.4 2.6 9.8 7l-4.4 4.4"}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }

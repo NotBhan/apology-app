@@ -168,6 +168,73 @@ describe("FileRepository", () => {
     expect(await repo.getPublishedByToken(published.accessToken)).toBeUndefined();
   });
 
+  it("honours the 1-day and 7-day ends of the window", async () => {
+    for (const days of [1, 7]) {
+      const draft = await repo.createDraft(OWNER, { recipientName: "A", senderName: "B" });
+      await repo.saveDraft(draft.id, OWNER, payload);
+      const before = Date.now();
+      const published = await repo.publish(draft.id, OWNER, days);
+      const createdAt = Date.parse(published.expiresAt ?? "");
+      const days_out = (createdAt - before) / 86_400_000;
+
+      expect(published.linkDurationDays).toBe(days);
+      expect(days_out).toBeGreaterThan(days - 0.01);
+      expect(days_out).toBeLessThan(days + 0.01);
+    }
+  });
+
+  it("lists only published records whose window has passed", async () => {
+    const draft = await repo.createDraft(OWNER, { recipientName: "A", senderName: "B" });
+    await repo.saveDraft(draft.id, OWNER, payload);
+    await repo.publish(draft.id, OWNER, 1);
+
+    const future = await repo.listExpired(new Date(Date.now() + 86_400_000).toISOString(), 10);
+    expect(future.map((record) => record.id)).toContain(draft.id);
+
+    const past = await repo.listExpired(new Date(Date.now() - 86_400_000).toISOString(), 10);
+    expect(past.map((record) => record.id)).not.toContain(draft.id);
+  });
+
+  it("purge removes the record and stops the token resolving", async () => {
+    const draft = await repo.createDraft(OWNER, { recipientName: "A", senderName: "B" });
+    await repo.saveDraft(draft.id, OWNER, payload);
+    const published = await repo.publish(draft.id, OWNER, 1);
+
+    await repo.purge(draft.id);
+
+    expect(await repo.getDraft(draft.id)).toBeUndefined();
+    expect(await repo.getByToken(published.accessToken)).toBeUndefined();
+    expect(await repo.listByOwner(OWNER)).toHaveLength(0);
+  });
+
+  it("refuses to renew once cleanup has started", async () => {
+    const draft = await repo.createDraft(OWNER, { recipientName: "A", senderName: "B" });
+    await repo.saveDraft(draft.id, OWNER, payload);
+    const published = await repo.publish(draft.id, OWNER, 1);
+
+    // Simulate the purge worker having claimed this apology.
+    const dir = path.join(process.cwd(), ".data", "deletions");
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(
+      path.join(dir, `${draft.id}.json`),
+      JSON.stringify({
+        apologyId: draft.id,
+        assetIds: [],
+        attempts: 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        leaseUntil: Date.now() + 60_000,
+      }),
+    );
+
+    await expect(repo.publish(draft.id, OWNER, 3)).rejects.toThrow("DELETED");
+
+    // Access is still governed by expiry, not by the job.
+    expect(await repo.getPublishedByToken(published.accessToken)).toBeDefined();
+
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
   it("toPublished never leaks server fields", () => {
     const published = toPublished({
       id: "x",

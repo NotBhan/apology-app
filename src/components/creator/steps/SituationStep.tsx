@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/Button";
 import { SITUATIONS } from "@/content/situations";
+import { Icon } from "@/components/ui/icons";
 import type { SituationKey } from "@/types/apology";
 import { cn } from "@/lib/cn";
 
@@ -70,7 +71,8 @@ export function SituationStep({
                 {active ? <span className="h-2 w-2 rounded-full bg-[#6d3fa8]" /> : null}
               </span>
               <span>
-                <span className="block text-[0.9rem] font-semibold text-[#33203f]">
+                <span className="flex items-center gap-1.5 text-[0.9rem] font-semibold text-[#33203f]">
+                  <Icon name={option.icon} size={15} className="text-[#8a5bc4]" />
                   {option.label}
                 </span>
                 <span className="block text-[0.75rem] text-[#8a7a9c]">{option.hint}</span>

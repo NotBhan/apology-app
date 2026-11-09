@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
+import { Icon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 
 export interface AudioControllerProps {
@@ -118,7 +119,7 @@ export function AudioController({
           animate={{ scale: playing ? 1 : 0.92 }}
           transition={{ type: "spring", stiffness: 300, damping: 22 }}
         >
-          {playing ? <PauseGlyph /> : <PlayGlyph />}
+          <Icon name={playing ? "pause" : "play"} size={13} />
         </motion.span>
       </button>
 
@@ -130,7 +131,7 @@ export function AudioController({
         className="grid h-8 w-8 place-items-center rounded-full transition active:scale-95"
         style={{ color: tone?.text ?? "#33203f" }}
       >
-        {muted ? <MutedGlyph /> : <SoundGlyph />}
+        <Icon name={muted ? "volume-off" : "volume-on"} size={15} />
       </button>
 
       {blocked ? (
@@ -142,40 +143,5 @@ export function AudioController({
         </span>
       ) : null}
     </div>
-  );
-}
-
-function PlayGlyph() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden>
-      <path d="M3 1.8v8.4c0 .5.55.8.97.54l6.2-4.2a.64.64 0 0 0 0-1.08l-6.2-4.2A.64.64 0 0 0 3 1.8Z" />
-    </svg>
-  );
-}
-
-function PauseGlyph() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden>
-      <rect x="2.4" y="1.8" width="2.4" height="8.4" rx="1" />
-      <rect x="7.2" y="1.8" width="2.4" height="8.4" rx="1" />
-    </svg>
-  );
-}
-
-function SoundGlyph() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden>
-      <path d="M2 5.2h2.2L7 2.8v8.4L4.2 8.8H2z" fill="currentColor" stroke="none" />
-      <path d="M9.2 4.6a3.2 3.2 0 0 1 0 4.8M11 3a5.6 5.6 0 0 1 0 8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function MutedGlyph() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden>
-      <path d="M2 5.2h2.2L7 2.8v8.4L4.2 8.8H2z" fill="currentColor" stroke="none" />
-      <path d="m9.4 5.4 3.2 3.2M12.6 5.4l-3.2 3.2" strokeLinecap="round" />
-    </svg>
   );
 }

@@ -98,18 +98,25 @@ const JSON_HEADERS: Record<string, string> = {
   "Content-Type": "application/json; charset=utf-8",
 };
 
-export function jsonOk<T>(data: T, status = 200): Response {
-  return new Response(JSON.stringify(data), { status, headers: JSON_HEADERS });
+export function jsonOk<T>(data: T, status = 200, extraHeaders?: Record<string, string>): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...JSON_HEADERS, ...extraHeaders },
+  });
 }
 
 export function jsonError(
   status: number,
   error: string,
   fields?: Record<string, string>,
+  extraHeaders?: Record<string, string>,
 ): Response {
   const body: ApiError =
     fields && Object.keys(fields).length > 0 ? { error, fields } : { error };
-  return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...JSON_HEADERS, ...extraHeaders },
+  });
 }
 
 /**
@@ -127,6 +134,8 @@ export function repositoryErrorResponse(error: unknown): Response {
       return jsonError(403, "You do not have access to this letter.");
     case "REVOKED":
       return jsonError(410, "This letter has been revoked.");
+    case "DELETED":
+      return jsonError(410, "This letter has been deleted and cannot be renewed.");
     default:
       console.error("[api] unexpected failure:", error);
       return jsonError(500, "Something went wrong on our side. Please try again.");

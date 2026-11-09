@@ -1,12 +1,19 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getOrCreateOwner, getOwner } from "@/lib/security/owner";
 import { getRepository } from "@/lib/storage";
+import { deleteDraftForOwner } from "@/lib/storage/delete-draft";
+import {
+  RATE_LIMITS,
+  clientIpFromHeaders,
+  getRateLimiter,
+  rateLimitKey,
+} from "@/lib/security/rate-limit";
 import {
   draftPayloadSchema,
-  createDraftSchema,
   formatZodError,
   linkDurationDaysSchema,
 } from "@/lib/validation/apology";
@@ -21,19 +28,16 @@ export interface ActionResult<T> {
   fields?: Record<string, string>;
 }
 
-export async function createDraftAction(input: unknown): Promise<ActionResult<ApologyDraft>> {
-  const parsed = createDraftSchema.safeParse(input);
-  if (!parsed.success) {
-    return { ok: false, error: "Check the names.", fields: formatZodError(parsed.error) };
-  }
-  const owner = await getOrCreateOwner();
-  const repo = await getRepository();
-  const record = await repo.createDraft(owner.hash, parsed.data);
-  revalidatePath("/manage");
-  return { ok: true, data: toCreatorDraft(record) };
-}
-
 export async function startDraftAction(): Promise<void> {
+  // Draft creation costs a write and is reachable from a plain form, so it is
+  // the first thing an abusive script would hit.
+  const requestHeaders = await headers();
+  const limit = await getRateLimiter().hit(
+    rateLimitKey("createDraft", clientIpFromHeaders(requestHeaders)),
+    RATE_LIMITS.createDraft,
+  );
+  if (!limit.allowed) redirect("/create?limited=1");
+
   const owner = await getOrCreateOwner();
   const repo = await getRepository();
   const record = await repo.createDraft(owner.hash, { recipientName: "", senderName: "" });
@@ -136,9 +140,8 @@ export async function revokeDraftAction(id: string): Promise<ActionResult<null>>
 export async function deleteDraftAction(id: string): Promise<ActionResult<null>> {
   const owner = await getOwner();
   if (!owner) return { ok: false, error: "Not your letter." };
-  const repo = await getRepository();
   try {
-    await repo.remove(id, owner.hash);
+    await deleteDraftForOwner(id, owner.hash);
     revalidatePath("/manage");
     return { ok: true, data: null };
   } catch (cause) {
@@ -151,5 +154,6 @@ function mapRepoError(cause: unknown): string {
   if (message === "NOT_FOUND") return "That draft no longer exists.";
   if (message === "FORBIDDEN") return "This draft belongs to another browser.";
   if (message === "REVOKED") return "This letter was revoked.";
+  if (message === "DELETED") return "This letter has been deleted and cannot be renewed.";
   return "Something went wrong. Try again.";
 }

@@ -180,7 +180,14 @@ export default function HomePage() {
 
       <footer className="mx-auto w-full max-w-[1080px] px-5 pb-10 pt-4">
         <div className="flex flex-col items-center justify-between gap-3 border-t border-[#ece2f6] pt-6 text-[0.72rem] text-[#a394b4] sm:flex-row">
-          <p>Original characters and artwork. No third-party sticker packs included.</p>
+          <p className="max-w-[52ch]">
+            Original characters and artwork. Links last at most seven days, then the letter
+            and its files are deleted.{" "}
+            <Link href="/privacy" className="underline underline-offset-2 hover:text-[#7a4fb0]">
+              What we store
+            </Link>
+            .
+          </p>
           <Link href="/create" className="font-semibold text-[#7a4fb0]">
             Start an apology →
           </Link>

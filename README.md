@@ -28,7 +28,8 @@ uploads are stored under `.data/`.
 | `/create/[draftId]` | Wizard (names → situation → words → theme → characters → customise → publish) |
 | `/preview/[draftId]` | Full recipient experience in a phone frame, creator controls outside |
 | `/letter/[token]` | Published, recipient-facing experience (until it expires) |
-| `/manage` | List letters, see time remaining, renew an expired link, revoke or delete |
+| `/manage` | List letters, see time remaining, renew, revoke or delete |
+| `/privacy` | What is stored, for how long, and how deletion works |
 
 ## Validation
 
@@ -37,11 +38,14 @@ npm run lint
 npm run typecheck
 npm run test
 npm run build
-npm run validate   # all four
+npm run validate       # all four
+npm run test:firebase  # lifecycle against Firestore + Storage emulators
+                       # (start them with the emulators:exec line in docs/TESTING.md)
 ```
 
-91 tests across scene building, theme/sticker contracts, validation, link
-expiry, access control, text reveals and the envelope interaction.
+136 tests: 131 hermetic (scene building, theme/sticker contracts, validation,
+link expiry, deletion lifecycle, media access, symbols, access control, text
+reveals, envelope) plus 5 that run against real Firestore + Storage emulators.
 
 ## Production notes
 
@@ -57,6 +61,10 @@ expiry, access control, text reveals and the envelope interaction.
   deadline is computed server-side and stored as `expiresAt`; an expired token
   behaves exactly like an unknown one (404), so it reveals nothing. Publishing
   again renews the same token for a fresh window.
+- **Deletion**: an hourly cron (`/api/cron/purge`, protected by `CRON_SECRET`)
+  removes expired letters, their uploads and their metadata. Media is bound to
+  its apology, so a dead link takes its photos with it. See
+  [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §6.
 
 ## Documentation
 
