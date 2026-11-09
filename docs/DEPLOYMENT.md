@@ -6,6 +6,11 @@ service, no worker.
 Marker key: ✅ verified here · ⚠️ verified only against doubles · ⏳ requires
 real credentials, **not verified**.
 
+The acceptance matrix — V1–V4, end-to-end deletion, retry, pre-signed retrieval,
+eventual removal and the crash-stranding check — lives in
+[`ACCEPTANCE.md`](ACCEPTANCE.md). Run `./scripts/acceptance/run.sh` to produce an
+evidence file.
+
 ## 0. Required configuration
 
 | Variable | Required | Notes |

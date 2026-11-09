@@ -145,3 +145,17 @@ Two environment traps worth remembering:
 - `FILEBASE_*` credentials are server-only and never read from ambient `AWS_*`.
 - `CLEANUP_SECRET` is used only by the cleanup function's manual path.
 - Migrations: `npm run db:migrate`.
+
+## Production infrastructure acceptance
+
+`src/acceptance/infrastructure.test.ts` is the only suite that touches real
+providers. It is skipped unless `ACCEPTANCE=1` plus credentials are present, so
+`npm test` stays hermetic:
+
+```
+Test Files  13 passed | 1 skipped (14)
+     Tests  139 passed | 5 skipped (144)
+```
+
+Run it with `./scripts/acceptance/run.sh`. The matrix, the current status and the
+crash-stranding proof are in [`ACCEPTANCE.md`](ACCEPTANCE.md).

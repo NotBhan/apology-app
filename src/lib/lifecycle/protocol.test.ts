@@ -213,6 +213,63 @@ describe("deletion protocol", () => {
     expect(ctx.backend.state.jobs.get(record.id)?.state).toBe("completed");
   });
 
+  it("does not strand a job if the run dies after deleting objects", async () => {
+    const record = expiredApology(ctx);
+
+    // The function terminates after DeleteObjects but before finalise — the
+    // worst realistic crash window, because the objects are already gone.
+    const original = ctx.backend.lifecycle.finalize.bind(ctx.backend.lifecycle);
+    ctx.backend.lifecycle.finalize = async () => {
+      throw new Error("process terminated");
+    };
+
+    await expect(run()).rejects.toThrow("process terminated");
+
+    // Objects gone, rows still present, job left processing with a lease.
+    expect(ctx.objects.objects.size).toBe(0);
+    expect(ctx.backend.state.apologies.has(record.id)).toBe(true);
+    expect(ctx.backend.state.jobs.get(record.id)?.state).toBe("processing");
+    expect(ctx.backend.state.jobs.get(record.id)?.leaseUntil).toBeGreaterThan(NOW.getTime());
+
+    // A run before the lease expires must not double-process it.
+    const during = await run();
+    expect(during.skipped).toBe(1);
+
+    // After the lease expires, the next run resumes and completes. Deleting an
+    // already-missing object is a success, so nothing is stranded.
+    ctx.backend.lifecycle.finalize = original;
+    const after = await runCleanup({
+      store: ctx.backend.lifecycle,
+      objects: ctx.objects,
+      now: () => new Date(NOW.getTime() + 3 * 60_000),
+    });
+
+    expect(after.deleted).toBe(1);
+    expect(ctx.backend.state.apologies.has(record.id)).toBe(false);
+    expect(ctx.backend.state.tombstones).toHaveLength(1);
+    expect(ctx.backend.state.jobs.get(record.id)?.state).toBe("completed");
+  });
+
+  it("resumes after a crash that happened before any object was deleted", async () => {
+    const record = expiredApology(ctx);
+    ctx.objects.failDeleteWith = Object.assign(new Error("503"), { name: "SlowDown" });
+
+    const first = await run();
+    expect(first.retried).toBe(1);
+    expect(ctx.backend.state.jobs.get(record.id)?.state).toBe("failed");
+
+    // The next run is not blocked by the previous failure.
+    ctx.objects.failDeleteWith = undefined;
+    const second = await runCleanup({
+      store: ctx.backend.lifecycle,
+      objects: ctx.objects,
+      now: () => new Date(NOW.getTime() + 60_000),
+    });
+
+    expect(second.deleted).toBe(1);
+    expect(ctx.backend.state.apologies.has(record.id)).toBe(false);
+  });
+
   it("leaves a live letter untouched", async () => {
     const record = makeRecord({
       ownerKeyHash: OWNER,
