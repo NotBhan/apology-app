@@ -23,6 +23,7 @@ evidence file.
 | `FILEBASE_REGION` | no | default `auto`; wrong region = `SignatureDoesNotMatch` |
 | `NEXT_PUBLIC_APP_URL` | no | canonical origin for links |
 | `CLEANUP_SECRET` | no | ≥32 chars; **only** for the cleanup function's manual path |
+| `NEON_FUNCTION_URL` | no | acceptance harness only, for the V4 manual-invocation check; from `neon functions get cleanup` |
 
 There is no filesystem fallback: without `DATABASE_URL` the data layer throws.
 
