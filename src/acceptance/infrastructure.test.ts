@@ -24,12 +24,35 @@ import type { ObjectStore } from "@/lib/storage/object-store";
  * contract is not met — no amount of green unit tests changes that.
  */
 
+/**
+ * Two distinct gates, deliberately:
+ *
+ * - `ACCEPTANCE` unset → skipped, so `npm test` stays hermetic and offline.
+ * - `ACCEPTANCE=1` but credentials missing → **fails**. Silently skipping an
+ *   acceptance run would let the orchestrator report a pass it never observed,
+ *   which is the one failure mode this suite exists to prevent.
+ */
+const REQUESTED = process.env.ACCEPTANCE === "1";
 const READY =
-  process.env.ACCEPTANCE === "1" &&
   Boolean(process.env.DATABASE_URL) &&
-  Boolean(process.env.FILEBASE_ACCESS_KEY);
+  Boolean(process.env.FILEBASE_ACCESS_KEY) &&
+  Boolean(process.env.FILEBASE_SECRET_KEY) &&
+  Boolean(process.env.FILEBASE_BUCKET);
 
+// Runs only when both gates pass, so a missing-credential run reports one clear
+// failure instead of five confusing ones.
 const suite = READY ? describe : describe.skip;
+
+if (REQUESTED && !READY) {
+  describe("production infrastructure acceptance", () => {
+    it("requires provider credentials", () => {
+      throw new Error(
+        "ACCEPTANCE=1 but credentials are missing. Set DATABASE_URL, " +
+          "FILEBASE_ACCESS_KEY, FILEBASE_SECRET_KEY and FILEBASE_BUCKET.",
+      );
+    });
+  });
+}
 
 const OWNER = `acceptance-${Date.now()}`;
 const PNG = new Uint8Array(

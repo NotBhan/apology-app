@@ -28,9 +28,13 @@ produced by a command that actually ran; the script stops on the first failure.
 The suite itself:
 
 ```bash
-ACCEPTANCE=1 npm run acceptance          # real Neon + real Filebase
-npm test                                 # hermetic; skips the suite above
+npm run acceptance   # real Neon + real Filebase (sets ACCEPTANCE=1 itself)
+npm test             # hermetic; the acceptance suite is skipped
 ```
+
+`npm run acceptance` **fails** when credentials are missing rather than skipping.
+A silently-skipped run would let the orchestrator report a pass it never
+observed.
 
 ## Checks
 
