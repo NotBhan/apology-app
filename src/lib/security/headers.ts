@@ -12,8 +12,9 @@
  * - Images: `/api/uploads/*` (same origin), plus `data:` and `blob:` for local
  *   previews before upload.
  * - Audio: `/audio/*.mp3` (same origin).
- * - Network: no third-party APIs are called from the browser. Firebase Admin is
- *   server-only, which is why no firebase domain appears in `connect-src`.
+ * - Network: no third-party APIs are called from the browser apart from the
+ *   storage origin used for pre-signed media. Database and bucket credentials
+ *   are server-only, so neither appears in connect-src.
  *
  * `'unsafe-eval'` is added only in development: React Refresh needs it, the
  * production bundle does not.
@@ -27,19 +28,30 @@ export interface SecurityHeader {
 export interface HeaderOptions {
   /** Production enables HSTS and drops the dev-only eval allowance. */
   production: boolean;
+  /**
+   * Origin that serves pre-signed media (Filebase). Pre-signed GETs are fetched
+   * by the browser directly, so exactly this origin is allowed for images and
+   * audio — no wildcard, nothing else relaxed.
+   */
+  storageOrigin?: string;
 }
 
-export function buildContentSecurityPolicy({ production }: HeaderOptions): string {
+export function buildContentSecurityPolicy({ production, storageOrigin }: HeaderOptions): string {
   const scriptSrc = production
     ? "'self' 'unsafe-inline'"
     : "'self' 'unsafe-inline' 'unsafe-eval'";
+
+  const media = ["'self'", "blob:"];
+  if (storageOrigin) media.push(storageOrigin);
+  const images = ["'self'", "data:", "blob:"];
+  if (storageOrigin) images.push(storageOrigin);
 
   return [
     "default-src 'self'",
     `script-src ${scriptSrc}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
-    "media-src 'self' blob:",
+    `img-src ${images.join(" ")}`,
+    `media-src ${media.join(" ")}`,
     "font-src 'self' data:",
     "connect-src 'self'",
     // Turbopack/worker chunks in development; harmless to allow in both.

@@ -1,27 +1,22 @@
 import { getOwner } from "@/lib/security/owner";
-import { getRepository } from "@/lib/storage";
-import { readUpload, removeUpload } from "@/lib/storage/uploads";
+import { getObjectStore, getRepository } from "@/lib/storage";
 import { canServeAsset } from "@/lib/storage/asset-access";
+import { isValidAssetId, presignAssetUrl } from "@/lib/storage/uploads";
 import { jsonError, jsonOk, repositoryErrorResponse } from "@/lib/api/responses";
-import { enforceRateLimit, rateLimitHeaders } from "@/lib/security/rate-limit";
+import { enforceRateLimit, rateLimitHeaders } from "@/lib/security/postgres-rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/**
- * Media is never cacheable by a shared cache and never served past the life of
- * the apology it belongs to. `no-store` is deliberate: authorisation changes at
- * the exact expiry timestamp, so a cached copy would outlive the link.
- */
-const PRIVATE_NO_STORE = "private, no-store";
-
 type AssetRouteContext = { params: Promise<{ assetId: string }> };
 
 /**
- * Serves an asset to its owner, or to anyone while the owning apology is live.
+ * Media is never served directly and never cached. The route authorises by
+ * asset row → owning apology → liveness, then redirects to a 60-second
+ * pre-signed URL.
  *
- * This is the second half of expiry enforcement: revoking a record is not
- * enough if the photos it referenced stay reachable from a saved URL.
+ * A leaked object key is therefore useless: the key is never in a URL the
+ * browser keeps, and the asset id alone still requires a live letter.
  */
 export async function GET(request: Request, context: AssetRouteContext) {
   const { assetId } = await context.params;
@@ -36,35 +31,25 @@ export async function GET(request: Request, context: AssetRouteContext) {
     );
   }
 
+  if (!isValidAssetId(assetId)) return jsonError(404, "That file could not be found.");
+
   try {
-    const stored = await readUpload(assetId);
-    if (!stored) return jsonError(404, "That file could not be found.");
-
-    const asset = stored.asset;
     const owner = await getOwner();
+    const asset = await getRepository().getAssetForServing(assetId);
 
-    // Owner, or anyone while the owning letter is live. Unbound assets fail
-    // closed rather than becoming anonymously readable.
-    const repository = await getRepository();
-    const record = asset.apologyId ? await repository.getDraft(asset.apologyId) : undefined;
-
-    if (!canServeAsset({ asset, ownerKeyHash: owner?.hash, record })) {
+    if (!asset || !canServeAsset({ asset, ownerKeyHash: owner?.hash })) {
       return jsonError(404, "That file could not be found.");
     }
 
-    // `new Response` needs an ArrayBuffer-backed body; copy into a plain buffer
-    // so the type is exact and the bytes cannot be mutated after this point.
-    const body = new ArrayBuffer(stored.bytes.byteLength);
-    new Uint8Array(body).set(stored.bytes);
+    const url = await presignAssetUrl({ objects: getObjectStore() }, asset);
 
-    return new Response(body, {
-      status: 200,
+    return new Response(null, {
+      status: 307,
       headers: {
-        "Content-Type": asset.mime,
-        "Content-Length": String(body.byteLength),
-        "Cache-Control": PRIVATE_NO_STORE,
-        "Content-Disposition": "inline",
-        "X-Content-Type-Options": "nosniff",
+        Location: url,
+        // The signed URL is a short-lived bearer token: never cache the hop.
+        "Cache-Control": "private, no-store",
+        "Referrer-Policy": "no-referrer",
       },
     });
   } catch (error) {
@@ -72,21 +57,22 @@ export async function GET(request: Request, context: AssetRouteContext) {
   }
 }
 
-/** Owner-only removal. Idempotent. */
+/** Owner-only removal. The row is kept as `failed` so its key stays traceable. */
 export async function DELETE(_request: Request, context: AssetRouteContext) {
   const { assetId } = await context.params;
 
   try {
     const owner = await getOwner();
     if (!owner) return jsonError(403, "You do not have access to that file.");
+    if (!isValidAssetId(assetId)) return jsonOk({ ok: true });
 
-    const stored = await readUpload(assetId);
-    if (!stored) return jsonOk({ ok: true });
-    if (stored.asset.ownerKeyHash !== owner.hash) {
+    const asset = await getRepository().getAssetForServing(assetId);
+    if (!asset || asset.ownerKeyHash !== owner.hash) {
       return jsonError(403, "You do not have access to that file.");
     }
 
-    await removeUpload(assetId);
+    await getObjectStore().deleteMany([asset.objectKey]);
+    await getRepository().failAsset(assetId);
     return jsonOk({ ok: true });
   } catch (error) {
     return repositoryErrorResponse(error);

@@ -1,26 +1,97 @@
 import type { ApologyDraft, ApologyRecord, PublishedApology } from "@/types/apology";
 import type { DraftPayload } from "@/lib/validation/apology";
+import type { DeletionTombstone } from "@/lib/lifecycle/types";
+
+/**
+ * Persistence contract.
+ *
+ * Nothing here schedules or performs physical deletion. `remove()` and
+ * `requestDeletionByOwner()` only enqueue durable intent; the Neon cleanup
+ * function owns object and row removal.
+ */
+
+export type AssetState = "pending" | "uploaded" | "failed";
+
+export interface AssetRecord {
+  id: string;
+  apologyId: string;
+  state: AssetState;
+  objectKey: string;
+  kind: "photo" | "audio";
+  contentType: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
+export interface ServingAsset extends AssetRecord {
+  ownerKeyHash: string;
+  apologyStatus: string;
+  expiresAt: string | null;
+}
+
+export interface ReserveAssetInput {
+  apologyId: string;
+  ownerKeyHash: string;
+  objectKey: string;
+  kind: "photo" | "audio";
+  contentType: string;
+  sizeBytes: number;
+  /** Maximum live (non-failed) assets the apology may hold. */
+  maxAssets: number;
+}
 
 export interface ApologyRepository {
-  createDraft(ownerKeyHash: string, seed: { recipientName: string; senderName: string }): Promise<ApologyRecord>;
+  createDraft(
+    ownerKeyHash: string,
+    seed: { recipientName: string; senderName: string },
+  ): Promise<ApologyRecord>;
+
   getDraft(id: string): Promise<ApologyRecord | undefined>;
+
   saveDraft(id: string, ownerKeyHash: string, payload: DraftPayload): Promise<ApologyRecord>;
-  /** Re-publishes with a fresh 1–7 day window; the token is reused. */
-  publish(id: string, ownerKeyHash: string, durationDays: number): Promise<ApologyRecord>;
-  revoke(id: string, ownerKeyHash: string): Promise<ApologyRecord>;
-  remove(id: string, ownerKeyHash: string): Promise<void>;
-  listByOwner(ownerKeyHash: string): Promise<ApologyDraft[]>;
-  /** Recipient read path: token + published status only. */
-  getPublishedByToken(token: string): Promise<PublishedApology | undefined>;
-  /** Look up a record by its access token, for the creator's own preview. */
-  getByToken(token: string): Promise<ApologyRecord | undefined>;
-  /** Published records whose expiry has passed. Used by the purge worker. */
-  listExpired(nowIso: string, limit: number): Promise<ApologyRecord[]>;
+
   /**
-   * Unconditional delete, for the purge worker only. Authorisation has already
-   * been decided by expiry, so this deliberately does not check ownership.
+   * Publishes or renews. Mints a **new** link token every time, because only
+   * hashes are stored; the plaintext is returned once, on the result.
    */
-  purge(id: string): Promise<void>;
+  publish(id: string, ownerKeyHash: string, durationDays: number): Promise<ApologyRecord>;
+
+  revoke(id: string, ownerKeyHash: string): Promise<ApologyRecord>;
+
+  /** Manual deletion: marks inaccessible and enqueues intent. No object I/O. */
+  remove(id: string, ownerKeyHash: string): Promise<void>;
+
+  listByOwner(ownerKeyHash: string): Promise<ApologyDraft[]>;
+
+  getPublishedByToken(token: string): Promise<PublishedApology | undefined>;
+
+  getByToken(token: string): Promise<ApologyRecord | undefined>;
+
+  /* ---- assets ------------------------------------------------------- */
+
+  /** Writes the row before any object exists. `null` = not eligible. */
+  reserveAsset(input: ReserveAssetInput): Promise<AssetRecord | null>;
+
+  /** Conditional attach: `null` means deletion started while the PUT ran. */
+  completeAsset(
+    assetId: string,
+    apologyId: string,
+    ownerKeyHash: string,
+  ): Promise<AssetRecord | null>;
+
+  failAsset(assetId: string): Promise<void>;
+
+  listAssets(apologyId: string): Promise<AssetRecord[]>;
+
+  getAssetForServing(assetId: string): Promise<ServingAsset | undefined>;
+
+  /* ---- lifecycle (creator-facing) ----------------------------------- */
+
+  requestDeletionByOwner(id: string, ownerKeyHash: string): Promise<boolean>;
+
+  isDeletionPending(apologyId: string): Promise<boolean>;
+
+  tombstonesForOwner(ownerKeyHash: string): Promise<DeletionTombstone[]>;
 }
 
 export function toPublished(record: ApologyRecord): PublishedApology {

@@ -31,7 +31,7 @@ npm run validate    # all four, in order
 | Reveal primitives | `src/components/presentation/MessageReveal.test.tsx` | text is never dropped in any reveal mode |
 | Envelope | `src/components/presentation/EnvelopeAnimation.test.tsx` | starts sealed, opens on the seal, reveals the letter, addresses recipient, signs sender, fires `onOpened` |
 | Security headers | `src/lib/security/headers.test.ts` | required headers present; `frame-ancestors 'none'`; HSTS production-only; no `unsafe-eval` in production; no third-party origin; no duplicate directives |
-| Error boundary | `src/app/error.test.tsx` | recovery actions work; error message, stack, Firestore path and token are never rendered; only the digest is shown |
+| Error boundary | `src/app/error.test.tsx` | recovery actions work; error message, stack, database path and token are never rendered; only the digest is shown |
 | Legacy records | `file-repository.test.ts`, `purge.test.ts` | a published record with a missing or malformed `expiresAt` is inaccessible **and** purgeable, labelled `legacy`, and auditable without mutation |
 
 **91 tests across 7 files.**
@@ -141,74 +141,7 @@ Two environment traps worth remembering:
 
 ## Production notes
 
-`FileRepository` writes to `.data/`. That survives local development and any
-long-lived Node host, but **not** Vercel's ephemeral filesystem. Set:
-
-```
-FIREBASE_PROJECT_ID
-FIREBASE_CLIENT_EMAIL
-FIREBASE_PRIVATE_KEY   # with \n escapes
-```
-
-`GET /api/health` reports the active backend.
-
-Firestore is never read with the client SDK; `firestore.rules` denies client
-access entirely and all reads/writes go through the Admin SDK in route handlers.
-
----
-
-## Deletion lifecycle
-
-Run the hermetic suite:
-
-```bash
-npm test          # 131 tests, 5 skipped (emulator suite)
-```
-
-Run the Firebase suite against real emulators:
-
-```bash
-npx firebase emulators:exec --only firestore,storage --project demo-apology \
-  "npm run test:firebase"
-```
-
-Requires Java (the Firestore emulator) and `firebase-tools`. Results on this
-machine: **5/5 passed** against Firestore + Storage emulators, exercising the
-real Admin SDK, real queries and real object storage — not fakes.
-
-| Test | What it proves |
-| --- | --- |
-| `purge lifecycle` (13) | record + every asset deleted; unrelated assets untouched; tombstone has no content; idempotent; retry after storage failure; verification catches a lying backend; lease blocks a second worker; two concurrent runs delete exactly once; live letters untouched; exact-boundary expiry; drafts ignored; job resumed after a crash mid-way; manual delete uses the same pipeline |
-| `asset-access` (9) | owner always allowed; stranger allowed only while live; boundary closed; revoked and draft refused; unbound/missing refused |
-| `file-repository` (4 added) | 1-day and 7-day windows exact; `listExpired` filters correctly; `purge` stops the token resolving; renewal refused with `DELETED` once a job exists |
-| `firebase.integration` (5) | real publish → real expiry → real purge; Firestore doc, upload metadata and Storage objects all gone; token dead; tombstone content-free; idempotent; renewal blocked; another owner's record untouched |
-
-**Bug caught by the emulator suite:** `getDb()` called `db.settings()` on every
-invocation. Firestore allows it once per instance, so the *second* request in a
-process would have thrown — a failure the filesystem backend could never reveal.
-The handle is now memoised. This is the concrete argument for testing against a
-real backend rather than trusting unit tests.
-
-### Limitations of this verification
-
-- It runs against the **emulator**, not a live Firebase project: no service
-  account credentials exist in this environment. The Admin SDK path, queries,
-  object storage and rules runtime are real; the managed service is not.
-- Storage rules are not exercised by these tests (the Admin SDK bypasses rules).
-  `storage.rules` denies all client access and is deployed with the project.
-- The hourly cron schedule in `vercel.json` is configuration; it is not fired in
-  tests. The route itself is tested indirectly through `purgeExpired`.
-
-## Symbol and emoji audit
-
-| Check | Result |
-| --- | --- |
-| Unicode emoji anywhere in `src/**` | **0** — enforced by a source-scanning test |
-| Functional symbols with documented meaning | 15/15 |
-| Situation options with a distinct, existing symbol | 6/6 |
-| Standalone controls with an accessible name | 5/5 (play, pause, volume on/off, back) |
-| Decorative family declared per theme | 8/8 |
-
-The premise that the app contained mismatched emoji did not hold: there were
-none. The deliverable is therefore the registry, the Lucide control set, the
-situation mapping, and a test that keeps it that way.
+- `DATABASE_URL` is required; there is no filesystem fallback.
+- `FILEBASE_*` credentials are server-only and never read from ambient `AWS_*`.
+- `CLEANUP_SECRET` is used only by the cleanup function's manual path.
+- Migrations: `npm run db:migrate`.

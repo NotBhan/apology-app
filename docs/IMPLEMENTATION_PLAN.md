@@ -45,8 +45,8 @@ Publish / revoke / delete, private token route, owner-cookie identity.
 1. **Reference media was unavailable.** See `docs/REFERENCE_AUDIT.md`.
 2. **No licensed third-party sticker art.** `bubu-dudu` is an original homage
    pack; no third-party designs are copied.
-3. **Filesystem storage is not durable on Vercel.** Set the Firebase env vars
-   for production; see `docs/TESTING.md`.
+3. **Provider-managed deletion is unverified until deployed.** The Neon trigger
+   must be confirmed on the real project; see `docs/DEPLOYMENT.md`.
 4. **Photo crop is focal-point based**, not freeform cropping. Enough to keep a
    face in frame in every layout, and it cannot produce an invalid image.
 5. **No account system.** Access is a browser cookie. Clearing site data loses

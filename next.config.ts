@@ -30,7 +30,12 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/:path*",
-        headers: buildSecurityHeaders({ production: isProduction }),
+        headers: buildSecurityHeaders({
+          production: isProduction,
+          // Pre-signed media is fetched from the storage origin, so the CSP
+          // allows exactly that host for images and audio.
+          storageOrigin: process.env.FILEBASE_ENDPOINT,
+        }),
       },
     ];
   },

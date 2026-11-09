@@ -1,31 +1,38 @@
-import { isLinkLive } from "@/lib/expiry";
-import type { ApologyRecord } from "@/types/apology";
+import type { AssetRecord, ServingAsset } from "./types";
 
 /**
- * The single decision about whether a stored asset may be served.
+ * The single authorization decision for stored media.
  *
  * Extracted from the route so it can be tested directly: media access is the
  * half of expiry enforcement that is easy to get wrong, because the link can be
  * dead while the photo URL still resolves.
  */
 export interface AssetAccessInput {
-  asset: { ownerKeyHash?: string; apologyId?: string };
+  asset: Pick<ServingAsset, "ownerKeyHash" | "apologyStatus" | "expiresAt" | "state">;
   /** Hash from the caller's creator cookie, when there is one. */
   ownerKeyHash?: string;
-  /** The apology the asset belongs to, if it still exists. */
-  record?: Pick<ApologyRecord, "status" | "expiresAt">;
   now?: number;
 }
 
 export function canServeAsset(input: AssetAccessInput): boolean {
+  const { asset } = input;
+
+  // Only a completed upload is ever servable.
+  if (asset.state !== "uploaded") return false;
+
   // The owner can always see their own media, including before publishing.
-  if (input.ownerKeyHash && input.asset.ownerKeyHash === input.ownerKeyHash) {
+  if (input.ownerKeyHash && asset.ownerKeyHash === input.ownerKeyHash) {
     return true;
   }
 
-  // Anything unbound fails closed rather than becoming anonymously readable.
-  if (!input.asset.apologyId) return false;
-  if (!input.record) return false;
-
-  return isLinkLive(input.record.status, input.record.expiresAt, input.now);
+  if (asset.apologyStatus !== "published") return false;
+  return isLive(asset.expiresAt, input.now);
 }
+
+function isLive(expiresAt: string | null, now = Date.now()): boolean {
+  if (!expiresAt) return false;
+  const parsed = Date.parse(expiresAt);
+  return Number.isFinite(parsed) && parsed > now;
+}
+
+export type { AssetRecord };

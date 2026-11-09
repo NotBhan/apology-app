@@ -296,6 +296,7 @@ function StatusPill({
         }
       : { label: "Live", className: "bg-[#e8f5ec] text-[#3f7a4a]" },
     revoked: { label: "Revoked", className: "bg-[#fdf1f3] text-[#a8556b]" },
+    deleted: { label: "Deleting", className: "bg-[#fdf1f3] text-[#a8556b]" },
   } as const;
   const item = map[status];
   return (

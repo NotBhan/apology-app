@@ -12,7 +12,7 @@
  */
 import type { ApologyDraft, CreateDraftInput, PublishedApology } from "@/types/apology";
 import type { ApiError } from "@/lib/api/responses";
-import type { UploadAsset } from "@/lib/storage/uploads";
+import type { AssetRecord } from "@/lib/storage/types";
 
 export type { ApiError };
 
@@ -54,11 +54,11 @@ export interface PublishDraftResult {
 }
 
 export interface UploadResponse {
-  asset: UploadAsset;
+  asset: AssetRecord;
 }
 
 export interface UploadListResponse {
-  assets: UploadAsset[];
+  assets: AssetRecord[];
 }
 
 /** Public URL for an uploaded asset (capability URL — the id is unguessable). */
@@ -236,9 +236,10 @@ export async function getPublishedLetter(token: string): Promise<PublishedApolog
 /* Uploads                                                                    */
 /* -------------------------------------------------------------------------- */
 
-export async function uploadAsset(file: File): Promise<UploadAsset> {
+export async function uploadAsset(file: File, draftId: string): Promise<AssetRecord> {
   const form = new FormData();
   form.append("file", file, file.name || "upload");
+  form.append("draftId", draftId);
   const { asset } = await apiRequest<UploadResponse>("/api/uploads", {
     method: "POST",
     form,

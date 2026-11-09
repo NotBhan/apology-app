@@ -14,7 +14,7 @@ import ErrorBoundary from "./error";
 
 const SECRET_ERROR = Object.assign(
   new Error(
-    "Firestore READ failed at projects/apology-app/databases/(default)/documents/apologies/abc123: PERMISSION_DENIED; token=SECRET-TOKEN-VALUE",
+    "postgres query failed: relation 'apologies' permission denied; at Object.query (/app/src/db/client.ts:42); token=SECRET-TOKEN-VALUE",
   ),
   { digest: "abc123digest" },
 );
@@ -38,10 +38,10 @@ describe("route error boundary", () => {
     const { container } = render(<ErrorBoundary error={SECRET_ERROR} reset={() => {}} />);
     const text = container.textContent ?? "";
 
-    expect(text).not.toContain("Firestore");
+    expect(text).not.toContain("postgres query failed");
     expect(text).not.toContain("PERMISSION_DENIED");
     expect(text).not.toContain("SECRET-TOKEN-VALUE");
-    expect(text).not.toContain("projects/apology-app");
+    expect(text).not.toContain("/app/src/db/client.ts");
     expect(text).not.toContain("at ");
   });
 

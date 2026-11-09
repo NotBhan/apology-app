@@ -8,7 +8,7 @@ import Link from "next/link";
  * matches the rest of the app.
  *
  * Deliberately shows nothing from the error object except its digest: a
- * message here could contain a storage path, a Firestore operation name or a
+ * message here could contain a storage path, a database operation name or a
  * fragment of someone's letter.
  */
 export default function ErrorBoundary({

@@ -56,10 +56,26 @@ storage may define components, timing functions or selectors.
 
 ## Legacy records
 
-- A published record with no `expiresAt` is inaccessible and purgeable. Never
+- A published record with no `expires_at` is inaccessible and purgeable. Never
   treat a missing expiry as permanent access.
-- `listExpired()` filters on `status` and checks the expiry in code. Do not
-  replace it with a range query: Firestore skips documents missing the field.
+- New rows cannot reach that state: `apologies_published_complete` is a CHECK
+  constraint. Only rows written before the constraint existed could lack one.
+
+## No Firebase, no cron
+
+- There is no Firebase SDK, no Firestore, no Vercel Cron and no `/api/cron/*`.
+  Do not reintroduce a scheduled route, a timer or a background worker in the
+  app. Physical deletion belongs to the Neon cleanup function.
+- Filebase cannot expire objects (lifecycle config is 501). Never claim native
+  bucket expiry.
+
+## Upload invariant
+
+- `apology_assets` is written as `pending` **before** `PutObject`. Never upload
+  an object whose key is not already a row: deletion snapshots rows, so an
+  un-reserved object can be orphaned forever.
+- Upload completion is conditional. If it reports zero rows, delete the object
+  you just wrote and return 409 — do not attach it.
 
 ## Deletion lifecycle
 
@@ -85,7 +101,7 @@ storage may define components, timing functions or selectors.
 - Never add `loading.tsx` to a route that calls `notFound()`: the framed shell
   flushes with 200 and the 404 status is lost.
 - Error boundaries show a digest only. Never render `error.message` — it can
-  contain storage paths, Firestore operations or letter fragments.
+  contain storage paths, database operations or letter fragments.
 
 ## Rendering rules that exist for a reason
 

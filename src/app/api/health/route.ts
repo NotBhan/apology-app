@@ -1,6 +1,4 @@
-import { repositoryBackend } from "@/lib/storage";
-import { uploadBackend } from "@/lib/storage/uploads";
-import { rateLimitBackend } from "@/lib/security/rate-limit";
+import { configuredServices } from "@/lib/env";
 import { jsonOk } from "@/lib/api/responses";
 
 export const dynamic = "force-dynamic";
@@ -10,10 +8,11 @@ export const dynamic = "force-dynamic";
  * Deliberately says nothing about configuration values or secrets.
  */
 export async function GET() {
+  const services = configuredServices();
   return jsonOk({
-    ok: true,
-    storage: repositoryBackend(),
-    uploads: uploadBackend(),
-    rateLimit: rateLimitBackend(),
+    ok: services.database,
+    database: services.database ? "postgres" : "unconfigured",
+    storage: services.storage ? "filebase" : "unconfigured",
+    cleanupSecret: services.cleanupSecret ? "configured" : "unconfigured",
   });
 }

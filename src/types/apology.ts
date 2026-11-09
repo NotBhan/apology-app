@@ -1,7 +1,7 @@
 import type { ThemeId } from "./theme";
 import type { StickerPackId } from "./sticker";
 
-export type DraftStatus = "draft" | "published" | "revoked";
+export type DraftStatus = "draft" | "published" | "revoked" | "deleted";
 
 export type Language = "en" | "hinglish";
 

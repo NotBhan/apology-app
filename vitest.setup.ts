@@ -1,8 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 
 // jsdom lacks matchMedia; reduced-motion tests depend on it. Guarded because
-// the Firebase integration suite runs in the node environment, where there is
-// no window at all.
+// node-environment suites have no window at all.
 if (typeof window !== "undefined" && !window.matchMedia) {
   window.matchMedia = ((query: string) => ({
     matches: false,

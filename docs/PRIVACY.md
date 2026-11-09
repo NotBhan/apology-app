@@ -32,15 +32,16 @@ permanent.
 
 ## What happens after expiry
 
-A cleanup job runs on a schedule and permanently deletes:
+A cleanup function, orchestrated by a scheduled trigger on our database
+provider, permanently deletes:
 
 - the apology document, including both names, the messages and the note;
 - the theme, sticker, music and photo metadata;
 - every uploaded photograph and custom audio file belonging to that letter;
 - the public access token.
 
-**Deletion is asynchronous.** It is not instant at the expiry second. The
-practical consequences:
+**Deletion is asynchronous.** It is not instant at the expiry second, and we do
+not promise a guaranteed deadline. The practical consequences:
 
 - Access stops immediately; data removal follows on the next cleanup run.
 - In normal operation that means within about an hour of expiry.

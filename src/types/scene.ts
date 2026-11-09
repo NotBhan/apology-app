@@ -26,7 +26,7 @@ export type ResponseOption = (typeof RESPONSE_OPTIONS)[number];
 export const EMOTION_OPTIONS = ["upset", "getting-there", "okay"] as const;
 export type EmotionOption = (typeof EMOTION_OPTIONS)[number];
 
-/** Typed per-scene payloads. Kept small so Firestore never smuggles logic. */
+/** Typed per-scene payloads. Kept small so persisted data never smuggles logic. */
 export interface SceneContent {
   /** Index into the draft messages (1-3) for `message` scenes. */
   messageKey?: "message1" | "message2" | "message3";

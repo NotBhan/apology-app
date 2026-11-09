@@ -4,21 +4,21 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getOrCreateOwner, getOwner } from "@/lib/security/owner";
-import { getRepository } from "@/lib/storage";
-import { deleteDraftForOwner } from "@/lib/storage/delete-draft";
-import {
-  RATE_LIMITS,
-  clientIpFromHeaders,
-  getRateLimiter,
-  rateLimitKey,
-} from "@/lib/security/rate-limit";
+import { getObjectStore, getRepository } from "@/lib/storage";
+import { sanitiseStorageError } from "@/lib/storage/filebase-errors";
 import {
   draftPayloadSchema,
   formatZodError,
   linkDurationDaysSchema,
 } from "@/lib/validation/apology";
-import { DEFAULT_LINK_DAYS, normalizeDurationDays } from "@/lib/expiry";
 import { toCreatorDraft } from "@/lib/storage/types";
+import { DEFAULT_LINK_DAYS, normalizeDurationDays } from "@/lib/expiry";
+import {
+  RATE_LIMITS,
+  clientIpFromHeaders,
+  getRateLimiter,
+  rateLimitKey,
+} from "@/lib/security/postgres-rate-limit";
 import type { ApologyDraft } from "@/types/apology";
 
 export interface ActionResult<T> {
@@ -28,9 +28,14 @@ export interface ActionResult<T> {
   fields?: Record<string, string>;
 }
 
+export interface PublishResult {
+  token: string;
+  path: string;
+  expiresAt: string;
+  durationDays: number;
+}
+
 export async function startDraftAction(): Promise<void> {
-  // Draft creation costs a write and is reachable from a plain form, so it is
-  // the first thing an abusive script would hit.
   const requestHeaders = await headers();
   const limit = await getRateLimiter().hit(
     rateLimitKey("createDraft", clientIpFromHeaders(requestHeaders)),
@@ -39,9 +44,10 @@ export async function startDraftAction(): Promise<void> {
   if (!limit.allowed) redirect("/create?limited=1");
 
   const owner = await getOrCreateOwner();
-  const repo = await getRepository();
-  const record = await repo.createDraft(owner.hash, { recipientName: "", senderName: "" });
-  // Seeded records must still satisfy validation once the sender names themselves.
+  const record = await getRepository().createDraft(owner.hash, {
+    recipientName: "",
+    senderName: "",
+  });
   redirect(`/create/${record.id}`);
 }
 
@@ -61,21 +67,13 @@ export async function saveDraftAction(
   const owner = await getOwner();
   if (!owner) return { ok: false, error: "This draft belongs to another browser." };
 
-  const repo = await getRepository();
   try {
-    const record = await repo.saveDraft(id, owner.hash, parsed.data);
+    const record = await getRepository().saveDraft(id, owner.hash, parsed.data);
     revalidatePath("/manage");
     return { ok: true, data: toCreatorDraft(record) };
   } catch (cause) {
     return { ok: false, error: mapRepoError(cause) };
   }
-}
-
-export interface PublishResult {
-  token: string;
-  path: string;
-  expiresAt: string;
-  durationDays: number;
 }
 
 export async function publishDraftAction(
@@ -94,8 +92,8 @@ export async function publishDraftAction(
   const owner = await getOwner();
   if (!owner) return { ok: false, error: "This draft belongs to another browser." };
 
-  const repo = await getRepository();
-  const existing = await repo.getDraft(id);
+  const repository = getRepository();
+  const existing = await repository.getDraft(id);
   if (!existing) return { ok: false, error: "That draft no longer exists." };
 
   const parsed = draftPayloadSchema.safeParse(existing);
@@ -107,8 +105,33 @@ export async function publishDraftAction(
     };
   }
 
+  const isRenewal = existing.status === "published" || existing.status === "revoked";
+  if (isRenewal) {
+    const assets = await repository.listAssets(id);
+    if (assets.length > 0) {
+      const objects = getObjectStore();
+      for (const asset of assets) {
+        try {
+          const head = await objects.head(asset.objectKey);
+          if (!head.exists) {
+            return {
+              ok: false,
+              error:
+                "One of this letter's files is no longer stored. Remove and re-upload it before republishing.",
+            };
+          }
+        } catch (error) {
+          return {
+            ok: false,
+            error: `Could not verify stored files (${sanitiseStorageError(error)}). Try again.`,
+          };
+        }
+      }
+    }
+  }
+
   try {
-    const record = await repo.publish(id, owner.hash, duration.data);
+    const record = await repository.publish(id, owner.hash, duration.data);
     revalidatePath("/manage");
     return {
       ok: true,
@@ -127,9 +150,8 @@ export async function publishDraftAction(
 export async function revokeDraftAction(id: string): Promise<ActionResult<null>> {
   const owner = await getOwner();
   if (!owner) return { ok: false, error: "Not your letter." };
-  const repo = await getRepository();
   try {
-    await repo.revoke(id, owner.hash);
+    await getRepository().revoke(id, owner.hash);
     revalidatePath("/manage");
     return { ok: true, data: null };
   } catch (cause) {
@@ -141,8 +163,9 @@ export async function deleteDraftAction(id: string): Promise<ActionResult<null>>
   const owner = await getOwner();
   if (!owner) return { ok: false, error: "Not your letter." };
   try {
-    await deleteDraftForOwner(id, owner.hash);
+    const marked = await getRepository().requestDeletionByOwner(id, owner.hash);
     revalidatePath("/manage");
+    if (!marked) return { ok: false, error: "This letter can no longer be edited." };
     return { ok: true, data: null };
   } catch (cause) {
     return { ok: false, error: mapRepoError(cause) };
@@ -155,5 +178,6 @@ function mapRepoError(cause: unknown): string {
   if (message === "FORBIDDEN") return "This draft belongs to another browser.";
   if (message === "REVOKED") return "This letter was revoked.";
   if (message === "DELETED") return "This letter has been deleted and cannot be renewed.";
+  if (message === "NOT_EDITABLE") return "This letter can no longer be edited.";
   return "Something went wrong. Try again.";
 }

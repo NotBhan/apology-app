@@ -3,242 +3,129 @@
 ## 1. Shape
 
 ```
-Browser ──► App Router pages (RSC) ──► Server Actions ──► Repository ──► .data | Firestore
-                 │                                            │
-                 └──► Presentation Engine (client) ◄── Zod ◄──┘
+Browser ──► Next.js App Router (RSC) ──► route handlers / server actions
+                                              │
+                        ┌─────────────────────┴─────────────────────┐
+                        ▼                                           ▼
+                 Neon PostgreSQL                              Filebase (S3)
+                 apologies, assets,                           private bucket
+                 deletion ledger, tombstones,                 apologies/{id}/{random}
+                 rate limits
+                        ▲
+                        │ schedule trigger
+                 ┌──────┴───────────────┐
+                 │ Neon Function        │── DeleteObjects ──► Filebase
+                 │ `cleanup` (Node 24)  │
+                 └──────────────────────┘
 ```
 
-- **Reads** for creator pages and the public letter happen in Server Components.
-- **Writes** from the wizard go through Server Actions (`src/app/create/actions.ts`).
-- **Uploads** and the JSON letter endpoint go through Route Handlers
-  (`src/app/api/**`) because they stream bytes and serve machine-readable data.
-- The **client never talks to Firestore**. Admin credentials stay server-side and
-  the client SDK is not used for drafts or letters, so no client-side rule can be
-  used to enumerate data.
+The application creates, validates and presents apologies. It never schedules or
+performs physical cleanup. **Neon hosts the cleanup orchestration; Filebase
+performs the physical deletion.** This is not Filebase lifecycle expiry —
+Filebase returns 501 for `PutBucketLifecycleConfiguration`, so no bucket TTL
+exists or is configured.
 
-## 2. Key decisions
+## 2. Decisions
 
-### AD-01 — Lazy theme skins, static theme data
+### AD-01 — Neon over Firestore
 
-`src/themes/registry.ts` imports theme *data* statically (cheap, needed for CSS
-variables and pickers) and theme *skins* through `next/dynamic`. Landing pages
-and the wizard therefore download one composition, not eight.
+Relational data with explicit constraints. `apologies.status`, duration bounds
+and "published implies expires_at + published_at + token hash" are CHECK
+constraints, so an invalid row cannot be written even by a build that forgets to
+validate.
 
-### AD-02 — Lazy sticker art, registry-cached
+### AD-02 — `neon-http`, therefore no interactive transactions
 
-`loadStickerArt(packId)` dynamically imports one pack's art module and caches the
-result. The renderer shows a tonal placeholder until the chunk resolves, then
-swaps in place. A failed chunk renders a labelled fallback, never a broken image.
+`drizzle-orm/neon-http` opens no session. Every mutation is a single statement or
+a `db.batch`. That is a constraint, not an accident: it forces the deletion
+intent and the renewal guard to be expressed as one atomic statement each,
+rather than as multi-round-trip logic that could interleave.
 
-### AD-03 — SVG is a first-class sticker format
+**No database transaction is held across a Filebase call.**
 
-The brief lists `rive | lottie | webp | apng`. There are no licensed Rive/Lottie
-binaries available, and the brief explicitly forbids filling that hole with
-emoji. Original animated SVG characters were authored instead, so `svg` was added
-to `STICKER_FORMATS`. `lottie` and `rive` renderers still ship and are lazily
-imported when a licensed pack provides a file, so adding one needs no engine
-change.
+### AD-03 — Upload reservation precedes the object
 
-### AD-04 — `cacheComponents` disabled
+`apology_assets` rows are written with `state='pending'` and a server-generated
+`object_key` *before* `PutObject`. Deletion intent snapshots `apology_assets`
+including pending rows, so every object that can ever exist is already inside
+`job.object_keys`. Orphaning is impossible by construction, not by timing.
 
-Next 16 enables Cache Components by default, which requires every route to
-produce a static shell. Every route here is request-time (owner cookies, private
-tokens, personalised content). The flag is disabled in `next.config.ts` rather
-than wrapping each route in artificial `<Suspense>` boundaries.
+Completion is conditional (`state='pending' AND apology editable AND no job`).
+Zero rows means deletion started mid-upload: the object just written is deleted,
+the row marked `failed`, and the client gets `409`.
 
-### AD-05 — Filesystem default, Firestore when configured
+### AD-04 — Token hashing, and what it costs
 
-`getRepository()` returns `FirestoreRepository` only when
-`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL` and `FIREBASE_PRIVATE_KEY` are all
-present; otherwise `FileRepository` writes to `.data/`. This keeps the project
-runnable and testable with zero external setup, and production needs only env
-vars. Vercel's ephemeral filesystem is the reason Firestore is the production
-path — documented in `docs/TESTING.md`.
+Only `sha256(token)` is stored. A database read therefore cannot produce a
+working link. The cost is that a token cannot be recovered, so **renewal mints a
+new link**: the previous URL stops working when a letter is republished. The
+Manage page surfaces the new URL rather than pretending the old one survived.
 
-### AD-06 — Scene order is theme data, copy is tone data
+### AD-05 — Media is authorised, then redirected
 
-`buildScenes()` walks `theme.sceneIds` and fills each scene from the sender's
-messages using copy keyed by a coarse *tone* (tender / warm / solemn /
-restrained). Themes reorder and restyle; they never contain the sender's words.
+`/api/uploads/[assetId]` resolves the asset row, checks the owning apology's
+liveness (`canServeAsset`), and only then issues a **60-second** pre-signed GET
+with a `307`. Responses are `private, no-store` because authorisation changes at
+the expiry instant.
 
-### AD-07 — Colour overrides are palette-only
+A leaked object key is useless: the key never appears in a URL the browser keeps,
+and the asset id alone still requires a live letter.
 
-`themeScopeVars()` applies sender colours to five palette slots. Spacing,
-composition, motion and scene structure are not overridable, which is why a
-sender cannot break a layout.
+### AD-06 — Deletion is a durable ledger, not a queue
 
-## 3. Data model
+`deletion_jobs` is the source of truth for what must be deleted. It is not a
+foreign key to `apologies`, so it survives the row it describes and can finish a
+crashed run. It stores ids, keys, an attempt count, a lease and a sanitised
+error — never names, messages or media.
 
-`ApologyRecord` = `ApologyDraft` + `accessToken` + `ownerKeyHash`. Everything the
-recipient receives is `PublishedApology`, which has neither.
+## 3. Deletion lifecycle
 
-Security properties:
+1. **Intent** (one CTE): lock the apology row `FOR UPDATE` → aggregate
+   `object_key` → upsert the job (union with the previous snapshot; a `completed`
+   job is never reopened) → mark `status='deleted'` **only for ids the upsert
+   returned**.
+2. **Claim**: `lease_until` compare-and-set. Zero rows means another worker owns
+   it.
+3. **Defer / reap**: a `pending` reservation younger than **30 minutes** defers
+   finalisation (a `PutObject` may still land). Older reservations are abandoned:
+   their objects are deleted and the rows marked `failed`.
+4. **Delete**: `DeleteObjects` in batches of ≤1000. A missing key is success; any
+   other per-key error fails the step.
+5. **Verify**: `HeadObject` every key. A survivor fails the step, even if the
+   delete response claimed success.
+6. **Finalise** (`db.batch`): delete assets → delete apology → tombstone →
+   `state='completed'`.
+
+Failure at 4–6 records a sanitised error, leaves the row and the tombstone
+untouched, and restores no access. The next scheduled run retries because
+candidate selection includes `failed` jobs.
+
+## 4. Expiry
+
+`expires_at` is computed server-side at publish (1–7 days, default 3) and is
+absent from `draftPayloadSchema`. Access is enforced on every read by
+`isLinkLive()`; physical deletion is a separate, eventual process. An expired,
+revoked, deleted or unknown token all produce the same 404.
+
+## 5. Security
 
 | Property | Mechanism |
 | --- | --- |
-| Unguessable link | 20 random bytes, base64url (`createAccessToken`) |
-| No sequential ids in URLs | `crypto.randomUUID()` for ids; tokens are separate |
-| Drafts private | server-side `ownerKeyHash` comparison on every read/write |
-| Published-only access | `getPublishedByToken` returns `undefined` unless the record is live |
-| Time-limited links | `expiresAt` is computed server-side; `isLinkLive()` requires `published` **and** a future expiry |
-| No immortal links | a published record with no `expiresAt` is treated as dead, not as permanent |
-| Revocation | status flips to `revoked`; token lookup then misses |
-| Expiry is not client-controlled | `expiresAt` is absent from `draftPayloadSchema`; only `linkDurationDays` (1–7, validated) crosses the wire |
-| No indexing | `robots: { index: false }` at root metadata + per-route |
-| Upload safety | magic-byte validation, 5 MB photo / 8 MB audio caps, server-minted ids |
+| Creator identity | httpOnly cookie → sha256 stored as `owner_key_hash` |
+| Link token | 32 random bytes; only the hash stored |
+| Recipient payload | `toPublished()` projection; no token, no owner hash |
+| Media | asset row → owning apology → liveness → 60 s presigned 307 |
+| Storage credentials | server-only; never `NEXT_PUBLIC_`; never ambient `AWS_*` |
+| Trigger auth | `x-neon-trigger-invocation-id` provenance via `parseTriggerDelivery` |
+| Manual cleanup | `x-cleanup-secret`, `timingSafeEqual`, checked before any work |
+| Headers | one policy for `/:path*`; storage origin added to `img-src`/`media-src` |
+| Rate limits | Postgres fixed-window counters, shared across instances |
 
-## 4. Presentation engine
+## 6. Failure surfaces
 
-```
-PresentationEngine
-├── ThemeCanvas        (lazy skin, paused when scene is inactive)
-├── chrome             (progress, back, audio)
-├── SceneTransition    (theme transition preset)
-└── SceneRenderer
-    ├── OpeningScene
-    ├── MessageScene   → MessageReveal (theme reveal mode)
-    ├── LetterScene    → LetterCard
-    ├── EnvelopeScene  → EnvelopeAnimation (5 stages)
-    ├── MemoryScene    → MemoryGallery (polaroid | scrapbook | slideshow)
-    ├── ClosingScene
-    └── ResponseScene  → ResponsePanel
-```
+`error.tsx` shows a digest only. `global-error.tsx` supplies its own document.
+`not-found.tsx` is uniform for unknown, expired, revoked and deleted links.
 
-`PresentationEngine` exposes a `PresentationApi` through `onApiReady` so the
-creator preview can drive it from outside the viewport. The recipient route never
-mounts that chrome.
-
-## 5. Non-goals (v1)
-
-Payments, accounts, analytics, server-side response storage, public galleries.
-The recipient's answer is never transmitted.
-
-## 6. Deletion lifecycle
-
-Expiry enforcement and data deletion are **separate** concerns, deliberately.
-
-### Access vs. deletion
-
-- **Access** is decided on every read by `isLinkLive(status, expiresAt)`. Nothing
-  is scheduled: at the expiry instant the letter stops resolving, the recipient
-  sees the generic unavailable page, and `/api/uploads/[id]` refuses the media
-  because the owning record is no longer live.
-- **Deletion** is physical removal, performed by a worker. It is eventually
-  consistent and may lag by up to one scheduled run.
-
-### Upload binding
-
-`UploadAsset` carries `apologyId` and `ownerKeyHash`. `canServeAsset()` allows a
-request only when the caller is the owner, or when the owning apology is live.
-An asset with no binding fails closed. This closes the gap where a dead link's
-photo URLs kept resolving.
-
-Media responses are `Cache-Control: private, no-store`, because authorisation
-changes at the expiry instant and a cached copy would outlive the link.
-
-### The worker
-
-`src/lib/lifecycle/purge.ts` — `runPurge()` and `purgeNow()` — is the only
-deletion path. The scheduled job and the Manage "Delete now" button both use it.
-
-Sequence per apology:
-
-1. **Identify** — `listExpired(now)` for published records past their window, plus
-   any job left by a previous run.
-2. **Claim** — a lease (`deletions/<id>.leaseUntil`) is written in a transaction
-   (Firestore) or under a per-id mutex (filesystem). A second worker sees a live
-   lease and skips.
-3. **Manifest** — asset ids come from the record's photos and custom audio, merged
-   with ids already recorded on the job, so a retry cannot lose one.
-4. **Delete assets** — each `remove()` is idempotent; a missing object is not an
-   error.
-5. **Verify** — each id is re-checked with `stat()`. A backend that reports
-   success but leaves the object behind still fails the step.
-6. **Delete the record** — only after storage is verified. Then re-read to confirm
-   it is gone.
-7. **Tombstone** — `{ apologyId, ownerKeyHash, deletedAt, assetsDeleted, reason }`.
-   No names, no messages, no media, no usable token.
-8. **Clear the job.**
-
-Failure handling:
-
-- Storage failure → job kept with `lastError`, record **not** deleted, retried next
-  run. This is what stops silent orphaning.
-- Record deletion failure → job kept, retried.
-- Crash mid-run → the lease expires and the next run resumes.
-- Repeated runs → idempotent; the second finds nothing.
-
-### Renewal
-
-`publish()` refuses with `DELETED` once a job exists, so a letter cannot be
-revived while it is being torn down. A deleted record is gone, so an old token
-cannot resurrect it.
-
-### Scheduled configuration
-
-`vercel.json` schedules `/api/cron/purge` hourly (`17 * * * *`). The route
-requires `CRON_SECRET`; without it the route returns 503 rather than running
-unauthenticated. Vercel sends `Authorization: Bearer $CRON_SECRET`.
-
-### What is not stored in the queue
-
-The job holds an id, asset ids, attempt count, timestamps, a lease and an owner
-hash. The owner hash is present only so a retry can still write the tombstone
-after the record is gone. It is a SHA-256 of a random key, not the key.
-
-## 7. Security headers
-
-Built once in `src/lib/security/headers.ts` and applied to `/:path*` from
-`next.config.ts`, so API routes, 404s and 500s carry the same policy as pages.
-
-| Header | Value | Why |
-| --- | --- | --- |
-| `Content-Security-Policy` | see below | Blocks injected/external code |
-| `X-Frame-Options` | `DENY` | Legacy companion to `frame-ancestors` |
-| `X-Content-Type-Options` | `nosniff` | No MIME sniffing on uploads |
-| `Referrer-Policy` | `no-referrer` | Private tokens live in the URL path |
-| `Permissions-Policy` | camera/mic/geo/… disabled | The app needs none |
-| `Cross-Origin-Opener-Policy` | `same-origin` | Isolate window handles |
-| `Cross-Origin-Resource-Policy` | `same-origin` | No cross-origin embedding |
-| `Strict-Transport-Security` | 2 years, preload | Production only |
-
-CSP: `default-src 'self'` with same-origin scripts/styles/fonts/media/images and
-**no third-party origin**. `'unsafe-inline'` is required for Next's inline
-bootstrap payload and the theme system's inline custom properties;
-`'unsafe-eval'` is added only in development for React Refresh.
-
-If a future feature needs a CDN or an external API, add that origin to the
-relevant directive in `headers.ts` — not inline in config — and re-run the
-browser compatibility check in `docs/TESTING.md`.
-
-## 8. Failure surfaces
-
-| Surface | File | Behaviour |
-| --- | --- | --- |
-| Route error | `src/app/error.tsx` | Design-matched page, digest reference only, Try again |
-| Root failure | `src/app/global-error.tsx` | Inline-styled fallback with its own `<html>` |
-| Unknown / expired / revoked | `src/app/not-found.tsx` | One generic page for every case |
-| Slow creator pages | `src/app/manage/loading.tsx` | Skeleton |
-
-**No `loading.tsx` on routes that call `notFound()`.** A `loading.tsx` creates a
-Suspense boundary, Next flushes the shell with `200`, and the later `notFound()`
-can no longer change the status — a dead link would answer `200`. This was
-observed and fixed; the recipient, preview and draft routes therefore resolve
-their data before the response starts. The trade-off is deliberate: correct 404
-semantics beat a skeleton.
-
-## 9. Legacy records without an expiry
-
-A published document written before expiry became mandatory has no `expiresAt`.
-It is:
-
-- **inaccessible** immediately, because `isLinkLive()` requires a valid future
-  expiry and `isExpired()` treats a missing value as expired;
-- **included in cleanup**, because `listExpired()` filters on `status` and then
-  checks the expiry in code, rather than using a range query that would skip
-  documents where the field is absent;
-- **labelled** `legacy` in its tombstone, so an operator can tell a migration
-  sweep from a normal expiry.
-
-`GET /api/cron/purge?dryRun=1` lists what a run would delete, with reasons,
-without mutating anything.
+**No `loading.tsx` on a route that can fail before rendering** (a `notFound()`, or a
+data-layer throw such as missing configuration). The shell flushes with `200`
+and the real status is lost, so a misconfigured deploy would look healthy.

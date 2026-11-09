@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getOwner } from "@/lib/security/owner";
 import { getRepository } from "@/lib/storage";
-import { getPurgeStore } from "@/lib/lifecycle/purge-store";
 import { isExpired } from "@/lib/expiry";
 import { ManageList } from "@/components/manage/ManageList";
 
@@ -15,19 +14,17 @@ export const dynamic = "force-dynamic";
 
 export default async function ManagePage() {
   const owner = await getOwner();
-  const repository = await getRepository();
-  const store = await getPurgeStore();
+  const repository = getRepository();
 
   const drafts = owner ? await repository.listByOwner(owner.hash) : [];
-  const tombstones = owner ? await store.listTombstones(owner.hash) : [];
+  const tombstones = owner ? await repository.tombstonesForOwner(owner.hash) : [];
 
-  // Only expired letters can be mid-cleanup; checking the rest would be N
-  // pointless reads on a page that is already one round-trip per letter.
+  // Only expired or already-queued letters can be mid-cleanup.
   const pendingDeletionIds = (
     await Promise.all(
       drafts
-        .filter((draft) => draft.status === "published" && isExpired(draft.expiresAt))
-        .map(async (draft) => ((await store.hasStarted(draft.id)) ? draft.id : null)),
+        .filter((draft) => draft.status === "deleted" || isExpired(draft.expiresAt))
+        .map(async (draft) => ((await repository.isDeletionPending(draft.id)) ? draft.id : null)),
     )
   ).filter((id): id is string => Boolean(id));
 

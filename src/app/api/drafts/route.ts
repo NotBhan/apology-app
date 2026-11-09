@@ -3,7 +3,7 @@ import { getRepository } from "@/lib/storage";
 import { toCreatorDraft } from "@/lib/storage/types";
 import { createDraftSchema, formatZodError } from "@/lib/validation/apology";
 import { jsonError, jsonOk, readJsonBody, repositoryErrorResponse } from "@/lib/api/responses";
-import { enforceRateLimit, rateLimitHeaders } from "@/lib/security/rate-limit";
+import { enforceRateLimit, rateLimitHeaders } from "@/lib/security/postgres-rate-limit";
 
 export const dynamic = "force-dynamic";
 

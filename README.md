@@ -4,6 +4,10 @@ A mobile-first app for making a private, animated apology: pick a world, write
 three messages, seal a letter, send one unguessable link that expires in 1–7
 days.
 
+Neon PostgreSQL for data, Filebase (S3) for private media, Next.js on Vercel
+Hobby. Expiry is enforced on every read; physical deletion is orchestrated by a
+scheduled Neon Function. There is no cron route, no worker and no Firebase.
+
 Two separate experiences share one data model and one scene engine:
 
 - **Creator** — a seven-step wizard, live phone-frame preview, publish/revoke.
@@ -39,20 +43,21 @@ npm run typecheck
 npm run test
 npm run build
 npm run validate       # all four
-npm run test:firebase  # lifecycle against Firestore + Storage emulators
-                       # (start them with the emulators:exec line in docs/TESTING.md)
+npm run db:migrate     # apply migrations to DATABASE_URL
 ```
 
-136 tests: 131 hermetic (scene building, theme/sticker contracts, validation,
-link expiry, deletion lifecycle, media access, symbols, access control, text
-reveals, envelope) plus 5 that run against real Firestore + Storage emulators.
+137 hermetic tests: scene building, theme/sticker contracts, validation, link
+expiry, upload lifecycle and its race with deletion, the deletion protocol,
+media access, symbol audit, security headers, error boundary, envelope.
 
 ## Production notes
 
-- **Storage**: filesystem by default. Set `FIREBASE_PROJECT_ID`,
-  `FIREBASE_CLIENT_EMAIL` and `FIREBASE_PRIVATE_KEY` to switch to Firestore
-  (required on Vercel, whose filesystem is ephemeral). `GET /api/health` reports
-  which backend is active.
+- **Database**: `DATABASE_URL` (Neon pooled). Migrations: `npm run db:migrate`.
+  No filesystem fallback — the app throws without it.
+- **Storage**: `FILEBASE_*`. Private bucket only; media is served through a
+  60-second pre-signed redirect after an authorisation check.
+- **Deletion**: a Neon `schedule` trigger runs `neon/functions/cleanup.ts`, which
+  calls Filebase `DeleteObjects`. See `docs/ARCHITECTURE.md` §3.
 - **Access**: a creator's identity is an httpOnly cookie; the database stores
   only its SHA-256 hash. Recipients get read access through a 20-byte random
   token and can only ever see `PublishedApology`.
@@ -61,10 +66,10 @@ reveals, envelope) plus 5 that run against real Firestore + Storage emulators.
   deadline is computed server-side and stored as `expiresAt`; an expired token
   behaves exactly like an unknown one (404), so it reveals nothing. Publishing
   again renews the same token for a fresh window.
-- **Deletion**: an hourly cron (`/api/cron/purge`, protected by `CRON_SECRET`)
-  removes expired letters, their uploads and their metadata. Media is bound to
-  its apology, so a dead link takes its photos with it. See
-  [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §6.
+- **Deletion**: a Neon `schedule` trigger runs `neon/functions/cleanup.ts`,
+  which deletes the Filebase objects and then the rows. Media is bound to its
+  apology, so a dead link takes its photos with it. See
+  [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §3.
 
 ## Documentation
 

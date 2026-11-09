@@ -1,7 +1,7 @@
 import { getRepository } from "@/lib/storage";
 import { toPublished } from "@/lib/storage/types";
 import { jsonError, jsonOk, repositoryErrorResponse } from "@/lib/api/responses";
-import { enforceRateLimit, rateLimitHeaders } from "@/lib/security/rate-limit";
+import { enforceRateLimit, rateLimitHeaders } from "@/lib/security/postgres-rate-limit";
 
 export const dynamic = "force-dynamic";
 

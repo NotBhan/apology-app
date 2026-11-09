@@ -2,107 +2,63 @@ import { describe, expect, it } from "vitest";
 import { canServeAsset } from "./asset-access";
 
 const NOW = Date.parse("2026-03-01T12:00:00.000Z");
-const live = { status: "published" as const, expiresAt: new Date(NOW + 60_000).toISOString() };
-const expired = { status: "published" as const, expiresAt: new Date(NOW - 1).toISOString() };
+const future = new Date(NOW + 60_000).toISOString();
+const past = new Date(NOW - 1).toISOString();
+
+function asset(patch: Partial<Parameters<typeof canServeAsset>[0]["asset"]> = {}) {
+  return {
+    ownerKeyHash: "owner-1",
+    apologyStatus: "published",
+    expiresAt: future,
+    state: "uploaded" as const,
+    ...patch,
+  };
+}
 
 describe("canServeAsset", () => {
-  it("always serves an asset to its owner", () => {
+  it("always serves an uploaded asset to its owner", () => {
     expect(
-      canServeAsset({
-        asset: { apologyId: "a1", ownerKeyHash: "owner-1" },
-        ownerKeyHash: "owner-1",
-        record: expired,
-        now: NOW,
-      }),
+      canServeAsset({ asset: asset({ expiresAt: past }), ownerKeyHash: "owner-1", now: NOW }),
     ).toBe(true);
   });
 
   it("serves to a stranger only while the letter is live", () => {
-    expect(
-      canServeAsset({
-        asset: { apologyId: "a1", ownerKeyHash: "owner-1" },
-        ownerKeyHash: undefined,
-        record: live,
-        now: NOW,
-      }),
-    ).toBe(true);
+    expect(canServeAsset({ asset: asset(), now: NOW })).toBe(true);
   });
 
-  it("stops serving the moment the window closes", () => {
+  it("stops the moment the window closes, including the boundary", () => {
+    expect(canServeAsset({ asset: asset({ expiresAt: past }), now: NOW })).toBe(false);
     expect(
       canServeAsset({
-        asset: { apologyId: "a1", ownerKeyHash: "owner-1" },
-        record: expired,
-        now: NOW,
-      }),
-    ).toBe(false);
-
-    // The boundary itself is closed, not open.
-    expect(
-      canServeAsset({
-        asset: { apologyId: "a1", ownerKeyHash: "owner-1" },
-        record: { status: "published", expiresAt: new Date(NOW).toISOString() },
+        asset: asset({ expiresAt: new Date(NOW).toISOString() }),
         now: NOW,
       }),
     ).toBe(false);
   });
 
-  it("refuses after revocation", () => {
-    expect(
-      canServeAsset({
-        asset: { apologyId: "a1", ownerKeyHash: "owner-1" },
-        record: { status: "revoked", expiresAt: live.expiresAt },
-        now: NOW,
-      }),
-    ).toBe(false);
+  it("refuses revoked, deleted and draft apologies to strangers", () => {
+    for (const status of ["revoked", "deleted", "draft"]) {
+      expect(canServeAsset({ asset: asset({ apologyStatus: status }), now: NOW })).toBe(false);
+    }
   });
 
-  it("refuses an unpublished draft to a stranger", () => {
-    expect(
-      canServeAsset({
-        asset: { apologyId: "a1", ownerKeyHash: "owner-1" },
-        record: { status: "draft", expiresAt: live.expiresAt },
-        now: NOW,
-      }),
-    ).toBe(false);
+  it("refuses an asset whose upload never completed", () => {
+    for (const state of ["pending", "failed"] as const) {
+      expect(
+        canServeAsset({ asset: asset({ state }), ownerKeyHash: "owner-1", now: NOW }),
+      ).toBe(false);
+    }
   });
 
-  it("refuses an asset with no apology binding", () => {
-    expect(
-      canServeAsset({
-        asset: { ownerKeyHash: "owner-1" },
-        record: live,
-        now: NOW,
-      }),
-    ).toBe(false);
-  });
-
-  it("refuses when the apology has been deleted", () => {
-    expect(
-      canServeAsset({
-        asset: { apologyId: "a1", ownerKeyHash: "owner-1" },
-        record: undefined,
-        now: NOW,
-      }),
-    ).toBe(false);
+  it("refuses a missing expiry", () => {
+    expect(canServeAsset({ asset: asset({ expiresAt: null }), now: NOW })).toBe(false);
   });
 
   it("does not treat a different owner as the owner", () => {
     expect(
       canServeAsset({
-        asset: { apologyId: "a1", ownerKeyHash: "owner-1" },
+        asset: asset({ apologyStatus: "deleted", expiresAt: null }),
         ownerKeyHash: "owner-2",
-        record: undefined,
-        now: NOW,
-      }),
-    ).toBe(false);
-  });
-
-  it("refuses a published record with no expiry at all", () => {
-    expect(
-      canServeAsset({
-        asset: { apologyId: "a1", ownerKeyHash: "owner-1" },
-        record: { status: "published", expiresAt: undefined },
         now: NOW,
       }),
     ).toBe(false);

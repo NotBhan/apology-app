@@ -57,6 +57,22 @@ describe("security headers", () => {
     expect(csp).toContain("style-src 'self' 'unsafe-inline'");
   });
 
+  it("allows exactly the configured storage origin for media", () => {
+    const withStorage = buildSecurityHeaders({
+      production: true,
+      storageOrigin: "https://s3.filebase.io",
+    });
+    const csp = header(withStorage, "Content-Security-Policy") ?? "";
+    const images = csp.split(";").find((part) => part.trim().startsWith("img-src")) ?? "";
+    const media = csp.split(";").find((part) => part.trim().startsWith("media-src")) ?? "";
+
+    expect(images).toContain("https://s3.filebase.io");
+    expect(media).toContain("https://s3.filebase.io");
+    expect(images).not.toContain("*");
+    // Only that host, not every origin.
+    expect(csp).not.toContain("https://other.example");
+  });
+
   it("does not open any third-party origin", () => {
     const csp = header(prod, "Content-Security-Policy") ?? "";
     const external = csp.match(/https?:\/\/[^\s;]+/g) ?? [];

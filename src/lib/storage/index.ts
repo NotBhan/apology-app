@@ -1,38 +1,37 @@
 import "server-only";
 import type { ApologyRepository } from "./types";
-import { FileRepository } from "./file-repository";
-import { firebaseConfigured, firestoreAvailable } from "./firebase-admin";
-
-let instance: ApologyRepository | null = null;
-
-export { firebaseConfigured };
+import { PostgresRepository } from "./postgres-repository";
+import { ObjectStore } from "./object-store";
+import { FilebaseObjectStore } from "./filebase-store";
 
 /**
- * Repository selection is centralized so every route goes through one
- * access-control implementation.
+ * Adapter selection.
  *
- * - Firestore when service-account env vars (or the emulator) are present.
- * - Filesystem store for local development and self-hosting.
+ * There is exactly one production backend. No filesystem fallback: without
+ * `DATABASE_URL` the repository throws when constructed, rather than silently
+ * writing to an ephemeral disk.
  */
-export async function getRepository(): Promise<ApologyRepository> {
-  if (instance) return instance;
 
-  if (firestoreAvailable()) {
-    const { FirestoreRepository } = await import("./firestore-repository");
-    instance = new FirestoreRepository();
-    return instance;
-  }
+let repository: ApologyRepository | null = null;
+let objects: ObjectStore | null = null;
 
-  instance = new FileRepository();
-  return instance;
+export function getRepository(): ApologyRepository {
+  if (!repository) repository = new PostgresRepository();
+  return repository;
 }
 
-export function repositoryBackend(): "firestore" | "filesystem" {
-  return firestoreAvailable() ? "firestore" : "filesystem";
+export function getObjectStore(): ObjectStore {
+  if (!objects) objects = FilebaseObjectStore.fromEnv();
+  return objects;
 }
 
-export function resetRepositoryForTests() {
-  instance = null;
+export function repositoryBackend(): "postgres" {
+  return "postgres";
+}
+
+export function resetStorageForTests() {
+  repository = null;
+  objects = null;
 }
 
 export type { ApologyRepository };

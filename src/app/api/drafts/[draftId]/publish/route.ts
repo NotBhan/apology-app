@@ -4,7 +4,7 @@ import { getRepository } from "@/lib/storage";
 import { draftPayloadSchema, formatZodError, linkDurationDaysSchema } from "@/lib/validation/apology";
 import { DEFAULT_LINK_DAYS, normalizeDurationDays } from "@/lib/expiry";
 import { jsonError, jsonOk, readJsonBody, repositoryErrorResponse } from "@/lib/api/responses";
-import { enforceRateLimit, rateLimitHeaders } from "@/lib/security/rate-limit";
+import { enforceRateLimit, rateLimitHeaders } from "@/lib/security/postgres-rate-limit";
 
 export const dynamic = "force-dynamic";
 
