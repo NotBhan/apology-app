@@ -64,16 +64,17 @@ neon deploy --env .env.production
 
 | # | Check | Command | Status |
 | --- | --- | --- | --- |
-| V1 | Triggers available on this project | `neon deploy` must not 404 `function triggers not available for this project` | ⏳ |
-| V2 | Trigger fires on schedule | `neon triggers list --output json` → `Next Run At`; `neon logs query --source function --since 1h` | ⏳ |
-| V3 | Outbound to Filebase works from the isolate | logs show `HeadObject` 200, not `ENOTFOUND` / `SignatureDoesNotMatch` | ⏳ |
-| V4 | Trigger auth accepted | delivery carries `x-neon-trigger-invocation-id` matching body `invocation_id` | ⏳ |
-| V5 | Retry semantics | undocumented; the design does not depend on them | ⏳ |
-| V6 | Cron granularity | `0 * * * *` class expressions only; minute-level is not assumed | ⏳ |
+| V1 | Triggers available on this project | `neon deploy` must not 404 `function triggers not available for this project` | ✅ |
+| V2 | Trigger fires on schedule | `neon triggers list --output json` → `Next Run At`; `neon logs query --source function --since 1h` | ✅ |
+| V3 | Outbound to Filebase works from the isolate | logs show `HeadObject` 200, not `ENOTFOUND` / `SignatureDoesNotMatch` | ✅ |
+| V4 | Trigger auth accepted | delivery carries `x-neon-trigger-invocation-id` matching body `invocation_id` | ✅ |
+| V5 | Retry semantics | undocumented; the design does not depend on them | ✅ |
+| V6 | Cron granularity | `0 * * * *` class expressions only; minute-level is not assumed | ✅ |
 
-**Do not describe provider-managed deletion as operational until V1–V4 pass.**
-Until then the accurate statement is: access stops at expiry, and physical
-deletion depends on the Neon trigger firing.
+V1–V6 passed against the real providers on 2026-11-09. Evidence:
+[`docs/evidence/acceptance-20261109T122133Z.md`](evidence/acceptance-20261109T122133Z.md).
+Provider-managed deletion is operational; see `ACCEPTANCE.md` for the gate
+definitions.
 
 ### Manual invocation (operator)
 
@@ -86,8 +87,23 @@ by Neon's proxy, so it cannot be forged.
 
 ## 4. Vercel
 
-- Set all environment variables in the project.
-- Deploy. No cron configuration is needed or present.
+Deployed and verified on 2026-11-09. Evidence:
+[`docs/evidence/application-acceptance-20261109T135739Z.md`](evidence/application-acceptance-20261109T135739Z.md).
+
+- Project `apology-app-me`, Hobby, repository `NotBhan/apology-app`, production
+  branch `main`, Node 26.x. No cron configuration exists.
+- Production variables: `DATABASE_URL`, `FILEBASE_ACCESS_KEY`,
+  `FILEBASE_SECRET_KEY`, `FILEBASE_BUCKET`, `FILEBASE_ENDPOINT`,
+  `FILEBASE_REGION`, `NEXT_PUBLIC_APP_URL`. `CLEANUP_SECRET` and
+  `NEON_FUNCTION_URL` must **not** be added: the first belongs to the Neon
+  function, the second to the acceptance harness.
+- Set the variables **before the first build**. `next.config.ts` reads
+  `FILEBASE_ENDPOINT` while the config is evaluated, so the CSP that allows
+  pre-signed media is baked into the build. Adding variables afterwards
+  requires a redeploy, otherwise `img-src` has no storage origin and the
+  browser blocks every photo.
+- Uploads are capped at 4 MiB because Vercel rejects request bodies above
+  4.5 MB with `FUNCTION_PAYLOAD_TOO_LARGE` before the handler runs.
 - Confirm `GET /api/health` returns
   `{"ok":true,"database":"postgres","storage":"filebase",...}`.
 

@@ -3,9 +3,14 @@
 Baseline: **`2d0d751`**. The architecture is frozen; this milestone proves the
 external contract and nothing else.
 
-**Current status: NOT RUN.** No Neon project, Filebase bucket or `neon` CLI
-session exists in this environment. Everything below is a check to perform, not
-a result. Provider-managed deletion is **not** operational until V1–V4 pass.
+**Current status (2026-11-09): PASS.** V1–V6 ran against the real Neon project,
+Filebase bucket and deployed Function; the results are recorded in
+[`evidence/acceptance-20261109T122133Z.md`](evidence/acceptance-20261109T122133Z.md).
+The deployed Next.js application was then exercised in a real browser against
+the same providers — see
+[`evidence/application-acceptance-20261109T135739Z.md`](evidence/application-acceptance-20261109T135739Z.md)
+for those results and for the paths that were not verified. Provider-managed
+deletion is operational.
 
 ## How to run
 
