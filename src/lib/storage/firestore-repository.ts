@@ -160,12 +160,20 @@ export class FirestoreRepository implements ApologyRepository {
 
   async listExpired(nowIso: string, limit: number): Promise<ApologyRecord[]> {
     const col = await this.collection();
-    // Single-field range query: no composite index required. Status is filtered
-    // in code because this collection is small and mixed-status.
-    const snap = await col.where("expiresAt", "<=", nowIso).limit(limit * 4).get();
+    // Query on status alone, not on expiresAt: a range query silently skips
+    // documents where the field is missing, which is exactly the legacy case
+    // we need to clean up. Single-field equality needs no composite index.
+    const snap = await col.where("status", "==", "published").limit(limit * 4).get();
+    const now = Date.parse(nowIso);
+
     return snap.docs
       .map((doc) => doc.data() as ApologyRecord)
-      .filter((record) => record.status === "published")
+      .filter((record) => {
+        const expires = Date.parse(record.expiresAt ?? "");
+        // Missing or malformed expiry == inaccessible and purgeable.
+        if (!Number.isFinite(expires)) return true;
+        return expires <= now;
+      })
       .slice(0, limit);
   }
 

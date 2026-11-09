@@ -1,5 +1,5 @@
 import { constantTimeEqual } from "@/lib/id";
-import { purgeExpired } from "@/lib/lifecycle";
+import { auditExpired, purgeExpired } from "@/lib/lifecycle";
 import { jsonError, jsonOk } from "@/lib/api/responses";
 
 export const dynamic = "force-dynamic";
@@ -42,7 +42,22 @@ async function handle(request: Request) {
     return jsonError(404, "Not found.");
   }
 
+  const url = new URL(request.url);
+  const dryRun = url.searchParams.get("dryRun") === "1";
+
   try {
+    // Dry run: identify only. Used to inspect legacy records before a sweep.
+    if (dryRun) {
+      const candidates = await auditExpired();
+      return jsonOk({
+        ok: true,
+        dryRun: true,
+        scanned: candidates.length,
+        legacy: candidates.filter((candidate) => candidate.reason === "legacy").length,
+        candidates,
+      });
+    }
+
     const report = await purgeExpired();
     return jsonOk({
       ok: true,

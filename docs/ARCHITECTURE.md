@@ -185,3 +185,60 @@ unauthenticated. Vercel sends `Authorization: Bearer $CRON_SECRET`.
 The job holds an id, asset ids, attempt count, timestamps, a lease and an owner
 hash. The owner hash is present only so a retry can still write the tombstone
 after the record is gone. It is a SHA-256 of a random key, not the key.
+
+## 7. Security headers
+
+Built once in `src/lib/security/headers.ts` and applied to `/:path*` from
+`next.config.ts`, so API routes, 404s and 500s carry the same policy as pages.
+
+| Header | Value | Why |
+| --- | --- | --- |
+| `Content-Security-Policy` | see below | Blocks injected/external code |
+| `X-Frame-Options` | `DENY` | Legacy companion to `frame-ancestors` |
+| `X-Content-Type-Options` | `nosniff` | No MIME sniffing on uploads |
+| `Referrer-Policy` | `no-referrer` | Private tokens live in the URL path |
+| `Permissions-Policy` | camera/mic/geo/… disabled | The app needs none |
+| `Cross-Origin-Opener-Policy` | `same-origin` | Isolate window handles |
+| `Cross-Origin-Resource-Policy` | `same-origin` | No cross-origin embedding |
+| `Strict-Transport-Security` | 2 years, preload | Production only |
+
+CSP: `default-src 'self'` with same-origin scripts/styles/fonts/media/images and
+**no third-party origin**. `'unsafe-inline'` is required for Next's inline
+bootstrap payload and the theme system's inline custom properties;
+`'unsafe-eval'` is added only in development for React Refresh.
+
+If a future feature needs a CDN or an external API, add that origin to the
+relevant directive in `headers.ts` — not inline in config — and re-run the
+browser compatibility check in `docs/TESTING.md`.
+
+## 8. Failure surfaces
+
+| Surface | File | Behaviour |
+| --- | --- | --- |
+| Route error | `src/app/error.tsx` | Design-matched page, digest reference only, Try again |
+| Root failure | `src/app/global-error.tsx` | Inline-styled fallback with its own `<html>` |
+| Unknown / expired / revoked | `src/app/not-found.tsx` | One generic page for every case |
+| Slow creator pages | `src/app/manage/loading.tsx` | Skeleton |
+
+**No `loading.tsx` on routes that call `notFound()`.** A `loading.tsx` creates a
+Suspense boundary, Next flushes the shell with `200`, and the later `notFound()`
+can no longer change the status — a dead link would answer `200`. This was
+observed and fixed; the recipient, preview and draft routes therefore resolve
+their data before the response starts. The trade-off is deliberate: correct 404
+semantics beat a skeleton.
+
+## 9. Legacy records without an expiry
+
+A published document written before expiry became mandatory has no `expiresAt`.
+It is:
+
+- **inaccessible** immediately, because `isLinkLive()` requires a valid future
+  expiry and `isExpired()` treats a missing value as expired;
+- **included in cleanup**, because `listExpired()` filters on `status` and then
+  checks the expiry in code, rather than using a range query that would skip
+  documents where the field is absent;
+- **labelled** `legacy` in its tombstone, so an operator can tell a migration
+  sweep from a normal expiry.
+
+`GET /api/cron/purge?dryRun=1` lists what a run would delete, with reasons,
+without mutating anything.

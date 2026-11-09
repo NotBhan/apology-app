@@ -190,8 +190,14 @@ export class FileRepository implements ApologyRepository {
       const record = await readJson<ApologyRecord>(path.join(RECORDS, entry));
       if (!record) continue;
       if (record.status !== "published") continue;
+
+      // A missing or malformed expiry is treated as *expired*, never as
+      // permanent access. These are legacy records written before expiry was
+      // mandatory; they are already inaccessible and must still be purged.
       const expires = Date.parse(record.expiresAt ?? "");
-      if (!Number.isFinite(expires) || expires > now) continue;
+      const isLegacy = !Number.isFinite(expires);
+      if (!isLegacy && expires > now) continue;
+
       expired.push(record);
       if (expired.length >= limit) break;
     }

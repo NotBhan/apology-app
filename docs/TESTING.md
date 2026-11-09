@@ -30,8 +30,31 @@ npm run validate    # all four, in order
 | Expiry is not client-set | `src/lib/validation/apology.test.ts` | `linkDurationDays` accepts 1–7 and rejects 0/8/fractional; a supplied `expiresAt` is stripped |
 | Reveal primitives | `src/components/presentation/MessageReveal.test.tsx` | text is never dropped in any reveal mode |
 | Envelope | `src/components/presentation/EnvelopeAnimation.test.tsx` | starts sealed, opens on the seal, reveals the letter, addresses recipient, signs sender, fires `onOpened` |
+| Security headers | `src/lib/security/headers.test.ts` | required headers present; `frame-ancestors 'none'`; HSTS production-only; no `unsafe-eval` in production; no third-party origin; no duplicate directives |
+| Error boundary | `src/app/error.test.tsx` | recovery actions work; error message, stack, Firestore path and token are never rendered; only the digest is shown |
+| Legacy records | `file-repository.test.ts`, `purge.test.ts` | a published record with a missing or malformed `expiresAt` is inaccessible **and** purgeable, labelled `legacy`, and auditable without mutation |
 
 **91 tests across 7 files.**
+
+## Verification run for this release
+
+| Step | Result |
+| --- | --- |
+| `npm run lint` | clean |
+| `npx tsc --noEmit` | clean |
+| `npm test` | 148 passed, 5 skipped |
+| `npm run build` | 17 routes, compiled |
+| emulator suite | 5/5 passed |
+| headers on 9 route shapes | all present, including 404 and 500 |
+| CSP in Chromium, 7 routes | 0 violations, 0 console errors |
+| legacy purge end-to-end | dry run reports `legacy:1`, real run deletes, tombstone `reason:"legacy"` |
+
+### Regression caught during this work
+
+Adding `loading.tsx` to `/letter/[token]`, `/preview/[draftId]` and
+`/create/[draftId]` made Next flush a shell early, so `notFound()` answered
+**200** instead of 404 — a dead link that looks healthy to caches and monitors.
+The boundaries were removed from those routes; `/manage` keeps one. `docs/ARCHITECTURE.md` §8 records the rule.
 
 ## Manual / visual matrix
 

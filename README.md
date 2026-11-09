@@ -76,6 +76,7 @@ reveals, envelope) plus 5 that run against real Firestore + Storage emulators.
 - [`docs/STICKER_SYSTEM.md`](docs/STICKER_SYSTEM.md) — pack contract, states, licensing
 - [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) — phases, milestones, limitations
 - [`docs/TESTING.md`](docs/TESTING.md) — automated coverage, manual matrix, security checklist
+- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — pre-launch verification and required configuration
 
 ## Asset provenance
 

@@ -54,6 +54,13 @@ storage may define components, timing functions or selectors.
 3. Every pack must render **all eleven** `CHARACTER_STATES`, with a distinct pose
    per state, prefixed CSS/SVG ids, and a static path when `animate === false`.
 
+## Legacy records
+
+- A published record with no `expiresAt` is inaccessible and purgeable. Never
+  treat a missing expiry as permanent access.
+- `listExpired()` filters on `status` and checks the expiry in code. Do not
+  replace it with a range query: Firestore skips documents missing the field.
+
 ## Deletion lifecycle
 
 - Expiry enforcement and deletion are separate responsibilities. Access stops
@@ -68,6 +75,17 @@ storage may define components, timing functions or selectors.
   or media to it.
 - Uploads are bound to `apologyId` + `ownerKeyHash`. Media access is decided by
   `canServeAsset()` — do not bypass it with a bare id lookup.
+
+## Security and failure surfaces
+
+- Security headers live in `src/lib/security/headers.ts` and are applied from
+  `next.config.ts` to every path. Never add an inline header in a route.
+- Adding an external origin to the CSP means editing that module and re-running
+  the browser compatibility check. No third-party origin is currently needed.
+- Never add `loading.tsx` to a route that calls `notFound()`: the framed shell
+  flushes with 200 and the 404 status is lost.
+- Error boundaries show a digest only. Never render `error.message` — it can
+  contain storage paths, Firestore operations or letter fragments.
 
 ## Rendering rules that exist for a reason
 

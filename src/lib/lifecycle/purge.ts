@@ -43,6 +43,51 @@ export interface PurgeDeps {
   leaseMs?: number;
 }
 
+/**
+ * Why a record is being purged. A published record with no valid expiry is
+ * "legacy", not "expired": it was written before expiry became mandatory, it is
+ * already inaccessible, and it must still be removed.
+ */
+export function expiryReason(
+  record: Pick<ApologyRecord, "status" | "expiresAt">,
+): "expired" | "legacy" | "manual" {
+  if (record.status !== "published") return "manual";
+  return Number.isFinite(Date.parse(record.expiresAt ?? "")) ? "expired" : "legacy";
+}
+
+export interface PurgeCandidate {
+  apologyId: string;
+  reason: "expired" | "legacy" | "retry";
+}
+
+/**
+ * Read-only audit of what the next run would touch. Powers the dry-run mode of
+ * the cron endpoint, so an operator can see legacy records before deleting them.
+ */
+export async function listPurgeCandidates(
+  deps: PurgeDeps,
+  limit = 100,
+): Promise<PurgeCandidate[]> {
+  const nowMs = deps.now ? deps.now() : Date.now();
+  const expired = await deps.repository.listExpired(new Date(nowMs).toISOString(), limit);
+  const retryable = await deps.store.listRetryable(nowMs, limit);
+
+  const found = new Map<string, PurgeCandidate>();
+  for (const record of expired) {
+    const reason = expiryReason(record);
+    found.set(record.id, {
+      apologyId: record.id,
+      reason: reason === "legacy" ? "legacy" : "expired",
+    });
+  }
+  for (const job of retryable) {
+    if (!found.has(job.apologyId)) {
+      found.set(job.apologyId, { apologyId: job.apologyId, reason: "retry" });
+    }
+  }
+  return [...found.values()];
+}
+
 export async function runPurge(deps: PurgeDeps): Promise<PurgeReport> {
   const nowMs = deps.now ? deps.now() : Date.now();
   const limit = deps.limit ?? 25;
@@ -90,7 +135,7 @@ interface PurgeOneArgs {
   job?: DeletionJob;
   nowMs: number;
   leaseMs: number;
-  reason?: "expired" | "manual";
+  reason?: "expired" | "legacy" | "manual";
 }
 
 async function purgeOne(deps: PurgeDeps, args: PurgeOneArgs): Promise<PurgeOutcome> {
@@ -187,7 +232,7 @@ async function purgeOne(deps: PurgeDeps, args: PurgeOneArgs): Promise<PurgeOutco
       ownerKeyHash: record.ownerKeyHash,
       deletedAt: new Date(nowMs).toISOString(),
       assetsDeleted,
-      reason: args.reason ?? (record.status === "published" ? "expired" : "manual"),
+      reason: args.reason ?? expiryReason(record),
     });
   } else {
     assetsDeleted = 0;
@@ -201,7 +246,7 @@ async function purgeOne(deps: PurgeDeps, args: PurgeOneArgs): Promise<PurgeOutco
 export async function purgeNow(
   deps: PurgeDeps,
   apologyId: string,
-  reason: "expired" | "manual" = "manual",
+  reason: "expired" | "legacy" | "manual" = "manual",
 ): Promise<PurgeOutcome> {
   const nowMs = deps.now ? deps.now() : Date.now();
   const record = await deps.repository.getDraft(apologyId);

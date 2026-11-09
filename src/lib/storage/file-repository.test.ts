@@ -235,6 +235,40 @@ describe("FileRepository", () => {
     await fs.rm(dir, { recursive: true, force: true });
   });
 
+  it("treats a published record with no expiry as dead and purgeable", async () => {
+    const draft = await repo.createDraft(OWNER, { recipientName: "A", senderName: "B" });
+    await repo.saveDraft(draft.id, OWNER, payload);
+    const published = await repo.publish(draft.id, OWNER, 1);
+
+    // Simulate a document written before expiry was mandatory.
+    const file = path.join(process.cwd(), ".data", "apologies", `${draft.id}.json`);
+    const stored = JSON.parse(await fs.readFile(file, "utf8"));
+    delete stored.expiresAt;
+    await fs.writeFile(file, JSON.stringify(stored));
+
+    // Inaccessible immediately: missing expiry is never permanent access.
+    expect(await repo.getPublishedByToken(published.accessToken)).toBeUndefined();
+
+    // And visible to cleanup, so it does not linger forever.
+    const candidates = await repo.listExpired(new Date().toISOString(), 10);
+    expect(candidates.map((record) => record.id)).toContain(draft.id);
+  });
+
+  it("treats a malformed expiry as dead and purgeable", async () => {
+    const draft = await repo.createDraft(OWNER, { recipientName: "A", senderName: "B" });
+    await repo.saveDraft(draft.id, OWNER, payload);
+    const published = await repo.publish(draft.id, OWNER, 1);
+
+    const file = path.join(process.cwd(), ".data", "apologies", `${draft.id}.json`);
+    const stored = JSON.parse(await fs.readFile(file, "utf8"));
+    stored.expiresAt = "not-a-date";
+    await fs.writeFile(file, JSON.stringify(stored));
+
+    expect(await repo.getPublishedByToken(published.accessToken)).toBeUndefined();
+    const candidates = await repo.listExpired(new Date().toISOString(), 10);
+    expect(candidates.map((record) => record.id)).toContain(draft.id);
+  });
+
   it("toPublished never leaks server fields", () => {
     const published = toPublished({
       id: "x",

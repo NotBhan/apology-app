@@ -2,7 +2,7 @@ import "server-only";
 import { getRepository } from "@/lib/storage";
 import { removeUpload, uploadExists } from "@/lib/storage/uploads";
 import { getPurgeStore } from "./purge-store";
-import { purgeNow, runPurge } from "./purge";
+import { listPurgeCandidates, purgeNow, runPurge } from "./purge";
 import type { PurgeDeps } from "./purge";
 import type { PurgeOutcome, PurgeReport } from "./types";
 
@@ -30,10 +30,18 @@ export async function purgeExpired(
   });
 }
 
+/** Read-only view of what the next run would delete. No mutation. */
+export async function auditExpired(
+  limit = 100,
+): Promise<Awaited<ReturnType<typeof listPurgeCandidates>>> {
+  const deps = await defaultPurgeDeps();
+  return listPurgeCandidates(deps, limit);
+}
+
 /** Manual delete from the creator's Manage page. Same lifecycle, no expiry wait. */
 export async function purgeApology(
   apologyId: string,
-  reason: "expired" | "manual" = "manual",
+  reason: "expired" | "legacy" | "manual" = "manual",
 ): Promise<PurgeOutcome> {
   const deps = await defaultPurgeDeps();
   return purgeNow(deps, apologyId, reason);

@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { FilePurgeStore } from "./purge-store";
-import { purgeNow, runPurge } from "./purge";
+import { listPurgeCandidates, purgeNow, runPurge } from "./purge";
 import type { PurgeDeps, PurgeRepository } from "./purge";
 import type { ApologyRecord } from "@/types/apology";
 
@@ -63,7 +63,9 @@ class FakeRepository implements PurgeRepository {
       .filter((record) => record.status === "published")
       .filter((record) => {
         const expires = Date.parse(record.expiresAt ?? "");
-        return Number.isFinite(expires) && expires <= now;
+        // Legacy (missing/invalid expiry) counts as expired, matching the
+        // real repositories.
+        return !Number.isFinite(expires) || expires <= now;
       })
       .slice(0, limit);
   }
@@ -299,6 +301,33 @@ describe("purge lifecycle", () => {
 
     const tombstones = await (deps.store as FilePurgeStore).listTombstones("owner-hash");
     expect(tombstones[0]?.reason).toBe("manual");
+  });
+
+  it("marks a legacy record as such in the tombstone", async () => {
+    repository.records.set(
+      "apology-1",
+      makeRecord({ expiresAt: undefined, status: "published" }),
+    );
+
+    const report = await runPurge(deps);
+    expect(report.deleted).toBe(1);
+
+    const [tombstone] = await (deps.store as FilePurgeStore).listTombstones("owner-hash");
+    expect(tombstone.reason).toBe("legacy");
+  });
+
+  it("audits candidates without deleting anything", async () => {
+    repository.records.set(
+      "apology-1",
+      makeRecord({ expiresAt: undefined, status: "published" }),
+    );
+
+    const candidates = await listPurgeCandidates(deps);
+    expect(candidates).toEqual([{ apologyId: "apology-1", reason: "legacy" }]);
+
+    // Nothing was touched.
+    expect(repository.records.has("apology-1")).toBe(true);
+    expect(uploads.removals).toHaveLength(0);
   });
 
   it("reports missing when there is nothing to delete", async () => {

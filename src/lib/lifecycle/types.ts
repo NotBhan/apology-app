@@ -35,7 +35,8 @@ export interface DeletionTombstone {
   ownerKeyHash: string;
   deletedAt: string;
   assetsDeleted: number;
-  reason: "expired" | "manual";
+  /** Why it was removed. `legacy` means it had no valid expiry at all. */
+  reason: "expired" | "legacy" | "manual";
 }
 
 export type PurgeOutcome =
