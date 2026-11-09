@@ -1,4 +1,4 @@
-import { getOrCreateOwner, getOwner } from "@/lib/security/owner";
+import { requireApiCreator } from "@/lib/security/creator";
 import { getRepository } from "@/lib/storage";
 import { toCreatorDraft } from "@/lib/storage/types";
 import { createDraftSchema, formatZodError } from "@/lib/validation/apology";
@@ -13,11 +13,11 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   try {
-    const owner = await getOwner();
-    if (!owner) return jsonOk({ drafts: [] });
+    const authz = await requireApiCreator();
+    if (!authz.ok) return authz.response;
 
     const repository = await getRepository();
-    const drafts = await repository.listByOwner(owner.hash);
+    const drafts = await repository.listByOwner(authz.creator.key);
     return jsonOk({ drafts });
   } catch (error) {
     return repositoryErrorResponse(error);
@@ -25,8 +25,8 @@ export async function GET() {
 }
 
 /**
- * Creates a draft seeded with the two names. The owner is derived from the
- * httpOnly cookie (`getOrCreateOwner`) — never from the request body.
+ * Creates a draft seeded with the two names. The owner is the verified Neon
+ * Auth user — never the request body, and never a freshly minted cookie.
  */
 export async function POST(request: Request) {
   const limit = await enforceRateLimit(request, "createDraft");
@@ -43,9 +43,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const owner = await getOrCreateOwner();
+    const authz = await requireApiCreator();
+    if (!authz.ok) return authz.response;
+
     const repository = await getRepository();
-    const record = await repository.createDraft(owner.hash, parsed.data);
+    const record = await repository.createDraft(authz.creator.key, parsed.data);
     return jsonOk({ draft: toCreatorDraft(record) }, 201);
   } catch (error) {
     return repositoryErrorResponse(error);
