@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { getRepository } from "@/lib/storage";
 import { getTheme } from "@/themes/registry";
 import { PresentationEngine } from "@/components/presentation/PresentationEngine";
+import { BirthdayLetter } from "@/components/presentation/BirthdayLetter";
+import { birthdayContentSchema } from "@/experiences/birthday/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +22,17 @@ export default async function LetterPage({ params }: { params: Promise<{ token: 
   // Unpublished, revoked, unknown and malformed tokens are indistinguishable
   // to the recipient — no oracle for guessing tokens.
   if (!letter) notFound();
+
+  // Branch on the experience module, not on which columns happen to be filled.
+  if (letter.experienceType === "birthday") {
+    const parsed = birthdayContentSchema.safeParse(letter.content);
+    if (!parsed.success) notFound();
+    return (
+      <main className="min-h-svh">
+        <BirthdayLetter content={parsed.data} />
+      </main>
+    );
+  }
 
   const theme = getTheme(letter.themeId);
 

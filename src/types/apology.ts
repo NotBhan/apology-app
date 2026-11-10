@@ -87,6 +87,10 @@ export interface ApologyRecord extends ApologyDraft {
 
 /** Everything a recipient is allowed to see. */
 export interface PublishedApology {
+  /** Experience module id; 'apology' for records written before the platform. */
+  experienceType?: string;
+  /** Module-owned content document for non-apology experiences. */
+  content?: unknown;
   recipientName: string;
   senderName: string;
   situation: SituationKey;
