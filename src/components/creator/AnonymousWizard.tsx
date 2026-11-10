@@ -86,5 +86,5 @@ export function AnonymousWizard() {
     [initial],
   );
 
-  return <Wizard initialDraft={initial} gateway={gateway} />;
+  return <Wizard initialDraft={initial} gateway={gateway} onDraftChange={persist} />;
 }

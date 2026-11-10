@@ -39,6 +39,11 @@ export interface WizardGateway {
 interface WizardProps {
   initialDraft: ApologyDraft;
   gateway: WizardGateway;
+  /**
+   * Fires whenever the draft changes. Used by the anonymous editor to keep a
+   * local copy in this tab, since it cannot save through the gateway first.
+   */
+  onDraftChange?: (draft: ApologyDraft) => void;
 }
 
 /**
@@ -60,7 +65,7 @@ const STEP_LABELS = [
   "Publish",
 ] as const;
 
-export function Wizard({ initialDraft, gateway }: WizardProps) {
+export function Wizard({ initialDraft, gateway, onDraftChange }: WizardProps) {
   const router = useRouter();
   const [draft, setDraft] = useState<ApologyDraft>(() => ({
     ...initialDraft,
@@ -79,6 +84,11 @@ export function Wizard({ initialDraft, gateway }: WizardProps) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const theme = useMemo(() => getTheme(draft.themeId), [draft.themeId]);
+
+  useEffect(() => {
+    onDraftChange?.(draft);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft]);
 
   const update = useCallback((patch: DraftPatch) => {
     setDraft((current) => ({
