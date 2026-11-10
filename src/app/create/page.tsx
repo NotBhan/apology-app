@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { startDraftAction } from "./actions";
-import { requirePageCreator } from "@/lib/security/creator";
+import { getCreator } from "@/lib/security/creator";
 
 export const metadata: Metadata = {
   title: "Start an apology",
@@ -14,7 +14,8 @@ export default async function CreatePage({
 }: {
   searchParams: Promise<{ limited?: string }>;
 }) {
-  await requirePageCreator("/create");
+  // Browsing and starting are open to anyone; only persistence needs an account.
+  const creator = await getCreator();
   const { limited } = await searchParams;
   return (
     <main className="min-h-svh bg-[#faf6ff]">
@@ -58,14 +59,23 @@ export default async function CreatePage({
           </p>
         ) : null}
 
-        <form action={startDraftAction} className="mt-9">
-          <button
-            type="submit"
-            className="inline-flex min-h-12 w-full items-center justify-center rounded-full bg-[#6d3fa8] px-7 text-[0.95rem] font-semibold text-white shadow-[0_12px_28px_-16px_rgba(109,63,168,0.9)] transition active:scale-[0.99]"
+        {creator ? (
+          <form action={startDraftAction} className="mt-9">
+            <button
+              type="submit"
+              className="inline-flex min-h-12 w-full items-center justify-center rounded-full bg-[#6d3fa8] px-7 text-[0.95rem] font-semibold text-white shadow-[0_12px_28px_-16px_rgba(109,63,168,0.9)] transition active:scale-[0.99]"
+            >
+              Start writing
+            </button>
+          </form>
+        ) : (
+          <Link
+            href="/create/start"
+            className="mt-9 flex min-h-12 w-full items-center justify-center rounded-full bg-[#6d3fa8] px-7 text-[0.95rem] font-semibold text-white shadow-[0_12px_28px_-16px_rgba(109,63,168,0.9)] transition active:scale-[0.99]"
           >
             Start writing
-          </button>
-        </form>
+          </Link>
+        )}
 
         <Link
           href="/"
