@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import { BRAND } from "@/platform/brand";
 import Link from "next/link";
 import { ThemeShowcase } from "@/components/theme-selector/ThemeShowcase";
+import { listExperiences } from "@/experiences/registry";
 import { startDraftAction } from "./create/actions";
 
 export const metadata: Metadata = {
   title: BRAND.name,
   description:
-    "A private, animated apology you can make in minutes. Pick a world, write three messages, seal it with a letter.",
+    "Personal, unexpected experiences for someone who matters: an apology, a birthday, and more.",
 };
 
 export const dynamic = "force-dynamic";
@@ -35,7 +36,7 @@ export default function HomePage() {
               Koi Koi
             </span>
             <span className="text-[0.62rem] uppercase tracking-[0.18em] text-[#a394b4]">
-              apologies
+              experiences
             </span>
           </Link>
           <nav className="flex items-center gap-4 text-[0.78rem] font-semibold text-[#6b5580]">
@@ -87,6 +88,42 @@ export default function HomePage() {
           </div>
         </section>
       </div>
+
+      <section id="experiences" className="mx-auto w-full max-w-[1080px] px-5 py-12">
+        <div className="mb-6 text-center">
+          <p className="text-[0.66rem] uppercase tracking-[0.24em] text-[#a394b4]">experiences</p>
+          <h2
+            className="mt-2 text-[clamp(1.4rem,4vw,2rem)] text-[#33203f]"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            Different feelings, different worlds.
+          </h2>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {listExperiences().map((experience) => (
+            <article
+              key={experience.id}
+              className="rounded-2xl border border-[#eadff3] bg-white/70 p-5"
+            >
+              <p className="text-[0.62rem] uppercase tracking-[0.18em] text-[#a394b4]">
+                {experience.category}
+              </p>
+              <h3 className="mt-2 text-lg text-[#33203f]">{experience.name}</h3>
+              <p className="mt-1 text-sm text-[#6b5580]">{experience.tagline}</p>
+              {experience.id === "apology" ? (
+                <Link
+                  href="/create"
+                  className="mt-4 inline-block text-sm font-semibold text-[#6d3fa8] underline"
+                >
+                  Start this one →
+                </Link>
+              ) : (
+                <p className="mt-4 text-xs text-[#a394b4]">Editor coming next.</p>
+              )}
+            </article>
+          ))}
+        </div>
+      </section>
 
       <section id="themes" className="mx-auto w-full max-w-[1080px] scroll-mt-8 px-5 py-14">
         <div className="mb-7 max-w-[46ch]">

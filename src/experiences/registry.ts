@@ -1,4 +1,5 @@
 import { apologyExperience } from "./apology/module";
+import { birthdayExperience } from "./birthday/module";
 import type { ExperienceId, ExperienceModule } from "./types";
 
 /**
@@ -7,7 +8,10 @@ import type { ExperienceId, ExperienceModule } from "./types";
  * Order is presentation order on the homepage. Adding a module means adding one
  * import and one entry; no shared code changes.
  */
-export const EXPERIENCES: readonly ExperienceModule[] = [apologyExperience];
+export const EXPERIENCES: readonly ExperienceModule[] = [
+  apologyExperience,
+  birthdayExperience,
+];
 
 export function listExperiences(): readonly ExperienceModule[] {
   return EXPERIENCES;
