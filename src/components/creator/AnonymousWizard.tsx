@@ -113,7 +113,7 @@ export function AnonymousWizard({ signedIn = false }: { signedIn?: boolean }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(stored),
       });
-      if (!saved.ok && saved.status !== 400) {
+      if (!saved.ok) {
         const out = await saved.json().catch(() => null);
         throw new Error(out?.error ?? "Could not save the draft.");
       }
