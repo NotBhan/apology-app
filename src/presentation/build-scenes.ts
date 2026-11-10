@@ -169,6 +169,10 @@ export function buildScenes(content: ApologyContent, theme: ApologyTheme): Prese
         break;
 
       case "letter":
+        // The envelope scene reveals this same note. Rendering both showed the
+        // letter twice, so the envelope is the letter moment whenever a theme
+        // has one; themes without an envelope keep this scene.
+        if (theme.sceneIds.includes("envelope")) break;
         scenes.push({
           id: "letter",
           type: "letter",
@@ -214,7 +218,8 @@ export function buildScenes(content: ApologyContent, theme: ApologyTheme): Prese
           type: "closing",
           eyebrow: tone.closing.eyebrow,
           title: tone.closing.title,
-          body: note || content.messages.message3,
+          // Not the personal note: that was delivered by the envelope.
+          body: content.messages.message3,
           content: { signature: true },
           characterState: "flowers",
           ctaLabel: tone.closing.cta,

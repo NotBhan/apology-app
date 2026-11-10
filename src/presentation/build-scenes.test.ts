@@ -39,9 +39,25 @@ describe("buildScenes", () => {
     const scenes = buildScenes(makeDraft({ themeId: "heartfelt" }), heartfelt);
     const ids = scenes.map((scene) => scene.id);
 
-    expect(ids.indexOf("envelope")).toBeLessThan(ids.indexOf("letter"));
+    // The envelope reveals the personal note, so there is no second letter scene.
+    expect(ids).toContain("envelope");
+    expect(ids).not.toContain("letter");
     expect(ids[0]).toBe("opening");
     expect(ids.at(-1)).toBe("response");
+  });
+
+  it("presents the personal note once, through the envelope", () => {
+    const midnight = THEME_LIST.find((theme) => theme.id === "midnight")!;
+    const note = "I wrote this at 2am because I could not sleep.";
+    const scenes = buildScenes(makeDraft({ themeId: "midnight" }), midnight);
+
+    expect(scenes.filter((scene) => scene.id === "envelope")).toHaveLength(1);
+    expect(scenes.some((scene) => scene.id === "letter")).toBe(false);
+    // Nothing else carries the note text, including the closing scene.
+    expect(scenes.some((scene) => scene.body === note)).toBe(false);
+    expect(scenes.find((scene) => scene.id === "closing")?.body).toBe(
+      "I am learning to pause before I speak.",
+    );
   });
 
   it("drops the memory scene when no photos were supplied", () => {
