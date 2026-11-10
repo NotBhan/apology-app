@@ -49,7 +49,7 @@ export function UpcomingCategoryRow({ category }: { category: ExperienceCategory
   if (category.status !== "upcoming") return null;
 
   return (
-    <article className="flex items-center gap-3 rounded-2xl border border-[#eee6f6] bg-white/55 p-3">
+    <article className="flex items-start gap-3 rounded-2xl border border-[#eee6f6] bg-white/55 p-3">
       <div
         className="h-12 w-12 shrink-0 rounded-xl"
         style={{ background: `linear-gradient(135deg, #ffffff, ${category.accent}22)` }}
@@ -57,8 +57,10 @@ export function UpcomingCategoryRow({ category }: { category: ExperienceCategory
         <CategoryArt id={category.id} accent={category.accent} className="h-full w-full" />
       </div>
       <div className="min-w-0">
-        <h4 className="truncate text-[0.88rem] font-semibold text-[#4b3a5c]">{category.label}</h4>
-        <p className="truncate text-[0.74rem] text-[#8a7a9c]">{category.description}</p>
+        <h4 className="text-[0.88rem] font-semibold text-[#4b3a5c]">{category.label}</h4>
+        <p className="mt-0.5 line-clamp-2 text-[0.74rem] leading-snug text-[#8a7a9c]">
+          {category.description}
+        </p>
       </div>
       <span className="ml-auto shrink-0 text-[0.62rem] uppercase tracking-[0.14em] text-[#b3a5c2]">
         soon
