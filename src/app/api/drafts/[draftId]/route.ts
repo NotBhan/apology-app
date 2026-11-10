@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { constantTimeEqual } from "@/lib/id";
-import { getOwner } from "@/lib/security/owner";
+import { requireApiCreator } from "@/lib/security/creator";
 import { getRepository } from "@/lib/storage";
 import { toCreatorDraft } from "@/lib/storage/types";
 import { draftPayloadSchema, formatZodError } from "@/lib/validation/apology";
@@ -40,8 +40,9 @@ export async function GET(_request: Request, context: DraftRouteContext) {
   const { draftId } = await context.params;
 
   try {
-    const owner = await getOwner();
-    if (!owner) return jsonError(404, "We could not find that draft.");
+    const authz = await requireApiCreator();
+    if (!authz.ok) return authz.response;
+    const owner = { hash: authz.creator.key };
 
     const repository = await getRepository();
     const record = await repository.getDraft(draftId);
@@ -69,8 +70,9 @@ export async function PATCH(request: Request, context: DraftRouteContext) {
   }
 
   try {
-    const owner = await getOwner();
-    if (!owner) return jsonError(403, "You do not have access to this draft.");
+    const authz = await requireApiCreator();
+    if (!authz.ok) return authz.response;
+    const owner = { hash: authz.creator.key };
 
     const repository = await getRepository();
     const record = await repository.saveDraft(draftId, owner.hash, parsed.data);
@@ -85,8 +87,9 @@ export async function DELETE(_request: Request, context: DraftRouteContext) {
   const { draftId } = await context.params;
 
   try {
-    const owner = await getOwner();
-    if (!owner) return jsonError(403, "You do not have access to this draft.");
+    const authz = await requireApiCreator();
+    if (!authz.ok) return authz.response;
+    const owner = { hash: authz.creator.key };
 
     const repository = await getRepository();
     const marked = await repository.requestDeletionByOwner(draftId, owner.hash);

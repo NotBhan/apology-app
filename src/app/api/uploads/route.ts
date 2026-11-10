@@ -1,4 +1,4 @@
-import { getOwner } from "@/lib/security/owner";
+import { requireApiCreator } from "@/lib/security/creator";
 import { getObjectStore, getRepository } from "@/lib/storage";
 import { storeUpload, UploadError } from "@/lib/storage/uploads";
 import { jsonError, jsonOk } from "@/lib/api/responses";
@@ -53,8 +53,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const owner = await getOwner();
-    if (!owner) return jsonError(403, "Start a letter before uploading files.");
+    const authz = await requireApiCreator();
+    if (!authz.ok) return authz.response;
+    const owner = { hash: authz.creator.key };
 
     const data = new Uint8Array(await file.arrayBuffer());
     const asset = await storeUpload(

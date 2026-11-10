@@ -1,5 +1,5 @@
 import { constantTimeEqual } from "@/lib/id";
-import { getOwner } from "@/lib/security/owner";
+import { requireApiCreator } from "@/lib/security/creator";
 import { getRepository } from "@/lib/storage";
 import { draftPayloadSchema, formatZodError, linkDurationDaysSchema } from "@/lib/validation/apology";
 import { DEFAULT_LINK_DAYS, normalizeDurationDays } from "@/lib/expiry";
@@ -48,8 +48,9 @@ export async function POST(request: Request, context: PublishRouteContext) {
   }
 
   try {
-    const owner = await getOwner();
-    if (!owner) return jsonError(403, "You do not have access to this draft.");
+    const authz = await requireApiCreator();
+    if (!authz.ok) return authz.response;
+    const owner = { hash: authz.creator.key };
 
     const repository = await getRepository();
     const record = await repository.getDraft(draftId);

@@ -1,4 +1,4 @@
-import { getOwner } from "@/lib/security/owner";
+import { requireApiCreator } from "@/lib/security/creator";
 import { getRepository } from "@/lib/storage";
 import { toCreatorDraft } from "@/lib/storage/types";
 import { jsonError, jsonOk, repositoryErrorResponse } from "@/lib/api/responses";
@@ -24,8 +24,9 @@ export async function POST(request: Request, context: RevokeRouteContext) {
 
 
   try {
-    const owner = await getOwner();
-    if (!owner) return jsonError(403, "You do not have access to this draft.");
+    const authz = await requireApiCreator();
+    if (!authz.ok) return authz.response;
+    const owner = { hash: authz.creator.key };
 
     const repository = await getRepository();
     const record = await repository.revoke(draftId, owner.hash);

@@ -1,4 +1,4 @@
-import { getOwner } from "@/lib/security/owner";
+import { requireApiCreator } from "@/lib/security/creator";
 import { getObjectStore, getRepository } from "@/lib/storage";
 import { canServeAsset } from "@/lib/storage/asset-access";
 import { isValidAssetId, presignAssetUrl } from "@/lib/storage/uploads";
@@ -34,7 +34,9 @@ export async function GET(request: Request, context: AssetRouteContext) {
   if (!isValidAssetId(assetId)) return jsonError(404, "That file could not be found.");
 
   try {
-    const owner = await getOwner();
+    const authz = await requireApiCreator();
+    if (!authz.ok) return authz.response;
+    const owner = { hash: authz.creator.key };
     const asset = await getRepository().getAssetForServing(assetId);
 
     if (!asset || !canServeAsset({ asset, ownerKeyHash: owner?.hash })) {
@@ -62,8 +64,9 @@ export async function DELETE(_request: Request, context: AssetRouteContext) {
   const { assetId } = await context.params;
 
   try {
-    const owner = await getOwner();
-    if (!owner) return jsonError(403, "You do not have access to that file.");
+    const authz = await requireApiCreator();
+    if (!authz.ok) return authz.response;
+    const owner = { hash: authz.creator.key };
     if (!isValidAssetId(assetId)) return jsonOk({ ok: true });
 
     const asset = await getRepository().getAssetForServing(assetId);
