@@ -33,7 +33,7 @@ export default function HomePage() {
               className="text-[1.25rem] font-semibold tracking-tight text-[#33203f]"
               style={{ fontFamily: "var(--font-display)" }}
             >
-              Koi Koi
+              {BRAND.name}
             </span>
             <span className="text-[0.62rem] uppercase tracking-[0.18em] text-[#a394b4]">
               experiences
