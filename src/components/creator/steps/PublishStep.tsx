@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ShareQrDialog } from "@/components/share/ShareQrDialog";
 import { motion } from "framer-motion";
 import type { ApologyDraft } from "@/types/apology";
 import { getTheme } from "@/themes/registry";
@@ -48,6 +49,8 @@ export function PublishStep({
   const theme = getTheme(draft.themeId);
   const pack = getStickerPack(draft.stickerPackId);
   const duration = draft.linkDurationDays;
+
+  const [showQr, setShowQr] = useState(false);
 
   const shareUrl =
     publishedToken && typeof window !== "undefined"
@@ -179,7 +182,18 @@ export function PublishStep({
             >
               Open
             </Button>
+            <Button variant="secondary" onClick={() => setShowQr(true)} className="flex-1">
+              Share QR
+            </Button>
           </div>
+
+          {showQr ? (
+            <ShareQrDialog
+              path={`/letter/${publishedToken}`}
+              experienceType="apology"
+              onClose={() => setShowQr(false)}
+            />
+          ) : null}
           <p className="text-[0.68rem] leading-relaxed text-[#8a7a9c]">
             Live for {formatDuration(duration)}. You can revoke it earlier from Manage, and an
             expired link can be renewed by publishing again.

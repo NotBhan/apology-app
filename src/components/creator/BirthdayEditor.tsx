@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { BirthdayLetter } from "@/components/presentation/BirthdayLetter";
 import { birthdayContentSchema } from "@/experiences/birthday/schema";
+import { ShareQrDialog } from "@/components/share/ShareQrDialog";
 
 const THEMES = [
   { id: "confetti", name: "Confetti" },
@@ -63,6 +64,7 @@ export function BirthdayEditor() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [published, setPublished] = useState<string | null>(null);
+  const [showQr, setShowQr] = useState(false);
 
   useEffect(() => {
     const stored = loadDraft();
@@ -235,9 +237,22 @@ export function BirthdayEditor() {
       ) : null}
 
       {published ? (
-        <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800">
-          Published: <span className="font-mono text-xs">{published}</span>
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800">
+          <span>
+            Published: <span className="font-mono text-xs">{published}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowQr(true)}
+            className="rounded-full border border-green-300 px-3 py-1 text-xs font-semibold text-green-900"
+          >
+            Share QR
+          </button>
+        </div>
+      ) : null}
+
+      {showQr && published ? (
+        <ShareQrDialog path={published} experienceType="birthday" onClose={() => setShowQr(false)} />
       ) : null}
 
       <div className="flex flex-wrap gap-3">
