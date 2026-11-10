@@ -27,6 +27,9 @@ export async function POST(request: Request) {
     );
   }
 
+  const authz = await requireApiCreator();
+  if (!authz.ok) return authz.response;
+
   const contentType = (request.headers.get("content-type") ?? "").toLowerCase();
   if (!contentType.includes("multipart/form-data")) {
     return jsonError(415, "Upload the file as multipart/form-data.");
@@ -53,8 +56,6 @@ export async function POST(request: Request) {
   }
 
   try {
-    const authz = await requireApiCreator();
-    if (!authz.ok) return authz.response;
     const owner = { hash: authz.creator.key };
 
     const data = new Uint8Array(await file.arrayBuffer());

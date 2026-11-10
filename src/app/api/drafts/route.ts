@@ -13,8 +13,6 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   try {
-    const authz = await requireApiCreator();
-    if (!authz.ok) return authz.response;
 
     const repository = await getRepository();
     const drafts = await repository.listByOwner(authz.creator.key);
@@ -33,6 +31,9 @@ export async function POST(request: Request) {
   if (!limit.allowed) {
     return jsonError(429, "Too many requests. Try again shortly.", undefined, rateLimitHeaders(limit));
   }
+
+  const authz = await requireApiCreator();
+  if (!authz.ok) return authz.response;
 
   const body = await readJsonBody(request);
   if (!body.ok) return body.response;
