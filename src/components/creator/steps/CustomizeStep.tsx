@@ -41,6 +41,30 @@ export function CustomizeStep({
   onBack,
 }: CustomizeStepProps) {
   const [tab, setTab] = useState<Tab>("music");
+  const index = TABS.findIndex((item) => item.key === tab);
+
+  /**
+   * Continue walks the three panels before leaving the step; Back unwinds them
+   * the same way. Without this, Continue jumped straight to publishing and the
+   * Photos and Colours panels were only reachable by clicking the tabs.
+   */
+  function advance() {
+    const next = TABS[index + 1];
+    if (next) {
+      setTab(next.key);
+      return;
+    }
+    onNext();
+  }
+
+  function retreat() {
+    const previous = TABS[index - 1];
+    if (previous) {
+      setTab(previous.key);
+      return;
+    }
+    onBack();
+  }
 
   return (
     <div className="space-y-5">
@@ -116,10 +140,10 @@ export function CustomizeStep({
       </div>
 
       <div className="flex gap-3">
-        <Button variant="secondary" onClick={onBack} className="flex-1">
+        <Button variant="secondary" onClick={retreat} className="flex-1">
           Back
         </Button>
-        <Button onClick={onNext} className="flex-[1.4]">
+        <Button onClick={advance} className="flex-[1.4]">
           Continue
         </Button>
       </div>
