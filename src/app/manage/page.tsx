@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requirePageCreator } from "@/lib/security/creator";
+import { signOutAction } from "@/lib/auth/actions";
 import { getRepository } from "@/lib/storage";
 import { isExpired } from "@/lib/expiry";
 import { ManageList } from "@/components/manage/ManageList";
@@ -57,6 +58,14 @@ export default async function ManagePage() {
           >
             New
           </Link>
+          <form action={signOutAction}>
+            <button
+              type="submit"
+              className="inline-flex min-h-10 items-center rounded-full border border-[#d9c9ee] px-4 text-[0.8rem] font-semibold text-[#6d3fa8]"
+            >
+              Sign out
+            </button>
+          </form>
         </div>
 
         <ManageList
