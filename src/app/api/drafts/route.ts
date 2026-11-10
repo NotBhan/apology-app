@@ -14,6 +14,9 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
 
+    const authz = await requireApiCreator();
+    if (!authz.ok) return authz.response;
+
     const repository = await getRepository();
     const drafts = await repository.listByOwner(authz.creator.key);
     return jsonOk({ drafts });
@@ -44,8 +47,6 @@ export async function POST(request: Request) {
   }
 
   try {
-    const authz = await requireApiCreator();
-    if (!authz.ok) return authz.response;
 
     const repository = await getRepository();
     const record = await repository.createDraft(
