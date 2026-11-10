@@ -348,6 +348,32 @@ export class PostgresRepository implements ApologyRepository {
     return claimed.length;
   }
 
+  async saveExperienceContent(
+    id: string,
+    ownerKeyHash: string,
+    content: unknown,
+    names: { recipientName: string; senderName: string },
+  ): Promise<ApologyRecord | null> {
+    const [row] = await this.db
+      .update(apologies)
+      .set({
+        content,
+        recipientName: names.recipientName,
+        senderName: names.senderName,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(apologies.id, id),
+          eq(apologies.ownerKeyHash, ownerKeyHash),
+          sql`${apologies.status} <> 'deleted'`,
+        ),
+      )
+      .returning();
+
+    return row ? rowToRecord(row) : null;
+  }
+
   async getByToken(token: string): Promise<ApologyRecord | undefined> {
     if (!/^[A-Za-z0-9_-]{10,96}$/.test(token)) return undefined;
     const [row] = await this.db

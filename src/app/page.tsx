@@ -118,7 +118,12 @@ export default function HomePage() {
                   Start this one →
                 </Link>
               ) : (
-                <p className="mt-4 text-xs text-[#a394b4]">Editor coming next.</p>
+                <Link
+                  href="/create/birthday"
+                  className="mt-4 inline-block text-sm font-semibold text-[#6d3fa8] underline"
+                >
+                  Start this one →
+                </Link>
               )}
             </article>
           ))}

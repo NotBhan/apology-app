@@ -4,6 +4,7 @@ import { toCreatorDraft } from "@/lib/storage/types";
 import { createDraftSchema, formatZodError } from "@/lib/validation/apology";
 import { jsonError, jsonOk, readJsonBody, repositoryErrorResponse } from "@/lib/api/responses";
 import { enforceRateLimit, rateLimitHeaders } from "@/lib/security/postgres-rate-limit";
+import { getExperience } from "@/experiences/registry";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,33 @@ export async function POST(request: Request) {
 
   const body = await readJsonBody(request);
   if (!body.ok) return body.response;
+
+  const requested = (body.data ?? {}) as { experienceType?: unknown; content?: unknown };
+  const requestedType =
+    typeof requested.experienceType === "string" ? requested.experienceType : "apology";
+
+  if (requestedType !== "apology") {
+    const experience = getExperience(requestedType);
+    if (!experience) return jsonError(400, "Unknown experience.");
+
+    const content = experience.draftSchema.safeParse(requested.content);
+    if (!content.success) {
+      return jsonError(400, "Check the highlighted fields.", formatZodError(content.error));
+    }
+
+    const names = content.data as { recipientName: string; senderName: string };
+    try {
+      const repository = await getRepository();
+      const record = await repository.createDraft(
+        { userId: authz.creator.userId, scopeKey: authz.creator.key, legacyKey: authz.creator.legacyKey },
+        { recipientName: names.recipientName, senderName: names.senderName },
+        { experienceType: requestedType, content: content.data },
+      );
+      return jsonOk({ draft: { ...toCreatorDraft(record), experienceType: requestedType } }, 201);
+    } catch (error) {
+      return repositoryErrorResponse(error);
+    }
+  }
 
   const parsed = createDraftSchema.safeParse(body.data);
   if (!parsed.success) {

@@ -187,6 +187,18 @@ export function createFakeBackend(): FakeBackend {
       return claimed;
     },
 
+    async saveExperienceContent(id, ownerKeyHash, content, names) {
+      const record = apologies.get(id);
+      if (!record) return null;
+      if (record.ownerKeyHash !== ownerKeyHash) return null;
+      if (record.status === "deleted") return null;
+      record.content = content;
+      record.recipientName = names.recipientName;
+      record.senderName = names.senderName;
+      record.updatedAt = new Date().toISOString();
+      return record;
+    },
+
     async getByToken(token) {
       return [...apologies.values()].find((record) => record.accessToken === token);
     },

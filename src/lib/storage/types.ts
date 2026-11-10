@@ -58,6 +58,14 @@ export interface ApologyRepository {
 
   getDraft(id: string): Promise<ApologyRecord | undefined>;
 
+  /** Updates a module-owned content document. Returns null if not owned. */
+  saveExperienceContent(
+    id: string,
+    ownerKeyHash: string,
+    content: unknown,
+    names: { recipientName: string; senderName: string },
+  ): Promise<ApologyRecord | null>;
+
   saveDraft(id: string, ownerKeyHash: string, payload: DraftPayload): Promise<ApologyRecord>;
 
   /**
