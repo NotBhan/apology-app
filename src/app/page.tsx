@@ -226,6 +226,12 @@ export default function HomePage() {
       </section>
 
       <footer className="mx-auto w-full max-w-[1080px] px-5 pb-10 pt-4">
+        <p
+          className="mb-4 text-center text-[0.88rem] text-[#6b5580]"
+          style={{ fontFamily: "var(--font-display)" }}
+        >
+          {BRAND.closing}
+        </p>
         <div className="flex flex-col items-center justify-between gap-3 border-t border-[#ece2f6] pt-6 text-[0.72rem] text-[#a394b4] sm:flex-row">
           <p className="max-w-[52ch]">
             Original characters and artwork. Links last at most seven days, then the letter
@@ -236,7 +242,7 @@ export default function HomePage() {
             .
           </p>
           <Link href="/create" className="font-semibold text-[#7a4fb0]">
-            Start an apology →
+            Create something →
           </Link>
         </div>
       </footer>
