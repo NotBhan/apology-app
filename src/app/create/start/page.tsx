@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getCreator } from "@/lib/security/creator";
-import { redirect } from "next/navigation";
 import { AnonymousWizard } from "@/components/creator/AnonymousWizard";
 
 export const metadata: Metadata = { title: "Start an apology · Koi Koi" };
@@ -11,7 +10,6 @@ export default async function StartApologyPage() {
   // Signed-in creators keep the persisted wizard; this route exists for the
   // anonymous path, which stores nothing until sign-in.
   const creator = await getCreator();
-  if (creator) redirect("/create");
 
   return (
     <main className="min-h-svh bg-[#faf6ff]">
@@ -23,7 +21,7 @@ export default async function StartApologyPage() {
           You can write and preview now. Nothing is saved to an account until you sign in.
         </p>
       </div>
-      <AnonymousWizard />
+      <AnonymousWizard signedIn={Boolean(creator)} />
     </main>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { ApologyDraft, PhotoAsset } from "@/types/apology";
 import { Wizard, type WizardGateway } from "./Wizard";
 
@@ -56,8 +57,11 @@ function persist(draft: ApologyDraft) {
  * draft to sign-in. Nothing is written to the database, so no anonymous
  * identity is created.
  */
-export function AnonymousWizard() {
+export function AnonymousWizard({ signedIn = false }: { signedIn?: boolean }) {
   const initial = useMemo(load, []);
+  const router = useRouter();
+  const [adopting, setAdopting] = useState(false);
+  const [adoptError, setAdoptError] = useState<string | null>(null);
 
   const gateway: WizardGateway = useMemo(
     () => ({
@@ -72,6 +76,8 @@ export function AnonymousWizard() {
       },
 
       async publish() {
+        persist(initial);
+        window.location.href = `/auth/sign-in?callbackURL=${encodeURIComponent("/create/start")}`;
         throw new Error("Sign in to publish. Your draft is kept in this browser.");
       },
 
@@ -86,5 +92,62 @@ export function AnonymousWizard() {
     [initial],
   );
 
-  return <Wizard initialDraft={initial} gateway={gateway} onDraftChange={persist} />;
+  async function adopt() {
+    setAdopting(true);
+    setAdoptError(null);
+    try {
+      const stored = load();
+      const created = await fetch("/api/drafts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          recipientName: stored.recipientName,
+          senderName: stored.senderName,
+        }),
+      });
+      const payload = await created.json();
+      if (!created.ok) throw new Error(payload.error ?? "Could not save the draft.");
+
+      const saved = await fetch(`/api/drafts/${payload.draft.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(stored),
+      });
+      if (!saved.ok && saved.status !== 400) {
+        const out = await saved.json().catch(() => null);
+        throw new Error(out?.error ?? "Could not save the draft.");
+      }
+
+      window.sessionStorage.removeItem(STORAGE_KEY);
+      router.push(`/create/${payload.draft.id}`);
+    } catch (cause) {
+      setAdoptError(cause instanceof Error ? cause.message : "Something went wrong.");
+    } finally {
+      setAdopting(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {signedIn ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[#efe7f8] px-3 py-2 text-xs text-[#4b2f6b]">
+          <span>You are signed in. Save this draft to your account to keep it.</span>
+          <button
+            type="button"
+            onClick={() => void adopt()}
+            disabled={adopting}
+            className="rounded-lg bg-[#6d3fa8] px-3 py-1.5 font-semibold text-white disabled:opacity-60"
+          >
+            {adopting ? "Saving…" : "Save to my account"}
+          </button>
+        </div>
+      ) : null}
+      {adoptError ? (
+        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          {adoptError}
+        </p>
+      ) : null}
+      <Wizard initialDraft={initial} gateway={gateway} onDraftChange={persist} />
+    </div>
+  );
 }
