@@ -326,6 +326,22 @@ export class PostgresRepository implements ApologyRepository {
     return rows.map((row) => toCreatorDraft(rowToRecord(row)));
   }
 
+  async claimLegacyRecords(input: {
+    userId: string;
+    scopeKey: string;
+    legacyKeyHash: string;
+  }): Promise<number> {
+    const claimed = await this.db
+      .update(apologies)
+      .set({ userId: input.userId, ownerKeyHash: input.scopeKey })
+      .where(
+        and(isNull(apologies.userId), eq(apologies.ownerKeyHash, input.legacyKeyHash)),
+      )
+      .returning({ id: apologies.id });
+
+    return claimed.length;
+  }
+
   async getByToken(token: string): Promise<ApologyRecord | undefined> {
     if (!/^[A-Za-z0-9_-]{10,96}$/.test(token)) return undefined;
     const [row] = await this.db

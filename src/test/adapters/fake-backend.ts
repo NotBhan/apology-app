@@ -172,6 +172,19 @@ export function createFakeBackend(): FakeBackend {
         });
     },
 
+    async claimLegacyRecords({ userId, scopeKey, legacyKeyHash }) {
+      let claimed = 0;
+      for (const record of apologies.values()) {
+        const owned = (record as ApologyRecord & { userId?: string }).userId;
+        if (!owned && record.ownerKeyHash === legacyKeyHash) {
+          (record as ApologyRecord & { userId?: string }).userId = userId;
+          record.ownerKeyHash = scopeKey;
+          claimed += 1;
+        }
+      }
+      return claimed;
+    },
+
     async getByToken(token) {
       return [...apologies.values()].find((record) => record.accessToken === token);
     },

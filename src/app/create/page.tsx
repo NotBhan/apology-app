@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { startDraftAction } from "./actions";
+import { requirePageCreator } from "@/lib/security/creator";
 
 export const metadata: Metadata = {
   title: "Start an apology",
@@ -13,6 +14,7 @@ export default async function CreatePage({
 }: {
   searchParams: Promise<{ limited?: string }>;
 }) {
+  await requirePageCreator("/create");
   const { limited } = await searchParams;
   return (
     <main className="min-h-svh bg-[#faf6ff]">

@@ -72,6 +72,19 @@ export interface ApologyRepository {
 
   listByOwner(ownerKeyHash: string, legacyKeyHash?: string): Promise<ApologyDraft[]>;
 
+  /**
+   * Binds unclaimed legacy rows to an account. Atomic and idempotent: the
+   * `user_id IS NULL` guard means a repeated or concurrent call claims nothing.
+   * `owner_key_hash` is rewritten to the account scope key so the row becomes
+   * operable through the normal predicates, and the legacy branch stops
+   * matching it.
+   */
+  claimLegacyRecords(input: {
+    userId: string;
+    scopeKey: string;
+    legacyKeyHash: string;
+  }): Promise<number>;
+
   getPublishedByToken(token: string): Promise<PublishedApology | undefined>;
 
   getByToken(token: string): Promise<ApologyRecord | undefined>;
