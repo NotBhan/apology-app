@@ -17,7 +17,7 @@ export default async function ManagePage() {
   const creator = await requirePageCreator("/my-letters");
   const repository = getRepository();
 
-  const drafts = await repository.listByOwner(creator.key);
+  const drafts = await repository.listByOwner(creator.key, creator.legacyKey);
   const tombstones = await repository.tombstonesForOwner(creator.key);
 
   // Only expired or already-queued letters can be mid-cleanup.

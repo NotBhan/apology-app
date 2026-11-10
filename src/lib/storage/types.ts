@@ -70,7 +70,7 @@ export interface ApologyRepository {
   /** Manual deletion: marks inaccessible and enqueues intent. No object I/O. */
   remove(id: string, ownerKeyHash: string): Promise<void>;
 
-  listByOwner(ownerKeyHash: string): Promise<ApologyDraft[]>;
+  listByOwner(ownerKeyHash: string, legacyKeyHash?: string): Promise<ApologyDraft[]>;
 
   getPublishedByToken(token: string): Promise<PublishedApology | undefined>;
 

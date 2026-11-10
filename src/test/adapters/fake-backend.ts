@@ -157,9 +157,13 @@ export function createFakeBackend(): FakeBackend {
       await repository.requestDeletionByOwner(id, ownerKeyHash);
     },
 
-    async listByOwner(ownerKeyHash) {
+    async listByOwner(ownerKeyHash, legacyKeyHash) {
       return [...apologies.values()]
-        .filter((record) => record.ownerKeyHash === ownerKeyHash)
+        .filter((record) => {
+          const claimed = Boolean((record as ApologyRecord & { userId?: string }).userId);
+          if (record.ownerKeyHash === ownerKeyHash) return true;
+          return Boolean(legacyKeyHash) && !claimed && record.ownerKeyHash === legacyKeyHash;
+        })
         .map<ApologyDraft>((record) => {
           const { accessToken: _t, ownerKeyHash: _o, ...draft } = record;
           void _t;

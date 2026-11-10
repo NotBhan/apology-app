@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 import type { ApologyDraft, ApologyRecord, PublishedApology } from "@/types/apology";
 import type { DraftPayload } from "@/lib/validation/apology";
 import { createLinkToken, hashLinkToken } from "@/lib/id";
@@ -300,11 +300,26 @@ export class PostgresRepository implements ApologyRepository {
     return Boolean(row);
   }
 
-  async listByOwner(ownerKeyHash: string): Promise<ApologyDraft[]> {
+  /**
+   * Creator listing.
+   *
+   * Rows written before Neon Auth are matched by the legacy hash the caller
+   * still holds. That branch is added only when the hash is present, so a
+   * missing cookie cannot widen the query, and a claimed row (which carries a
+   * `user_id`) stops matching it.
+   */
+  async listByOwner(ownerKeyHash: string, legacyKeyHash?: string): Promise<ApologyDraft[]> {
+    const scope = legacyKeyHash
+      ? or(
+          eq(apologies.ownerKeyHash, ownerKeyHash),
+          and(isNull(apologies.userId), eq(apologies.ownerKeyHash, legacyKeyHash)),
+        )
+      : eq(apologies.ownerKeyHash, ownerKeyHash);
+
     const rows = await this.db
       .select()
       .from(apologies)
-      .where(eq(apologies.ownerKeyHash, ownerKeyHash))
+      .where(scope)
       .orderBy(desc(apologies.updatedAt))
       .limit(100);
 
