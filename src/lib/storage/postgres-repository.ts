@@ -102,7 +102,7 @@ export class PostgresRepository implements ApologyRepository {
         // Ownership is written from the verified session only; there is no
         // request-supplied path to either column.
         userId: owner.userId,
-        ownerKeyHash: owner.legacyKey ?? null,
+        ownerKeyHash: owner.scopeKey,
         recipientName: seed.recipientName,
         senderName: seed.senderName,
         situation: "other",

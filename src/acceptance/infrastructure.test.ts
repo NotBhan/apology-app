@@ -103,7 +103,7 @@ suite("production infrastructure acceptance", { timeout: 60_000 }, () => {
     token: string;
     objectKey: string;
   }> {
-    const draft = await repository.createDraft({ userId: OWNER }, {
+    const draft = await repository.createDraft({ userId: OWNER, scopeKey: OWNER }, {
       recipientName: "Acceptance",
       senderName: "Harness",
     });

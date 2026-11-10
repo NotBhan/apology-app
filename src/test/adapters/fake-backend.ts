@@ -105,7 +105,7 @@ export function createFakeBackend(): FakeBackend {
   const repository: ApologyRepository = {
     async createDraft(owner, seed) {
       const record = makeRecord({
-        ownerKeyHash: owner.legacyKey ?? "",
+        ownerKeyHash: owner.scopeKey,
         recipientName: seed.recipientName,
         senderName: seed.senderName,
       });

@@ -48,7 +48,7 @@ export async function startDraftAction(): Promise<void> {
   if (!creator) redirect("/auth/sign-in?callbackURL=%2Fcreate");
 
   const record = await getRepository().createDraft(
-    { userId: creator.userId, legacyKey: creator.legacyKey },
+    { userId: creator.userId, scopeKey: creator.key, legacyKey: creator.legacyKey },
     {
       recipientName: "",
       senderName: "",

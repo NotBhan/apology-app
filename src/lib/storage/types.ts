@@ -45,6 +45,8 @@ export interface DraftOwner {
   userId: string;
   /** Legacy hash, only when the creator still holds a pre-auth cookie. */
   legacyKey?: string;
+  /** Value written to `owner_key_hash` so existing predicates match. */
+  scopeKey: string;
 }
 
 export interface ApologyRepository {

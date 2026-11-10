@@ -48,7 +48,7 @@ export async function POST(request: Request) {
 
     const repository = await getRepository();
     const record = await repository.createDraft(
-      { userId: authz.creator.userId, legacyKey: authz.creator.legacyKey },
+      { userId: authz.creator.userId, scopeKey: authz.creator.key, legacyKey: authz.creator.legacyKey },
       parsed.data,
     );
     return jsonOk({ draft: toCreatorDraft(record) }, 201);
