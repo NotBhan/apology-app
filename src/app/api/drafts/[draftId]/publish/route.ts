@@ -62,6 +62,9 @@ export async function POST(request: Request, context: PublishRouteContext) {
       return jsonError(410, "This letter was revoked. Start a new draft to share it again.");
     }
 
+    // Apology completeness is a rule of the apology module, not of the platform.
+    const isExperience = (record.experienceType ?? "apology") !== "apology";
+
     const required = draftPayloadSchema.safeParse({
       recipientName: record.recipientName,
       senderName: record.senderName,
@@ -74,7 +77,7 @@ export async function POST(request: Request, context: PublishRouteContext) {
       customization: record.customization,
     });
 
-    if (!required.success) {
+    if (!required.success && !isExperience) {
       return jsonError(
         400,
         "Finish the required parts of the letter before publishing.",
