@@ -53,6 +53,7 @@ export interface ApologyRepository {
   createDraft(
     owner: DraftOwner,
     seed: { recipientName: string; senderName: string },
+    options?: { experienceType?: string; content?: unknown },
   ): Promise<ApologyRecord>;
 
   getDraft(id: string): Promise<ApologyRecord | undefined>;

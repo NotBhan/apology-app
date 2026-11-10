@@ -103,7 +103,7 @@ export function createFakeBackend(): FakeBackend {
   }
 
   const repository: ApologyRepository = {
-    async createDraft(owner, seed) {
+    async createDraft(owner, seed, options) {
       const record = makeRecord({
         ownerKeyHash: owner.scopeKey,
         recipientName: seed.recipientName,
@@ -112,6 +112,8 @@ export function createFakeBackend(): FakeBackend {
       // Mirrors the column the real repository writes, so tests can assert
       // that ownership comes from the server-resolved scope.
       (record as ApologyRecord & { userId?: string }).userId = owner.userId;
+      record.experienceType = options?.experienceType ?? "apology";
+      record.content = options?.content ?? null;
       apologies.set(record.id, record);
       return record;
     },

@@ -54,6 +54,8 @@ export function rowToRecord(row: ApologyRow, accessToken = ""): ApologyRecord {
     // Empty means "no legacy device binding"; rows created under Neon Auth
     // carry a user id instead.
     ownerKeyHash: row.ownerKeyHash ?? "",
+    experienceType: row.experienceType ?? "apology",
+    content: row.content ?? null,
     recipientName: row.recipientName,
     senderName: row.senderName,
     situation: row.situation as ApologyRecord["situation"],
@@ -95,6 +97,7 @@ export class PostgresRepository implements ApologyRepository {
   async createDraft(
     owner: DraftOwner,
     seed: { recipientName: string; senderName: string },
+    options?: { experienceType?: string; content?: unknown },
   ): Promise<ApologyRecord> {
     const [row] = await this.db
       .insert(apologies)
@@ -103,6 +106,9 @@ export class PostgresRepository implements ApologyRepository {
         // request-supplied path to either column.
         userId: owner.userId,
         ownerKeyHash: owner.scopeKey,
+        // Defaulted at the column level too, so an omission is still 'apology'.
+        experienceType: options?.experienceType ?? "apology",
+        content: options?.content ?? null,
         recipientName: seed.recipientName,
         senderName: seed.senderName,
         situation: "other",
