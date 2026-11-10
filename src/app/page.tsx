@@ -38,7 +38,7 @@ export default function HomePage() {
             </span>
           </Link>
           <nav className="flex items-center gap-4 text-[0.78rem] font-semibold text-[#6b5580]">
-            <Link href="/manage" className="hover:text-[#4b2f6b]">
+            <Link href="/my-letters" className="hover:text-[#4b2f6b]">
               My letters
             </Link>
           </nav>

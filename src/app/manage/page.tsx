@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getOwner } from "@/lib/security/owner";
+import { requirePageCreator } from "@/lib/security/creator";
 import { getRepository } from "@/lib/storage";
 import { isExpired } from "@/lib/expiry";
 import { ManageList } from "@/components/manage/ManageList";
@@ -13,11 +13,12 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function ManagePage() {
-  const owner = await getOwner();
+  // Server-side gate: the dashboard never renders without a verified session.
+  const creator = await requirePageCreator("/my-letters");
   const repository = getRepository();
 
-  const drafts = owner ? await repository.listByOwner(owner.hash) : [];
-  const tombstones = owner ? await repository.tombstonesForOwner(owner.hash) : [];
+  const drafts = await repository.listByOwner(creator.key);
+  const tombstones = await repository.tombstonesForOwner(creator.key);
 
   // Only expired or already-queued letters can be mid-cleanup.
   const pendingDeletionIds = (
