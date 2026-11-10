@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import type { ThemeAssets } from "@/types/theme";
 import { LetterCard } from "./LetterCard";
+import { paginateLetter } from "./paginateLetter";
 import { cn } from "@/lib/cn";
 
 type Stage = "sealed" | "cracking" | "opening" | "rising" | "unfolded";
@@ -43,13 +44,26 @@ export function EnvelopeAnimation({
 }: EnvelopeAnimationProps) {
   const reduce = useReducedMotion();
   const [stage, setStage] = useState<Stage>("sealed");
+  const pages = useMemo(() => paginateLetter(body), [body]);
+  const [page, setPage] = useState(0);
+
+  useEffect(() => {
+    setPage(0);
+  }, [body]);
+
+  /**
+   * The letter card clips long copy, so the note is paginated. `onOpened` — the
+   * signal that lets the scene's Continue button enable — waits until the last
+   * page has actually been read.
+   */
+  const singlePage = pages.length <= 1;
   const paint = ENVELOPE_PAINT[variant] ?? ENVELOPE_PAINT.classic;
 
   const open = useCallback(() => {
     if (stage !== "sealed") return;
     if (reduce) {
       setStage("unfolded");
-      onOpened?.();
+      if (pages.length <= 1) onOpened?.();
       return;
     }
     setStage("cracking");
@@ -57,9 +71,9 @@ export function EnvelopeAnimation({
     window.setTimeout(() => setStage("rising"), 1080);
     window.setTimeout(() => {
       setStage("unfolded");
-      onOpened?.();
+      if (pages.length <= 1) onOpened?.();
     }, 1750);
-  }, [stage, reduce, onOpened]);
+  }, [stage, reduce, onOpened, pages.length]);
 
   const revealed = stage === "unfolded";
   const flapOpen = stage === "opening" || stage === "rising" || revealed;
@@ -213,10 +227,36 @@ export function EnvelopeAnimation({
             <LetterCard
               recipientName={recipientName}
               senderName={senderName}
-              body={body}
+              body={pages[page] ?? ""}
               variant={letterVariant}
               className="origin-top"
             />
+
+            {pages.length > 1 ? (
+              <div className="mt-3 flex items-center justify-between gap-3 px-1">
+                <span
+                  className="text-[0.64rem] uppercase tracking-[0.14em]"
+                  style={{ color: "var(--t-muted)" }}
+                  aria-live="polite"
+                >
+                  page {page + 1} of {pages.length}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (singlePage || page >= pages.length - 1) return;
+                    const next = page + 1;
+                    setPage(next);
+                    if (next === pages.length - 1) onOpened?.();
+                  }}
+                  disabled={page >= pages.length - 1}
+                  className="rounded-full px-4 py-1.5 text-[0.74rem] font-semibold text-white disabled:opacity-50"
+                  style={{ background: "var(--t-accent, #6d3fa8)" }}
+                >
+                  {page >= pages.length - 1 ? "End of letter" : "Next page"}
+                </button>
+              </div>
+            ) : null}
           </motion.div>
         ) : (
           <p
