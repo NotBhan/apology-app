@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { authConfigured, getAuth } from "@/lib/auth/server";
+import { safeCallback } from "@/lib/security/creator";
 import { AuthForm } from "../sign-in/AuthForm";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +11,13 @@ export const metadata = {
   robots: { index: false, follow: false, nocache: true },
 };
 
-export default async function SignUpPage() {
+export default async function SignUpPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ callbackURL?: string }>;
+}) {
+  const { callbackURL } = await searchParams;
+  const destination = safeCallback(callbackURL);
   if (!authConfigured()) {
     return (
       <main className="mx-auto flex min-h-svh max-w-md flex-col justify-center gap-4 px-6">
@@ -26,7 +33,7 @@ export default async function SignUpPage() {
   }
 
   const { data } = await getAuth().getSession();
-  if (data?.user) redirect("/manage");
+  if (data?.user) redirect(destination);
 
   return (
     <main className="mx-auto flex min-h-svh max-w-md flex-col justify-center gap-8 px-6">
@@ -37,7 +44,7 @@ export default async function SignUpPage() {
         <h1 className="text-3xl">Create your account</h1>
         <p className="text-sm text-stone-600">Keep every letter you write in one place.</p>
       </header>
-      <AuthForm mode="sign-up" />
+      <AuthForm mode="sign-up" callbackURL={destination} />
       <p className="text-sm text-stone-600">
         Already have an account?{" "}
         <Link href="/auth/sign-in" className="underline">

@@ -14,12 +14,13 @@ const initial: AuthFormState = {};
  * visual language. This form posts to the same Neon Auth endpoints through a
  * server action, so the provider is unchanged.
  */
-export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
+export function AuthForm({ mode, callbackURL }: { mode: "sign-in" | "sign-up"; callbackURL: string }) {
   const action = mode === "sign-in" ? signInAction : signUpAction;
   const [state, formAction, pending] = useActionState(action, initial);
 
   return (
     <form action={formAction} className="space-y-4">
+      <input type="hidden" name="callbackURL" value={callbackURL} />
       {mode === "sign-up" ? (
         <label className="block space-y-1">
           <span className="text-xs uppercase tracking-[0.15em] text-stone-500">Your name</span>

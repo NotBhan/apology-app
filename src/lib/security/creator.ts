@@ -5,6 +5,9 @@ import { hashOwnerKey } from "@/lib/id";
 import { authConfigured, getAuth } from "@/lib/auth/server";
 import { OWNER_COOKIE } from "@/lib/security/owner";
 import { jsonError } from "@/lib/api/responses";
+import { safeCallback } from "./callback";
+
+export { safeCallback };
 
 /**
  * The single place creator identity is decided.
@@ -19,16 +22,6 @@ export interface Creator {
   key: string;
   /** Present only when this browser still holds a pre-auth `kk_owner` cookie. */
   legacyKey?: string;
-}
-
-const DEFAULT_DESTINATION = "/my-letters";
-
-/** Rejects open redirects: same-origin absolute paths only. */
-export function safeCallback(raw: string | null | undefined): string {
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.includes("\\")) {
-    return DEFAULT_DESTINATION;
-  }
-  return raw;
 }
 
 export function signInUrl(callbackURL: string): string {

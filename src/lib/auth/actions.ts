@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { getAuth } from "@/lib/auth/server";
+import { safeCallback } from "@/lib/security/creator";
 
 /**
  * Auth actions.
@@ -28,7 +29,7 @@ export async function signInAction(_state: AuthFormState, formData: FormData): P
   const { error } = await getAuth().signIn.email({ email, password });
   if (error) return { error: message(error) };
 
-  redirect("/manage");
+  redirect(safeCallback(String(formData.get("callbackURL") ?? "")));
 }
 
 export async function signUpAction(_state: AuthFormState, formData: FormData): Promise<AuthFormState> {
@@ -42,7 +43,7 @@ export async function signUpAction(_state: AuthFormState, formData: FormData): P
   const { error } = await getAuth().signUp.email({ email, password, name: name || email });
   if (error) return { error: message(error) };
 
-  redirect("/manage");
+  redirect(safeCallback(String(formData.get("callbackURL") ?? "")));
 }
 
 export async function signOutAction(): Promise<void> {
