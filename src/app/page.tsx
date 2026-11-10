@@ -55,7 +55,7 @@ export default function HomePage() {
             className="mx-auto mt-4 max-w-[16ch] text-balance text-[clamp(2.4rem,9vw,4rem)] leading-[1.02] text-[#33203f]"
             style={{ fontFamily: "var(--font-display)" }}
           >
-            Some things deserve more than a text.
+            {BRAND.tagline}
           </h1>
 
           <p
