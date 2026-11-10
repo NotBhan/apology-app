@@ -7,7 +7,7 @@ import { isExpired } from "@/lib/expiry";
 import { ManageList } from "@/components/manage/ManageList";
 
 export const metadata: Metadata = {
-  title: "My letters",
+  title: "My Experiences",
   robots: { index: false, follow: false },
 };
 
@@ -45,18 +45,18 @@ export default async function ManagePage() {
               className="mt-2 text-[clamp(1.7rem,6vw,2.2rem)] leading-tight text-[#33203f]"
               style={{ fontFamily: "var(--font-display)" }}
             >
-              My letters
+              My Experiences
             </h1>
             <p className="mt-1 text-[0.82rem] text-[#8a7a9c]">
-              Links last at most seven days. Expired letters are deleted, files and all.
-              Everything here is tied to this browser.
+              Everything you've made lives here. Links last at most seven days; expired
+              experiences are deleted, files and all.
             </p>
           </div>
           <Link
-            href="/create"
+            href="/explore"
             className="inline-flex min-h-10 shrink-0 items-center rounded-full bg-[#6d3fa8] px-4 text-[0.8rem] font-semibold text-white"
           >
-            New
+            Create
           </Link>
           <form action={signOutAction}>
             <button
@@ -75,7 +75,7 @@ export default async function ManagePage() {
         />
 
         <p className="mt-6 text-center text-[0.68rem] leading-relaxed text-[#a394b4]">
-          Deletion removes the letter, its messages and every uploaded file.{" "}
+          Deletion removes the experience, its messages and every uploaded file.{" "}
           <Link href="/privacy" className="underline underline-offset-2 hover:text-[#7a4fb0]">
             What we store
           </Link>

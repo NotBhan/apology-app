@@ -1,14 +1,20 @@
 import type { Metadata } from "next";
 import { BRAND } from "@/platform/brand";
+import { PLATFORM_COPY } from "@/platform/content";
 import Link from "next/link";
 import { ThemeShowcase } from "@/components/theme-selector/ThemeShowcase";
-import { listExperiences } from "@/experiences/registry";
-import { startDraftAction } from "./create/actions";
+import { listCategories } from "@/experiences/categories";
+import { BIRTHDAY_THEMES } from "@/experiences/birthday/themes";
 
 export const metadata: Metadata = {
-  title: BRAND.name,
+  title: "Make Something Meaningful",
   description:
-    "Personal, unexpected experiences for someone who matters: an apology, a birthday, and more.",
+    "Create personalised digital experiences for apologies, birthdays, celebrations, love, and life's meaningful moments. Make something special and share it privately.",
+  openGraph: {
+    title: "Koi Koi — Make Something Meaningful",
+    description:
+      "Personalised, interactive experiences for apologies, birthdays, celebrations and the moments worth remembering.",
+  },
 };
 
 export const dynamic = "force-dynamic";
@@ -40,94 +46,95 @@ export default function HomePage() {
             </span>
           </Link>
           <nav className="flex items-center gap-4 text-[0.78rem] font-semibold text-[#6b5580]">
+            <Link href="/explore" className="hover:text-[#4b2f6b]">
+              {PLATFORM_COPY.nav.explore}
+            </Link>
             <Link href="/my-letters" className="hover:text-[#4b2f6b]">
-              My letters
+              {PLATFORM_COPY.nav.collection}
             </Link>
           </nav>
         </header>
 
         <section className="relative mx-auto w-full max-w-[760px] px-5 pb-16 pt-8 text-center sm:pt-14">
-          <p className="text-[0.64rem] uppercase tracking-[0.3em] text-[#a394b4]">
-            a private animated apology
+          <p className="text-[0.62rem] uppercase tracking-[0.3em] text-[#a394b4]">
+            {PLATFORM_COPY.hero.eyebrow}
           </p>
 
           <h1
             className="mx-auto mt-4 max-w-[16ch] text-balance text-[clamp(2.4rem,9vw,4rem)] leading-[1.02] text-[#33203f]"
             style={{ fontFamily: "var(--font-display)" }}
           >
-            {BRAND.tagline}
+            {PLATFORM_COPY.hero.headline}
           </h1>
 
-          <p
-            className="mx-auto mt-4 max-w-[30ch] text-[1.15rem] text-[#7a4fb0]"
-            style={{ fontFamily: "var(--font-hand)" }}
-          >
-            Three messages, a sealed letter, and a little world you can hand to them.
-          </p>
-
-          <p className="mx-auto mt-5 max-w-[42ch] text-[0.92rem] leading-relaxed text-[#6b5580]">
-            Build it in minutes. Preview every scene. Send one private link. No signup, no
-            payment, no pressure on the person opening it.
+          <p className="mx-auto mt-5 max-w-[46ch] text-[0.95rem] leading-relaxed text-[#6b5580]">
+            {PLATFORM_COPY.hero.supporting}
           </p>
 
           <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-            <form action={startDraftAction} className="w-full sm:w-auto">
-              <button
-                type="submit"
-                className="inline-flex min-h-12 w-full items-center justify-center rounded-full bg-[#6d3fa8] px-8 text-[0.95rem] font-semibold text-white shadow-[0_14px_32px_-16px_rgba(109,63,168,0.9)] transition active:scale-[0.99] sm:w-auto"
-              >
-                Start an apology
-              </button>
-            </form>
             <Link
-              href="#themes"
+              href="/explore"
+              className="inline-flex min-h-12 w-full items-center justify-center rounded-full bg-[#6d3fa8] px-8 text-[0.95rem] font-semibold text-white shadow-[0_14px_32px_-16px_rgba(109,63,168,0.9)] transition active:scale-[0.99] sm:w-auto"
+            >
+              {PLATFORM_COPY.hero.primaryCta}
+            </Link>
+            <Link
+              href="#experiences"
               className="inline-flex min-h-12 w-full items-center justify-center rounded-full border border-[#ddcdea] bg-white/70 px-8 text-[0.9rem] font-semibold text-[#4b2f6b] transition hover:border-[#c9b6dd] sm:w-auto"
             >
-              See the eight worlds
+              {PLATFORM_COPY.hero.secondaryCta}
             </Link>
           </div>
+
+          <p className="mx-auto mt-4 max-w-[42ch] text-[0.76rem] text-[#a394b4]">
+            {PLATFORM_COPY.hero.reassurance}
+          </p>
         </section>
       </div>
 
       <section id="experiences" className="mx-auto w-full max-w-[1080px] px-5 py-12">
-        <div className="mb-6 text-center">
-          <p className="text-[0.66rem] uppercase tracking-[0.24em] text-[#a394b4]">experiences</p>
+        <div className="mb-6 max-w-[46ch]">
+          <p className="text-[0.64rem] uppercase tracking-[0.24em] text-[#a394b4]">
+            {PLATFORM_COPY.experiences.eyebrow}
+          </p>
           <h2
-            className="mt-2 text-[clamp(1.4rem,4vw,2rem)] text-[#33203f]"
+            className="mt-2 text-[clamp(1.4rem,4.6vw,2rem)] leading-tight text-[#33203f]"
             style={{ fontFamily: "var(--font-display)" }}
           >
-            Different feelings, different worlds.
+            {PLATFORM_COPY.experiences.heading}
           </h2>
+          <p className="mt-2 text-[0.86rem] leading-relaxed text-[#7c6892]">
+            {PLATFORM_COPY.experiences.supporting}
+          </p>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          {listExperiences().map((experience) => (
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {listCategories().map((category) => (
             <article
-              key={experience.id}
-              className="rounded-2xl border border-[#eadff3] bg-white/70 p-5"
-              style={{ borderTopColor: experience.accent, borderTopWidth: 3 }}
+              key={category.id}
+              className="flex flex-col rounded-2xl border border-[#eadff3] bg-white/75 p-5"
+              style={{ borderTopColor: category.accent, borderTopWidth: 3 }}
             >
               <p
-                className="text-[0.62rem] uppercase tracking-[0.18em]"
-                style={{ color: experience.accent }}
+                className="text-[0.6rem] uppercase tracking-[0.18em]"
+                style={{ color: category.accent }}
               >
-                {experience.category}
+                {category.status === "implemented" ? "available now" : "coming soon"}
               </p>
-              <h3 className="mt-2 text-lg text-[#33203f]">{experience.name}</h3>
-              <p className="mt-1 text-sm text-[#6b5580]">{experience.tagline}</p>
-              {experience.id === "apology" ? (
+              <h3 className="mt-2 text-lg text-[#33203f]">{category.label}</h3>
+              <p className="mt-1 flex-1 text-[0.84rem] leading-relaxed text-[#6b5580]">
+                {category.description}
+              </p>
+
+              {category.status === "implemented" ? (
                 <Link
-                  href="/create"
-                  className="mt-4 inline-block text-sm font-semibold text-[#6d3fa8] underline"
+                  href={category.href}
+                  className="mt-4 text-sm font-semibold text-[#6d3fa8] underline"
                 >
-                  Start this one →
+                  {PLATFORM_COPY.experiences.start} →
                 </Link>
               ) : (
-                <Link
-                  href="/create/birthday"
-                  className="mt-4 inline-block text-sm font-semibold text-[#6d3fa8] underline"
-                >
-                  Start this one →
-                </Link>
+                <p className="mt-4 text-xs text-[#a394b4]">{PLATFORM_COPY.experiences.upcoming}</p>
               )}
             </article>
           ))}
@@ -135,42 +142,84 @@ export default function HomePage() {
       </section>
 
       <section id="themes" className="mx-auto w-full max-w-[1080px] scroll-mt-8 px-5 py-14">
-        <div className="mb-7 max-w-[46ch]">
-          <p className="text-[0.64rem] uppercase tracking-[0.24em] text-[#a394b4]">the worlds</p>
+        <div className="mb-7 max-w-[50ch]">
+          <p className="text-[0.64rem] uppercase tracking-[0.24em] text-[#a394b4]">
+            {PLATFORM_COPY.worlds.eyebrow}
+          </p>
           <h2
             className="mt-2 text-[clamp(1.6rem,5vw,2.2rem)] leading-tight text-[#33203f]"
             style={{ fontFamily: "var(--font-display)" }}
           >
-            Eight ways to say the same true thing.
+            {PLATFORM_COPY.worlds.heading}
           </h2>
           <p className="mt-2 text-[0.88rem] leading-relaxed text-[#7c6892]">
-            Each one is its own art direction — not a recoloured template. The characters are
-            chosen separately, so a midnight confession can star a very earnest capybara.
+            {PLATFORM_COPY.worlds.supporting}
           </p>
         </div>
 
-        <ThemeShowcase />
+        <div className="space-y-10">
+          <div>
+            <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+              <h3 className="text-[1rem] font-semibold text-[#33203f]">
+                {PLATFORM_COPY.worlds.apologyGroup}
+              </h3>
+              <p className="text-[0.72rem] uppercase tracking-[0.16em] text-[#a394b4]">
+                for the apology experience
+              </p>
+            </div>
+            <ThemeShowcase />
+          </div>
+
+          <div>
+            <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+              <h3 className="text-[1rem] font-semibold text-[#33203f]">
+                {PLATFORM_COPY.worlds.birthdayGroup}
+              </h3>
+              <p className="text-[0.72rem] uppercase tracking-[0.16em] text-[#a394b4]">
+                for the birthday experience
+              </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {BIRTHDAY_THEMES.map((theme) => (
+                <article
+                  key={theme.id}
+                  className="rounded-2xl border p-5"
+                  style={{
+                    background: theme.palette.background,
+                    borderColor: theme.palette.surface,
+                    color: theme.palette.text,
+                  }}
+                >
+                  <p
+                    className="text-[0.6rem] uppercase tracking-[0.18em]"
+                    style={{ color: theme.palette.accent }}
+                  >
+                    birthday
+                  </p>
+                  <h4 className="mt-2 text-[1rem] font-semibold">{theme.name}</h4>
+                  <p className="mt-1 text-[0.82rem] leading-relaxed opacity-80">{theme.tagline}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </div>
       </section>
 
       <section className="mx-auto w-full max-w-[1080px] px-5 py-10">
+        <div className="mb-6 max-w-[46ch]">
+          <p className="text-[0.64rem] uppercase tracking-[0.24em] text-[#a394b4]">
+            {PLATFORM_COPY.howItWorks.eyebrow}
+          </p>
+          <h2
+            className="mt-2 text-[clamp(1.4rem,4.6vw,2rem)] leading-tight text-[#33203f]"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            {PLATFORM_COPY.howItWorks.heading}
+          </h2>
+        </div>
+
         <div className="grid gap-4 sm:grid-cols-3">
-          {[
-            {
-              step: "01",
-              title: "Write it",
-              body: "Three short messages plus an optional personal note. Starters exist; nothing is forced.",
-            },
-            {
-              step: "02",
-              title: "Dress it",
-              body: "Pick a world, a character pack, music, photos and colours. Preview every scene.",
-            },
-            {
-              step: "03",
-              title: "Send one link",
-              body: "A private URL, unguessable, revocable. Search engines never index it.",
-            },
-          ].map((item) => (
+          {PLATFORM_COPY.howItWorks.steps.map((item) => (
             <div
               key={item.step}
               className="rounded-3xl border border-[#ece2f6] bg-white/70 p-5 backdrop-blur"
@@ -190,28 +239,21 @@ export default function HomePage() {
           <div className="grid gap-8 sm:grid-cols-2">
             <div>
               <p className="text-[0.64rem] uppercase tracking-[0.24em] text-[#a394b4]">
-                the other side
+                {PLATFORM_COPY.recipient.eyebrow}
               </p>
               <h2
                 className="mt-2 text-[clamp(1.45rem,4.6vw,2rem)] leading-tight text-[#33203f]"
                 style={{ fontFamily: "var(--font-display)" }}
               >
-                Built to be opened, not to pressure.
+                {PLATFORM_COPY.recipient.heading}
               </h2>
               <p className="mt-3 text-[0.88rem] leading-relaxed text-[#7c6892]">
-                The recipient can stop at any scene, replay it, and leave without answering. Their
-                response stays on their device unless they choose to copy it themselves.
+                {PLATFORM_COPY.recipient.description}
               </p>
             </div>
 
             <ul className="space-y-3 text-[0.84rem] text-[#5b4a6d]">
-              {[
-                "No forced forgiveness and no score",
-                "Responses never leave the recipient’s device",
-                "Links are unguessable, unindexed and revocable",
-                "Music can be muted or turned off entirely",
-                "Reduced-motion is respected throughout",
-              ].map((item) => (
+              {PLATFORM_COPY.recipient.points.map((item) => (
                 <li key={item} className="flex items-start gap-2.5">
                   <span
                     aria-hidden
@@ -225,24 +267,63 @@ export default function HomePage() {
         </div>
       </section>
 
-      <footer className="mx-auto w-full max-w-[1080px] px-5 pb-10 pt-4">
-        <p
-          className="mb-4 text-center text-[0.88rem] text-[#6b5580]"
+      <section className="mx-auto w-full max-w-[1080px] px-5 py-10">
+        <div className="mb-6 max-w-[46ch]">
+          <p className="text-[0.64rem] uppercase tracking-[0.24em] text-[#a394b4]">
+            {PLATFORM_COPY.personalisation.eyebrow}
+          </p>
+          <h2
+            className="mt-2 text-[clamp(1.4rem,4.6vw,2rem)] leading-tight text-[#33203f]"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            {PLATFORM_COPY.personalisation.heading}
+          </h2>
+          <p className="mt-2 text-[0.88rem] leading-relaxed text-[#7c6892]">
+            {PLATFORM_COPY.personalisation.description}
+          </p>
+        </div>
+
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {PLATFORM_COPY.personalisation.items.map((item) => (
+            <li
+              key={item}
+              className="rounded-2xl border border-[#ece2f6] bg-white/70 px-4 py-3 text-[0.84rem] text-[#5b4a6d]"
+            >
+              {item}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="mx-auto w-full max-w-[760px] px-5 py-14 text-center">
+        <h2
+          className="text-[clamp(1.7rem,5.4vw,2.4rem)] leading-tight text-[#33203f]"
           style={{ fontFamily: "var(--font-display)" }}
         >
-          {BRAND.closing}
+          {PLATFORM_COPY.closing.heading}
+        </h2>
+        <p className="mx-auto mt-3 max-w-[36ch] text-[0.9rem] leading-relaxed text-[#7c6892]">
+          {PLATFORM_COPY.closing.supporting}
         </p>
+        <Link
+          href="/explore"
+          className="mt-6 inline-flex min-h-12 items-center justify-center rounded-full bg-[#6d3fa8] px-8 text-[0.95rem] font-semibold text-white shadow-[0_14px_32px_-16px_rgba(109,63,168,0.9)] transition active:scale-[0.99]"
+        >
+          {PLATFORM_COPY.closing.cta}
+        </Link>
+      </section>
+
+      <footer className="mx-auto w-full max-w-[1080px] px-5 pb-10 pt-4">
         <div className="flex flex-col items-center justify-between gap-3 border-t border-[#ece2f6] pt-6 text-[0.72rem] text-[#a394b4] sm:flex-row">
           <p className="max-w-[52ch]">
-            Original characters and artwork. Links last at most seven days, then the letter
-            and its files are deleted.{" "}
+            {PLATFORM_COPY.footer.description} {PLATFORM_COPY.footer.retention}{" "}
             <Link href="/privacy" className="underline underline-offset-2 hover:text-[#7a4fb0]">
-              What we store
+              {PLATFORM_COPY.footer.privacyLink}
             </Link>
             .
           </p>
-          <Link href="/create" className="font-semibold text-[#7a4fb0]">
-            Create something →
+          <Link href="/explore" className="font-semibold text-[#7a4fb0]">
+            {PLATFORM_COPY.closing.cta} →
           </Link>
         </div>
       </footer>

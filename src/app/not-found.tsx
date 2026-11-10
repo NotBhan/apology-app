@@ -20,11 +20,11 @@ export default function NotFound() {
           className="mt-4 text-[clamp(1.7rem,7vw,2.3rem)] leading-tight text-[#33203f]"
           style={{ fontFamily: "var(--font-display)" }}
         >
-          This letter isn&rsquo;t open right now.
+          This little experience isn&rsquo;t open right now.
         </h1>
 
         <p className="mx-auto mt-3 max-w-[34ch] text-[0.88rem] leading-relaxed text-[#6b5580]">
-          Apology links are temporary, and this one may have expired or been closed by the person
+          Links like this are temporary, and this one may have expired or been closed by the person
           who made it. If someone sent it to you, ask them for a fresh link.
         </p>
 

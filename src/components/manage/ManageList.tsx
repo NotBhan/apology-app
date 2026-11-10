@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { PLATFORM_COPY } from "@/platform/content";
 import { getTheme } from "@/themes/registry";
 import { getStickerPack } from "@/sticker-packs/registry";
 import { resolveSituationLabel } from "@/content/situations";
@@ -24,12 +25,17 @@ export function ManageList({ drafts, tombstones, pendingDeletionIds }: ManageLis
   if (drafts.length === 0 && tombstones.length === 0) {
     return (
       <div className="rounded-3xl border border-dashed border-[#ddd0ec] px-6 py-14 text-center">
-        <p className="text-[0.9rem] text-[#6b5580]">No letters yet.</p>
+        <h2 className="text-[1.05rem] font-semibold text-[#33203f]">
+          {PLATFORM_COPY.dashboard.emptyHeading}
+        </h2>
+        <p className="mx-auto mt-2 max-w-[38ch] text-[0.86rem] leading-relaxed text-[#6b5580]">
+          {PLATFORM_COPY.dashboard.emptyBody}
+        </p>
         <Link
-          href="/create"
-          className="mt-4 inline-flex min-h-10 items-center justify-center rounded-full bg-[#6d3fa8] px-6 text-[0.85rem] font-semibold text-white"
+          href="/explore"
+          className="mt-5 inline-flex min-h-10 items-center justify-center rounded-full bg-[#6d3fa8] px-6 text-[0.85rem] font-semibold text-white"
         >
-          Start your first one
+          {PLATFORM_COPY.dashboard.emptyCta}
         </Link>
       </div>
     );

@@ -15,6 +15,6 @@ export { default } from "../manage/page";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "My letters",
+  title: "My Experiences",
   robots: { index: false, follow: false },
 };

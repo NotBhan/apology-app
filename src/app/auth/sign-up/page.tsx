@@ -42,7 +42,7 @@ export default async function SignUpPage({
           Koi Koi
         </Link>
         <h1 className="text-3xl">Create your account</h1>
-        <p className="text-sm text-stone-600">Keep every letter you write in one place.</p>
+        <p className="text-sm text-stone-600">Keep every experience you create in one place.</p>
       </header>
       <AuthForm mode="sign-up" callbackURL={destination} />
       <p className="text-sm text-stone-600">

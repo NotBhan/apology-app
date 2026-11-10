@@ -34,7 +34,7 @@ export default function PrivacyPage() {
           analytics, no advertising and no third-party trackers.
         </p>
 
-        <Section title="What a letter contains">
+        <Section title="What an experience contains">
           The recipient&rsquo;s first name and yours, the situation you chose, the three messages
           and optional note, your theme and character choices, any photos or audio you uploaded,
           and a random link token. No email, phone number, location or device information.
@@ -45,11 +45,11 @@ export default function PrivacyPage() {
           link permanent. The deadline is calculated on the server, so a client cannot extend it.
           At that moment the link stops opening and the recipient sees the same page as for a link
           that never existed. Photos and audio stop being served at the same time, so a saved
-          image URL does not outlive the letter.
+          image URL does not outlive the experience.
         </Section>
 
         <Section title="Deletion is automatic, and asynchronous">
-          A cleanup job runs hourly. It permanently deletes the letter, both names, the messages,
+          A cleanup job runs hourly. It permanently deletes the experience, both names, the messages,
           the note, the theme and sticker settings, the token, and every uploaded photo and audio
           file belonging to it.
           <br />
@@ -62,7 +62,7 @@ export default function PrivacyPage() {
 
         <Section title="What remains afterwards">
           A minimal record: an internal id, a hashed creator key, a timestamp and a file count. It
-          exists so your Manage page can show that a letter was deleted instead of quietly losing
+          exists so your Manage page can show that an experience was deleted instead of quietly losing
           it. It contains no names, no messages, no media and no usable token.
         </Section>
 
@@ -73,18 +73,18 @@ export default function PrivacyPage() {
         </Section>
 
         <Section title="Your responses stay with you">
-          The optional answer at the end of a letter is never transmitted. It lives in the
+          The optional answer at the end of an experience is never transmitted. It lives in the
           recipient&rsquo;s browser and there is no endpoint that accepts it.
         </Section>
 
         <Section title="Cookies">
           One httpOnly cookie identifies this browser as the creator so your drafts can be listed.
           It holds a random key, not personal information. Clearing site data removes access to
-          letters created from that browser.
+          experiences created from that browser.
         </Section>
 
         <p className="mt-8 text-[0.75rem] leading-relaxed text-[#8a7a9c]">
-          Questions about a specific letter can be answered from Manage, which is the only place
+          Questions about a specific experience can be answered from Manage, which is the only place
           that can identify it.
         </p>
 
@@ -92,7 +92,7 @@ export default function PrivacyPage() {
           href="/manage"
           className="mt-5 inline-flex min-h-10 items-center rounded-full border border-[#ddcdea] bg-white px-5 text-[0.82rem] font-semibold text-[#4b2f6b]"
         >
-          Go to my letters
+          Go to my experiences
         </Link>
       </div>
     </main>

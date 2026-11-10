@@ -9,9 +9,9 @@ import { birthdayContentSchema } from "@/experiences/birthday/schema";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "A letter for you",
+  title: "A little something for you",
   robots: { index: false, follow: false, nocache: true },
-  openGraph: { title: "A letter for you", description: "Open it when you're ready." },
+  openGraph: { title: "A little something for you", description: "Open it when you're ready." },
 };
 
 export default async function LetterPage({ params }: { params: Promise<{ token: string }> }) {

@@ -28,13 +28,13 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "Koi Koi — say it properly",
+    default: "Koi Koi — Make Something Meaningful",
     template: "%s · Koi Koi",
   },
   description:
-    "A private, animated apology you can make in minutes — your words, your memories, delivered as a sealed letter.",
+    "Create personalised digital experiences for apologies, birthdays, celebrations, love, and life's meaningful moments. Make something special and share it privately.",
   robots: {
-    // Private apology links must never be indexed.
+    // Private recipient links must never be indexed.
     index: false,
     follow: false,
   },
