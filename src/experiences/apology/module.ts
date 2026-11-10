@@ -15,6 +15,7 @@ export const apologyExperience: ExperienceModule = {
   name: "I'm Sorry",
   tagline: "Say it properly, without the pressure of a reply.",
   category: "apology",
+  accent: "#6d3fa8",
   draftSchema: draftPayloadSchema,
   themeIds: THEME_IDS,
   defaultThemeId: "romantic",

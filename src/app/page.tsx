@@ -104,8 +104,12 @@ export default function HomePage() {
             <article
               key={experience.id}
               className="rounded-2xl border border-[#eadff3] bg-white/70 p-5"
+              style={{ borderTopColor: experience.accent, borderTopWidth: 3 }}
             >
-              <p className="text-[0.62rem] uppercase tracking-[0.18em] text-[#a394b4]">
+              <p
+                className="text-[0.62rem] uppercase tracking-[0.18em]"
+                style={{ color: experience.accent }}
+              >
                 {experience.category}
               </p>
               <h3 className="mt-2 text-lg text-[#33203f]">{experience.name}</h3>

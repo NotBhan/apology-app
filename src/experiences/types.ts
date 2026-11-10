@@ -24,6 +24,8 @@ export interface ExperienceModule {
   /** One line describing the intent, not the implementation. */
   tagline: string;
   category: ExperienceCategory;
+  /** Discovery accent; categories must not look identical. */
+  accent: string;
   /** Server-authoritative content validation for this experience. */
   draftSchema: z.ZodTypeAny;
   /** Theme identifiers this module understands. */

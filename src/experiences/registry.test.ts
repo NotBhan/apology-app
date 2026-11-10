@@ -20,7 +20,13 @@ describe("experience registry", () => {
       expect(new Set(experience.themeIds).size).toBe(experience.themeIds.length);
       expect(experience.themeIds).toContain(experience.defaultThemeId);
       expect(experience.sceneIds.length).toBeGreaterThan(0);
+      expect(experience.accent).toMatch(/^#[0-9a-f]{6}$/i);
     }
+  });
+
+  it("gives each experience a distinct discovery accent", () => {
+    const accents = listExperiences().map((experience) => experience.accent);
+    expect(new Set(accents).size).toBe(accents.length);
   });
 
   it("returns undefined for an unknown module", () => {

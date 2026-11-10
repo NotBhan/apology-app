@@ -14,6 +14,7 @@ export const birthdayExperience: ExperienceModule = {
   name: "Happy Birthday",
   tagline: "A celebration they can open, not just read.",
   category: "celebration",
+  accent: "#e8590c",
   draftSchema: birthdayContentSchema,
   themeIds: BIRTHDAY_THEMES.map((theme) => theme.id),
   defaultThemeId: "confetti",
