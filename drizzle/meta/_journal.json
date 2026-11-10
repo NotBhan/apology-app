@@ -15,6 +15,13 @@
       "when": 1794233939381,
       "tag": "0001_spooky_leo",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794304761912,
+      "tag": "0002_yummy_expediter",
+      "breakpoints": true
     }
   ]
 }

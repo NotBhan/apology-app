@@ -42,6 +42,14 @@ export const apologies = pgTable(
     userId: text("user_id"),
     ownerKeyHash: text("owner_key_hash"),
 
+    /**
+     * Experience module id. Existing rows take the apology module by default,
+     * so the column is additive and needs no backfill.
+     */
+    experienceType: text("experience_type").notNull().default("apology"),
+    /** Module-owned content document; null means "read the legacy columns". */
+    content: jsonb("content"),
+
     recipientName: text("recipient_name").notNull(),
     senderName: text("sender_name").notNull(),
     situation: text("situation").notNull(),

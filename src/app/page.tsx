@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
+import { BRAND } from "@/platform/brand";
 import Link from "next/link";
 import { ThemeShowcase } from "@/components/theme-selector/ThemeShowcase";
 import { startDraftAction } from "./create/actions";
 
 export const metadata: Metadata = {
-  title: "Koi Koi — say it properly",
+  title: BRAND.name,
   description:
     "A private, animated apology you can make in minutes. Pick a world, write three messages, seal it with a letter.",
 };
