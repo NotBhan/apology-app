@@ -3,7 +3,7 @@ import { BRAND } from "@/platform/brand";
 import { PLATFORM_COPY } from "@/platform/content";
 import Link from "next/link";
 import { ThemeShowcase } from "@/components/theme-selector/ThemeShowcase";
-import { listCategories } from "@/experiences/categories";
+import { CategorySections } from "@/components/experiences/CategorySections";
 import { BIRTHDAY_THEMES } from "@/experiences/birthday/themes";
 
 export const metadata: Metadata = {
@@ -108,37 +108,7 @@ export default function HomePage() {
           </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {listCategories().map((category) => (
-            <article
-              key={category.id}
-              className="flex flex-col rounded-2xl border border-[#eadff3] bg-white/75 p-5"
-              style={{ borderTopColor: category.accent, borderTopWidth: 3 }}
-            >
-              <p
-                className="text-[0.6rem] uppercase tracking-[0.18em]"
-                style={{ color: category.accent }}
-              >
-                {category.status === "implemented" ? "available now" : "coming soon"}
-              </p>
-              <h3 className="mt-2 text-lg text-[#33203f]">{category.label}</h3>
-              <p className="mt-1 flex-1 text-[0.84rem] leading-relaxed text-[#6b5580]">
-                {category.description}
-              </p>
-
-              {category.status === "implemented" ? (
-                <Link
-                  href={category.href}
-                  className="mt-4 text-sm font-semibold text-[#6d3fa8] underline"
-                >
-                  {PLATFORM_COPY.experiences.start} →
-                </Link>
-              ) : (
-                <p className="mt-4 text-xs text-[#a394b4]">{PLATFORM_COPY.experiences.upcoming}</p>
-              )}
-            </article>
-          ))}
-        </div>
+        <CategorySections />
       </section>
 
       <section id="themes" className="mx-auto w-full max-w-[1080px] scroll-mt-8 px-5 py-14">
