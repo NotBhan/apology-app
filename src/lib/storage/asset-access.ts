@@ -25,14 +25,9 @@ export function canServeAsset(input: AssetAccessInput): boolean {
     return true;
   }
 
-  if (asset.apologyStatus !== "published") return false;
-  return isLive(asset.expiresAt, input.now);
-}
-
-function isLive(expiresAt: string | null, now = Date.now()): boolean {
-  if (!expiresAt) return false;
-  const parsed = Date.parse(expiresAt);
-  return Number.isFinite(parsed) && parsed > now;
+  // Under permanent links, published media is permanently servable to recipients.
+  // Revoked, deleted, or draft assets are refused.
+  return asset.apologyStatus === "published";
 }
 
 export type { AssetRecord };

@@ -42,7 +42,7 @@ export default async function SignInPage({
           Koi Koi
         </Link>
         <h1 className="text-3xl">Welcome back</h1>
-        <p className="text-sm text-stone-600">Sign in to see the experiences you've made.</p>
+        <p className="text-sm text-stone-600">Sign in to see the experiences you&apos;ve made.</p>
       </header>
       <AuthForm mode="sign-in" callbackURL={destination} />
       <p className="text-sm text-stone-600">

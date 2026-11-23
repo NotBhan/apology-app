@@ -55,6 +55,10 @@ export interface ApologyCustomization {
 
 export interface ApologyDraft {
   id: string;
+  /** Experience module id. Defaults to 'apology' for rows written before the platform. */
+  experienceType?: string;
+  /** Module-owned content document; null means the legacy apology columns apply. */
+  content?: unknown;
   recipientName: string;
   senderName: string;
   situation: SituationKey;
@@ -79,14 +83,11 @@ export interface ApologyRecord extends ApologyDraft {
   accessToken: string;
   /** Hash of the creator's manage key; the raw key lives in an http-only cookie. */
   ownerKeyHash: string;
-  /** Experience module id. Defaults to 'apology' for rows written before the platform. */
-  experienceType?: string;
-  /** Module-owned content document; null means the legacy apology columns apply. */
-  content?: unknown;
 }
 
 /** Everything a recipient is allowed to see. */
 export interface PublishedApology {
+  id: string;
   /** Experience module id; 'apology' for records written before the platform. */
   experienceType?: string;
   /** Module-owned content document for non-apology experiences. */

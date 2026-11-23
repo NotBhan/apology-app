@@ -27,15 +27,38 @@ const nextConfig: NextConfig = {
    * The policy is built in `src/lib/security/headers.ts` so it can be tested.
    */
   async headers() {
+    const baseHeaders = buildSecurityHeaders({
+      production: isProduction,
+      // Pre-signed media is fetched from the storage origin, so the CSP
+      // allows exactly that host for images and audio.
+      storageOrigin: process.env.FILEBASE_ENDPOINT,
+    });
+
+    const noStoreHeader = {
+      key: "Cache-Control",
+      value: "private, no-store, no-cache, must-revalidate",
+    };
+
     return [
       {
         source: "/:path*",
-        headers: buildSecurityHeaders({
-          production: isProduction,
-          // Pre-signed media is fetched from the storage origin, so the CSP
-          // allows exactly that host for images and audio.
-          storageOrigin: process.env.FILEBASE_ENDPOINT,
-        }),
+        headers: baseHeaders,
+      },
+      {
+        source: "/response/:path*",
+        headers: [noStoreHeader],
+      },
+      {
+        source: "/letter/:path*",
+        headers: [noStoreHeader],
+      },
+      {
+        source: "/manage/:path*",
+        headers: [noStoreHeader],
+      },
+      {
+        source: "/api/:path*",
+        headers: [noStoreHeader],
       },
     ];
   },

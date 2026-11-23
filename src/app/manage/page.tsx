@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requirePageCreator } from "@/lib/security/creator";
 import { signOutAction } from "@/lib/auth/actions";
-import { getRepository } from "@/lib/storage";
+import { getRepository, getResponseRepository } from "@/lib/storage";
 import { isExpired } from "@/lib/expiry";
+import type { PublishedResponse } from "@/types/response";
 import { ManageList } from "@/components/manage/ManageList";
 
 export const metadata: Metadata = {
@@ -20,6 +21,17 @@ export default async function ManagePage() {
 
   const drafts = await repository.listByOwner(creator.key, creator.legacyKey);
   const tombstones = await repository.tombstonesForOwner(creator.key);
+
+  const responseRepo = getResponseRepository();
+  const responsesByApology: Record<string, PublishedResponse[]> = {};
+  await Promise.all(
+    drafts
+      .filter((draft) => draft.status === "published")
+      .map(async (draft) => {
+        const list = await responseRepo.listResponsesForApology(draft.id, creator.key);
+        if (list.length > 0) responsesByApology[draft.id] = list;
+      }),
+  );
 
   // Only expired or already-queued letters can be mid-cleanup.
   const pendingDeletionIds = (
@@ -48,8 +60,7 @@ export default async function ManagePage() {
               My Experiences
             </h1>
             <p className="mt-1 text-[0.82rem] text-[#8a7a9c]">
-              Everything you've made lives here. Links last at most seven days; expired
-              experiences are deleted, files and all.
+              Everything you&apos;ve made lives here. Your links remain active until you revoke or delete them.
             </p>
           </div>
           <Link
@@ -72,6 +83,7 @@ export default async function ManagePage() {
           drafts={drafts}
           tombstones={tombstones}
           pendingDeletionIds={pendingDeletionIds}
+          responsesByApology={responsesByApology}
         />
 
         <p className="mt-6 text-center text-[0.68rem] leading-relaxed text-[#a394b4]">

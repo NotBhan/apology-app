@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import type { ThemeAssets } from "@/types/theme";
 import { LetterCard } from "./LetterCard";
@@ -46,10 +46,11 @@ export function EnvelopeAnimation({
   const [stage, setStage] = useState<Stage>("sealed");
   const pages = useMemo(() => paginateLetter(body), [body]);
   const [page, setPage] = useState(0);
-
-  useEffect(() => {
+  const [prevBody, setPrevBody] = useState(body);
+  if (body !== prevBody) {
+    setPrevBody(body);
     setPage(0);
-  }, [body]);
+  }
 
   /**
    * The letter card clips long copy, so the note is paginated. `onOpened` — the

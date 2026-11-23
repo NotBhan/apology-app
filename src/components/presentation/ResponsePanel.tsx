@@ -7,8 +7,10 @@ import type { CharacterState } from "@/types/sticker";
 import { RESPONSE_COPY } from "@/lib/api/responses";
 import { cn } from "@/lib/cn";
 import { Icon } from "@/components/ui/icons";
+import { QuickReplyModal } from "@/components/response/QuickReplyModal";
 
 interface ResponsePanelProps {
+  apologyId?: string;
   senderName: string;
   onReplay: () => void;
   onCharacterState: (state: CharacterState) => void;
@@ -36,6 +38,7 @@ const EMOTIONS: { key: EmotionOption; label: string }[] = [
  * answer never leaves their device unless they copy it themselves.
  */
 export function ResponsePanel({
+  apologyId,
   senderName,
   onReplay,
   onCharacterState,
@@ -47,6 +50,7 @@ export function ResponsePanel({
   const [emotion, setEmotion] = useState<EmotionOption | null>(null);
   const [showShare, setShowShare] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [quickReplyOpen, setQuickReplyOpen] = useState(false);
 
   const copy = choice ? RESPONSE_COPY[choice] : null;
 
@@ -235,6 +239,31 @@ export function ResponsePanel({
             </div>
           </div>
         )}
+
+        {apologyId ? (
+          <div className="mt-5 border-t pt-4" style={{ borderColor: "var(--t-border)" }}>
+            <button
+              type="button"
+              onClick={() => setQuickReplyOpen(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition active:scale-[0.985]"
+              style={{
+                borderColor: "var(--t-primary)",
+                background: "color-mix(in oklab, var(--t-primary) 10%, transparent)",
+                color: "var(--t-primary)",
+              }}
+            >
+              <Icon name="message" size={15} />
+              <span>Send a quick reply to {senderName}</span>
+            </button>
+            <QuickReplyModal
+              apologyId={apologyId}
+              senderName={senderName}
+              isOpen={quickReplyOpen}
+              onClose={() => setQuickReplyOpen(false)}
+              experienceId="apology"
+            />
+          </div>
+        ) : null}
       </motion.div>
     </div>
   );

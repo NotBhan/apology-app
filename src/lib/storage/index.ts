@@ -1,6 +1,7 @@
 import "server-only";
 import type { ApologyRepository } from "./types";
 import { PostgresRepository } from "./postgres-repository";
+import { ResponseRepository } from "./response-repository";
 import { ObjectStore } from "./object-store";
 import { FilebaseObjectStore } from "./filebase-store";
 
@@ -13,11 +14,17 @@ import { FilebaseObjectStore } from "./filebase-store";
  */
 
 let repository: ApologyRepository | null = null;
+let responseRepository: ResponseRepository | null = null;
 let objects: ObjectStore | null = null;
 
 export function getRepository(): ApologyRepository {
   if (!repository) repository = new PostgresRepository();
   return repository;
+}
+
+export function getResponseRepository(): ResponseRepository {
+  if (!responseRepository) responseRepository = new ResponseRepository();
+  return responseRepository;
 }
 
 export function getObjectStore(): ObjectStore {
@@ -31,7 +38,8 @@ export function repositoryBackend(): "postgres" {
 
 export function resetStorageForTests() {
   repository = null;
+  responseRepository = null;
   objects = null;
 }
 
-export type { ApologyRepository };
+export type { ApologyRepository, ResponseRepository };

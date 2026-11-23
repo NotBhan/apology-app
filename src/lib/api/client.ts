@@ -11,6 +11,7 @@
  * `cache: "no-store"` is the supported equivalent of `next: { cache: "no-store" }`.
  */
 import type { ApologyDraft, CreateDraftInput, PublishedApology } from "@/types/apology";
+import type { PublishedResponse, QuickReplyPayload } from "@/types/response";
 import type { ApiError } from "@/lib/api/responses";
 import type { AssetRecord } from "@/lib/storage/types";
 
@@ -116,6 +117,8 @@ interface RequestOptions {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   /** Serialized as JSON. */
   body?: unknown;
+  /** Custom headers. */
+  headers?: Record<string, string>;
   /** Sent as multipart/form-data (the browser sets the boundary). */
   form?: FormData;
   signal?: AbortSignal;
@@ -124,6 +127,12 @@ interface RequestOptions {
 async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers = new Headers({ Accept: "application/json" });
   let body: BodyInit | undefined;
+
+  if (options.headers) {
+    for (const [key, value] of Object.entries(options.headers)) {
+      headers.set(key, value);
+    }
+  }
 
   if (options.form) {
     body = options.form;
@@ -249,4 +258,107 @@ export async function uploadAsset(file: File, draftId: string): Promise<AssetRec
 
 export async function deleteAsset(assetId: string): Promise<void> {
   await apiRequest<{ ok: boolean }>(uploadedAssetUrl(assetId), { method: "DELETE" });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Responses                                                                  */
+/* -------------------------------------------------------------------------- */
+
+export interface QuickReplyResult {
+  ok: boolean;
+  publicToken: string;
+  manageToken: string;
+  publicUrl: string;
+  manageUrl: string;
+}
+
+export interface ResponseUploadResult {
+  asset: {
+    id: string;
+    url: string;
+  };
+  responseId: string;
+}
+
+export interface PublicResponseData {
+  response: PublishedResponse;
+  parent: {
+    recipientName: string;
+    senderName: string;
+    publishedAt: string;
+  };
+}
+
+export interface ResponseManageData {
+  id: string;
+  status: "draft" | "published" | "revoked" | "deleted";
+  responseType: "quick" | "experience";
+  content: QuickReplyPayload;
+  publishedAt?: string;
+  createdAt: string;
+}
+
+export async function sendQuickReply(
+  apologyId: string,
+  input: {
+    message: string;
+    recipientEmotion?: string;
+    photos?: string[];
+    responseId?: string;
+  },
+): Promise<QuickReplyResult> {
+  return apiRequest<QuickReplyResult>(
+    `/api/experiences/${encodeURIComponent(apologyId)}/responses/quick`,
+    {
+      method: "POST",
+      body: input,
+    },
+  );
+}
+
+export async function uploadResponsePhoto(
+  apologyId: string,
+  file: File,
+  responseId?: string,
+): Promise<ResponseUploadResult> {
+  const form = new FormData();
+  form.append("file", file, file.name || "upload");
+  form.append("apologyId", apologyId);
+  if (responseId) form.append("responseId", responseId);
+
+  return apiRequest<ResponseUploadResult>("/api/responses/upload", {
+    method: "POST",
+    form,
+  });
+}
+
+export async function getPublicResponse(publicToken: string): Promise<PublicResponseData> {
+  return apiRequest<PublicResponseData>(`/api/responses/${encodeURIComponent(publicToken)}`);
+}
+
+export async function getResponseManagement(manageToken: string): Promise<ResponseManageData> {
+  return apiRequest<ResponseManageData>("/api/responses/manage", {
+    headers: {
+      Authorization: `Bearer ${manageToken}`,
+    },
+  });
+}
+
+export async function manageResponse(
+  manageToken: string,
+  action: "revoke" | "restore" | "delete",
+): Promise<{ ok: boolean; status: string }> {
+  return apiRequest<{ ok: boolean; status: string }>("/api/responses/manage", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${manageToken}`,
+    },
+    body: { action },
+  });
+}
+
+export async function listResponsesForExperience(apologyId: string): Promise<{ responses: PublishedResponse[] }> {
+  return apiRequest<{ responses: PublishedResponse[] }>(
+    `/api/experiences/${encodeURIComponent(apologyId)}/responses`,
+  );
 }

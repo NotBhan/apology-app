@@ -33,4 +33,23 @@ describe("birthday presentation", () => {
     await user.click(screen.getByRole("button", { name: "Continue" }));
     expect(screen.getByText(/from Arjun/i)).toBeInTheDocument();
   });
+
+  it("renders 'Say Thank You' button on finale scene and opens birthday reply modal", async () => {
+    const user = userEvent.setup();
+    render(<BirthdayLetter content={content} apologyId="bday-123" />);
+
+    await user.click(screen.getByRole("button", { name: "Open it" }));
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(screen.getByRole("button", { name: "One last thing" }));
+
+    const thankBtn = screen.getByRole("button", { name: /Say Thank You/i });
+    expect(thankBtn).toBeInTheDocument();
+
+    await user.click(thankBtn);
+    expect(screen.getByRole("heading", { name: "Thank Arjun" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Send a thank-you note, joyous wish, or celebration photos"),
+    ).toBeInTheDocument();
+  });
 });

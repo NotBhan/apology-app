@@ -127,6 +127,7 @@ export interface ApologyRepository {
 
 export function toPublished(record: ApologyRecord): PublishedApology {
   return {
+    id: record.id,
     experienceType: record.experienceType ?? "apology",
     content: record.content ?? null,
     recipientName: record.recipientName,
@@ -145,6 +146,8 @@ export function toPublished(record: ApologyRecord): PublishedApology {
 export function toCreatorDraft(record: ApologyRecord): ApologyDraft {
   return {
     id: record.id,
+    experienceType: record.experienceType ?? "apology",
+    content: record.content ?? null,
     recipientName: record.recipientName,
     senderName: record.senderName,
     situation: record.situation,

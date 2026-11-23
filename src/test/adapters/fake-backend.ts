@@ -1,10 +1,12 @@
 import type { ApologyDraft, ApologyRecord, PublishedApology } from "@/types/apology";
 import type { DraftPayload } from "@/lib/validation/apology";
-import type {
-  ApologyRepository,
-  AssetRecord,
-  ReserveAssetInput,
-  ServingAsset,
+import {
+  toCreatorDraft,
+  toPublished,
+  type ApologyRepository,
+  type AssetRecord,
+  type ReserveAssetInput,
+  type ServingAsset,
 } from "@/lib/storage/types";
 import type { LifecycleStore } from "@/lib/lifecycle/store";
 import type {
@@ -89,12 +91,15 @@ export function createFakeBackend(): FakeBackend {
     for (const asset of listFor(record.id)) keys.add(asset.objectKey);
 
     jobs.set(record.id, {
+      resourceType: "apology",
+      resourceId: record.id,
       apologyId: record.id,
       ownerKeyHash: record.ownerKeyHash,
       objectKeys: [...keys],
       state: "pending",
       reason: existing?.reason ?? reason,
       attemptCount: existing?.attemptCount ?? 0,
+      fencingToken: existing?.fencingToken ?? 1,
     });
 
     record.status = "deleted";
@@ -166,12 +171,7 @@ export function createFakeBackend(): FakeBackend {
           if (record.ownerKeyHash === ownerKeyHash) return true;
           return Boolean(legacyKeyHash) && !claimed && record.ownerKeyHash === legacyKeyHash;
         })
-        .map<ApologyDraft>((record) => {
-          const { accessToken: _t, ownerKeyHash: _o, ...draft } = record;
-          void _t;
-          void _o;
-          return draft;
-        });
+        .map<ApologyDraft>((record) => toCreatorDraft(record));
     },
 
     async claimLegacyRecords({ userId, scopeKey, legacyKeyHash }) {
@@ -206,17 +206,7 @@ export function createFakeBackend(): FakeBackend {
     async getPublishedByToken(token): Promise<PublishedApology | undefined> {
       const record = await repository.getByToken(token);
       if (!record || !isLinkLive(record.status, record.expiresAt)) return undefined;
-      return {
-        recipientName: record.recipientName,
-        senderName: record.senderName,
-        situation: record.situation,
-        situationCustom: record.situationCustom,
-        messages: record.messages,
-        themeId: record.themeId,
-        stickerPackId: record.stickerPackId,
-        customization: record.customization,
-        publishedAt: record.publishedAt ?? record.updatedAt,
-      };
+      return toPublished(record);
     },
 
     async reserveAsset(input: ReserveAssetInput) {
@@ -328,6 +318,7 @@ export function createFakeBackend(): FakeBackend {
       if (job.leaseUntil && job.leaseUntil > now.getTime()) return null;
       job.state = "processing";
       job.attemptCount += 1;
+      job.fencingToken = (job.fencingToken ?? 0) + 1;
       job.leaseUntil = now.getTime() + leaseMs;
       return { ...job };
     },

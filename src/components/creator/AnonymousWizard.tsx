@@ -58,7 +58,7 @@ function persist(draft: ApologyDraft) {
  * identity is created.
  */
 export function AnonymousWizard({ signedIn = false }: { signedIn?: boolean }) {
-  const initial = useMemo(load, []);
+  const initial = useMemo(() => load(), []);
   const router = useRouter();
   const [adopting, setAdopting] = useState(false);
   const [adoptError, setAdoptError] = useState<string | null>(null);

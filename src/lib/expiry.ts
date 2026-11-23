@@ -1,8 +1,9 @@
 /**
- * Published links are deliberately temporary. A sender chooses a window of
- * 1–7 days; after it passes the link stops resolving and behaves exactly like
- * an unknown token, so an expired link reveals nothing about whether it ever
- * existed.
+ * Published links are permanent. An experience or response remains accessible
+ * until it is explicitly revoked or deleted by its author, or removed by a
+ * platform administrator.
+ *
+ * Expiry helper functions are retained for migration and legacy backwards-compatibility.
  */
 export const MIN_LINK_DAYS = 1;
 export const MAX_LINK_DAYS = 7;
@@ -28,16 +29,29 @@ export function isExpired(expiresAt: string | undefined, now: number = Date.now(
 }
 
 /**
- * A published link is live only while it has an expiry that is still in the
- * future. A missing expiry is treated as dead rather than immortal, so a record
- * can never accidentally become permanent.
+ * A published link is live as long as its status is "published".
+ * Under the permanent-link architecture, published links never automatically expire.
  */
 export function isLinkLive(
   status: string | undefined,
-  expiresAt: string | undefined,
-  now: number = Date.now(),
+  _expiresAt?: string,
+  _now?: number,
 ): boolean {
-  return status === "published" && !isExpired(expiresAt, now);
+  void _expiresAt;
+  void _now;
+  return status === "published";
+}
+
+/**
+ * A response link is live if and only if both the response itself and its parent
+ * experience are published. If the parent experience is revoked or deleted, the
+ * response is immediately inaccessible.
+ */
+export function isResponseLive(
+  responseStatus: string | undefined,
+  parentStatus: string | undefined,
+): boolean {
+  return responseStatus === "published" && parentStatus === "published";
 }
 
 /** Whole days left, rounded up; 0 once expired. */

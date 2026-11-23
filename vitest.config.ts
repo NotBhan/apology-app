@@ -15,6 +15,7 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
       "server-only": path.resolve(__dirname, "./src/test/server-only-stub.ts"),
+      "next/headers": path.resolve(__dirname, "./node_modules/next/headers.js"),
     },
   },
 });

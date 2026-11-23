@@ -22,7 +22,8 @@ import { sql } from "drizzle-orm";
  *   written even by a build that forgets to validate;
  * - `apology_assets.apology_id` is `RESTRICT`, not `CASCADE`: deleting an
  *   apology must fail loudly rather than silently orphan objects in Filebase;
- * - `deletion_jobs.apology_id` is deliberately **not** a foreign key, so the
+ * - `response_assets.response_id` is `RESTRICT`, not `CASCADE` for the same reason;
+ * - `deletion_jobs.resource_id` is deliberately **not** a foreign key, so the
  *   job survives the row it describes and can still retry.
  */
 
@@ -62,7 +63,7 @@ export const apologies = pgTable(
     stickerPackId: text("sticker_pack_id").notNull(),
     customization: jsonb("customization").notNull(),
 
-    linkDurationDays: smallint("link_duration_days").notNull().default(3),
+    linkDurationDays: smallint("link_duration_days"),
     status: text("status").notNull().default("draft"),
 
     /** SHA-256 of the 32-byte link token. The token itself is never stored. */
@@ -76,9 +77,6 @@ export const apologies = pgTable(
   (table) => [
     index("apologies_owner_updated_idx").on(table.ownerKeyHash, table.updatedAt.desc()),
     index("apologies_user_updated_idx").on(table.userId, table.updatedAt.desc()),
-    index("apologies_expiry_idx")
-      .on(table.expiresAt)
-      .where(sql`${table.status} = 'published'`),
     uniqueIndex("apologies_token_idx").on(table.privateTokenHash),
     check(
       "apologies_status_check",
@@ -86,16 +84,15 @@ export const apologies = pgTable(
     ),
     check(
       "apologies_duration_check",
-      sql`${table.linkDurationDays} between 1 and 7`,
+      sql`${table.linkDurationDays} is null or (${table.linkDurationDays} between 1 and 7)`,
     ),
     /**
-     * A published record must carry everything a recipient link needs. This is
-     * what makes "missing expiry" structurally impossible for new rows, without
-     * relying on application code.
+     * A published record must carry everything a recipient link needs.
+     * Permanent links drop the required future expiry timestamp.
      */
     check(
       "apologies_published_complete",
-      sql`${table.status} <> 'published' or (${table.expiresAt} is not null and ${table.publishedAt} is not null and ${table.privateTokenHash} is not null)`,
+      sql`${table.status} <> 'published' or (${table.publishedAt} is not null and ${table.privateTokenHash} is not null)`,
     ),
   ],
 );
@@ -132,31 +129,94 @@ export const apologyAssets = pgTable(
   ],
 );
 
+export const responses = pgTable(
+  "responses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    apologyId: uuid("apology_id")
+      .notNull()
+      .references(() => apologies.id, { onDelete: "restrict" }),
+    responseType: text("response_type").notNull(),
+    status: text("status").notNull().default("draft"),
+    content: jsonb("content").notNull().default(sql`'{}'::jsonb`),
+    publicTokenHash: text("public_token_hash"),
+    manageTokenHash: text("manage_token_hash"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("responses_apology_idx").on(table.apologyId, table.createdAt.desc()),
+    uniqueIndex("responses_public_token_idx").on(table.publicTokenHash),
+    uniqueIndex("responses_manage_token_idx").on(table.manageTokenHash),
+    check(
+      "responses_type_check",
+      sql`${table.responseType} in ('quick', 'experience')`,
+    ),
+    check(
+      "responses_status_check",
+      sql`${table.status} in ('draft', 'published', 'revoked', 'deleted')`,
+    ),
+    check(
+      "responses_published_complete",
+      sql`${table.status} <> 'published' or (${table.publishedAt} is not null and ${table.publicTokenHash} is not null and ${table.manageTokenHash} is not null)`,
+    ),
+  ],
+);
+
+export const responseAssets = pgTable(
+  "response_assets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    responseId: uuid("response_id")
+      .notNull()
+      .references(() => responses.id, { onDelete: "restrict" }),
+    state: text("state").notNull().default("pending"),
+    objectKey: text("object_key").notNull(),
+    kind: text("kind").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: bigint("size_bytes", { mode: "number" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("response_assets_response_state_idx").on(table.responseId, table.state),
+    uniqueIndex("response_assets_object_key_idx").on(table.objectKey),
+    check(
+      "response_assets_state_check",
+      sql`${table.state} in ('pending', 'uploaded', 'failed')`,
+    ),
+    check("response_assets_kind_check", sql`${table.kind} in ('photo', 'audio')`),
+    check("response_assets_size_check", sql`${table.sizeBytes} > 0`),
+  ],
+);
+
 export const deletionJobs = pgTable(
   "deletion_jobs",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    /** No FK on purpose: the job must outlive the apology row. */
-    apologyId: uuid("apology_id").notNull(),
-    /** Hash only, so a tombstone can be written after the row is gone. */
+    resourceType: text("resource_type").notNull().default("apology"),
+    resourceId: uuid("resource_id").notNull(),
     ownerKeyHash: text("owner_key_hash"),
     objectKeys: jsonb("object_keys").notNull().default(sql`'[]'::jsonb`),
     state: text("state").notNull().default("pending"),
     reason: text("reason").notNull(),
     attemptCount: integer("attempt_count").notNull().default(0),
+    fencingToken: integer("fencing_token").notNull().default(1),
     lastError: text("last_error"),
     leaseUntil: timestamp("lease_until", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex("deletion_jobs_apology_idx").on(table.apologyId),
+    uniqueIndex("deletion_jobs_resource_idx").on(table.resourceType, table.resourceId),
     index("deletion_jobs_state_updated_idx").on(table.state, table.updatedAt),
     check(
       "deletion_jobs_state_check",
       sql`${table.state} in ('pending','processing','failed','completed')`,
     ),
-    check("deletion_jobs_reason_check", sql`${table.reason} in ('expired','manual')`),
+    check("deletion_jobs_reason_check", sql`${table.reason} in ('expired','manual','abandoned_draft')`),
+    check("deletion_jobs_resource_type_check", sql`${table.resourceType} in ('apology','response')`),
   ],
 );
 
@@ -180,5 +240,7 @@ export const rateLimits = pgTable("rate_limits", {
 
 export type ApologyRow = typeof apologies.$inferSelect;
 export type ApologyAssetRow = typeof apologyAssets.$inferSelect;
+export type ResponseRow = typeof responses.$inferSelect;
+export type ResponseAssetRow = typeof responseAssets.$inferSelect;
 export type DeletionJobRow = typeof deletionJobs.$inferSelect;
 export type DeletionTombstoneRow = typeof deletionTombstones.$inferSelect;

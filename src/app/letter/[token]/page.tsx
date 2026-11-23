@@ -29,7 +29,7 @@ export default async function LetterPage({ params }: { params: Promise<{ token: 
     if (!parsed.success) notFound();
     return (
       <main className="min-h-svh">
-        <BirthdayLetter content={parsed.data} />
+        <BirthdayLetter content={parsed.data} apologyId={letter.id} />
       </main>
     );
   }

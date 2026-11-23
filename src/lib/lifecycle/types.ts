@@ -11,16 +11,21 @@
  *   show "deleted". It stores a hashed owner key, never the key or any content.
  */
 
+export type ResourceType = "apology" | "response";
 export type DeletionState = "pending" | "processing" | "failed" | "completed";
-export type DeletionReason = "expired" | "manual";
+export type DeletionReason = "expired" | "manual" | "abandoned_draft";
 
 export interface DeletionJob {
+  resourceType?: ResourceType;
+  resourceId?: string;
+  /** Primary identifier alias for backwards compatibility */
   apologyId: string;
   ownerKeyHash?: string;
   objectKeys: string[];
   state: DeletionState;
   reason: DeletionReason;
   attemptCount: number;
+  fencingToken?: number;
   lastError?: string;
   leaseUntil?: number;
 }

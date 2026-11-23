@@ -500,6 +500,7 @@ function ResponseScene(props: SceneRendererProps) {
           </div>
 
           <ResponsePanel
+            apologyId={content.id}
             senderName={content.senderName}
             onReplay={onReplay}
             onCharacterState={onCharacterState}

@@ -9,17 +9,21 @@ import { resolveSituationLabel } from "@/content/situations";
 import { deleteDraftAction, publishDraftAction, revokeDraftAction } from "@/app/create/actions";
 import { daysRemaining, formatDuration, formatExpiry, isExpired } from "@/lib/expiry";
 import { useMounted } from "@/hooks/useMounted";
+import { Icon } from "@/components/ui/icons";
+import { resolveEmotionBadge } from "@/experiences/emotion";
 import type { ApologyDraft } from "@/types/apology";
 import type { DeletionTombstone } from "@/lib/lifecycle/types";
+import type { PublishedResponse, QuickReplyPayload } from "@/types/response";
 
 export interface ManageListProps {
   drafts: ApologyDraft[];
   tombstones: DeletionTombstone[];
   /** Draft ids whose cleanup has started but not finished. */
   pendingDeletionIds: string[];
+  responsesByApology?: Record<string, PublishedResponse[]>;
 }
 
-export function ManageList({ drafts, tombstones, pendingDeletionIds }: ManageListProps) {
+export function ManageList({ drafts, tombstones, pendingDeletionIds, responsesByApology }: ManageListProps) {
   const pending = new Set(pendingDeletionIds);
 
   if (drafts.length === 0 && tombstones.length === 0) {
@@ -44,7 +48,12 @@ export function ManageList({ drafts, tombstones, pendingDeletionIds }: ManageLis
   return (
     <ul className="space-y-3">
       {drafts.map((draft) => (
-        <ManageRow key={draft.id} draft={draft} cleanupPending={pending.has(draft.id)} />
+        <ManageRow
+          key={draft.id}
+          draft={draft}
+          cleanupPending={pending.has(draft.id)}
+          responses={responsesByApology?.[draft.id] ?? []}
+        />
       ))}
       {tombstones.map((tombstone) => (
         <DeletedRow key={tombstone.apologyId} tombstone={tombstone} />
@@ -56,9 +65,11 @@ export function ManageList({ drafts, tombstones, pendingDeletionIds }: ManageLis
 function ManageRow({
   draft,
   cleanupPending,
+  responses = [],
 }: {
   draft: ApologyDraft;
   cleanupPending: boolean;
+  responses?: PublishedResponse[];
 }) {
   const mounted = useMounted();
   const [pending, startTransition] = useTransition();
@@ -67,6 +78,7 @@ function ManageRow({
   const [confirming, setConfirming] = useState<null | "revoke" | "delete">(null);
   const [renewed, setRenewed] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [showReplies, setShowReplies] = useState(false);
   const theme = getTheme(draft.themeId);
   const pack = getStickerPack(draft.stickerPackId);
 
@@ -199,6 +211,17 @@ function ManageRow({
           </button>
         ) : null}
 
+        {responses.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setShowReplies((prev) => !prev)}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-[#f2eafc] px-3 text-[0.74rem] font-semibold text-[#6d3fa8] transition hover:bg-[#ebdcf8]"
+          >
+            <Icon name="message" size={13} />
+            <span>Replies ({responses.length})</span>
+          </button>
+        ) : null}
+
         <button
           type="button"
           disabled={pending}
@@ -208,6 +231,59 @@ function ManageRow({
           Delete now
         </button>
       </div>
+
+      {showReplies && responses.length > 0 ? (
+        <div className="mt-4 border-t border-[#f0e8f7] pt-3 space-y-2.5">
+          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#8a7a9c]">
+            Incoming Responses ({responses.length})
+          </p>
+          {responses.map((resp) => {
+            const replyContent = resp.content as QuickReplyPayload;
+            return (
+              <div key={resp.id} className="rounded-2xl border border-[#ede3f5] bg-[#faf6ff] p-3 text-xs">
+                <div className="mb-1.5 flex items-center justify-between">
+                  {(() => {
+                    const emotionBadge = resolveEmotionBadge(draft.experienceType, replyContent.recipientEmotion);
+                    return emotionBadge ? (
+                      <span className="rounded-full bg-[#ebdcf8] px-2.5 py-0.5 text-[0.68rem] font-semibold text-[#6d3fa8]">
+                        {emotionBadge.prefix ? `${emotionBadge.prefix}: ` : ""}{emotionBadge.label}
+                      </span>
+                    ) : (
+                      <span className="text-[0.68rem] font-medium text-[#8a7a9c]">Quick Reply</span>
+                    );
+                  })()}
+                  <span className="text-[0.65rem] text-[#a495b5]">
+                    {mounted && resp.publishedAt
+                      ? new Date(resp.publishedAt).toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                        })
+                      : ""}
+                  </span>
+                </div>
+                <p className="whitespace-pre-line text-[0.8rem] leading-relaxed text-[#33203f]">
+                  {replyContent.message}
+                </p>
+                {replyContent.photos && replyContent.photos.length > 0 ? (
+                  <div className="mt-2.5 flex gap-2 overflow-x-auto pb-1">
+                    {replyContent.photos.map((pId, idx) => (
+                      <div key={pId} className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-[#e5d9f0]">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={`/api/responses/assets/${pId}`}
+                          alt={`Attachment ${idx + 1}`}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
 
       {renewed ? (
         <p className="mt-2 rounded-xl bg-[#f0f8f2] px-3 py-2 text-[0.72rem] text-[#3f7a4a]">

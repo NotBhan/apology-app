@@ -3,6 +3,8 @@
 import { useState } from "react";
 import type { BirthdayContent } from "@/experiences/birthday/schema";
 import { BIRTHDAY_THEMES, getBirthdayTheme } from "@/experiences/birthday/themes";
+import { Icon } from "@/components/ui/icons";
+import { QuickReplyModal } from "@/components/response/QuickReplyModal";
 
 /**
  * Birthday presentation.
@@ -14,10 +16,17 @@ import { BIRTHDAY_THEMES, getBirthdayTheme } from "@/experiences/birthday/themes
 const SCENES = ["opening", "wish", "message", "gallery", "finale"] as const;
 type Scene = (typeof SCENES)[number];
 
-export function BirthdayLetter({ content }: { content: BirthdayContent }) {
+export function BirthdayLetter({
+  content,
+  apologyId,
+}: {
+  content: BirthdayContent;
+  apologyId?: string;
+}) {
   const theme = getBirthdayTheme(content.themeId) ?? BIRTHDAY_THEMES[0];
   const [scene, setScene] = useState<Scene>("opening");
   const [candleOut, setCandleOut] = useState(false);
+  const [quickReplyOpen, setQuickReplyOpen] = useState(false);
   const index = SCENES.indexOf(scene);
 
   const next = () => setScene(SCENES[Math.min(index + 1, SCENES.length - 1)]);
@@ -88,8 +97,8 @@ export function BirthdayLetter({ content }: { content: BirthdayContent }) {
             {content.photos.length > 0 ? (
               <ul className="grid grid-cols-2 gap-3">
                 {content.photos.map((photo) => (
-                  // eslint-disable-next-line @next/next/no-img-element
                   <li key={photo}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={photo} alt="" className="h-40 w-full rounded-xl object-cover" />
                   </li>
                 ))}
@@ -104,9 +113,33 @@ export function BirthdayLetter({ content }: { content: BirthdayContent }) {
         ) : null}
 
         {scene === "finale" ? (
-          <div className="space-y-5">
+          <div className="space-y-6">
             <h2 className="text-[clamp(1.8rem,6vw,2.6rem)]">{content.wish ?? "Happy birthday."}</h2>
             <p className="text-sm opacity-80">— {content.senderName}</p>
+
+            {apologyId ? (
+              <div className="pt-4">
+                <button
+                  type="button"
+                  onClick={() => setQuickReplyOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-xs font-semibold shadow-sm transition active:scale-95"
+                  style={{
+                    background: theme.palette.primary,
+                    color: theme.palette.background,
+                  }}
+                >
+                  <Icon name="message" size={15} />
+                  <span>Say Thank You</span>
+                </button>
+                <QuickReplyModal
+                  apologyId={apologyId}
+                  senderName={content.senderName}
+                  isOpen={quickReplyOpen}
+                  onClose={() => setQuickReplyOpen(false)}
+                  experienceId="birthday"
+                />
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>

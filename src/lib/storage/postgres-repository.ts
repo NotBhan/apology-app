@@ -65,7 +65,7 @@ export function rowToRecord(row: ApologyRow, accessToken = ""): ApologyRecord {
     themeId: row.themeId as ApologyRecord["themeId"],
     stickerPackId: row.stickerPackId as ApologyRecord["stickerPackId"],
     customization: row.customization as ApologyRecord["customization"],
-    linkDurationDays: row.linkDurationDays,
+    linkDurationDays: row.linkDurationDays ?? 3,
     status: row.status as ApologyRecord["status"],
     createdAt: requiredIso(row.createdAt),
     updatedAt: requiredIso(row.updatedAt),
@@ -163,7 +163,7 @@ export class PostgresRepository implements ApologyRepository {
           eq(apologies.id, id),
           eq(apologies.ownerKeyHash, ownerKeyHash),
           sql`${apologies.status} <> 'deleted'`,
-          sql`not exists (select 1 from ${deletionJobs} j where j.apology_id = ${apologies.id})`,
+          sql`not exists (select 1 from ${deletionJobs} j where j.resource_type = 'apology' and j.resource_id = ${apologies.id})`,
         ),
       )
       .returning();
@@ -181,9 +181,9 @@ export class PostgresRepository implements ApologyRepository {
   async publish(
     id: string,
     ownerKeyHash: string,
-    durationDays: number,
+    durationDays?: number,
   ): Promise<ApologyRecord> {
-    const days = normalizeDurationDays(durationDays);
+    void durationDays;
     const token = createLinkToken();
     const tokenHash = hashLinkToken(token);
 
@@ -194,7 +194,7 @@ export class PostgresRepository implements ApologyRepository {
           and a.owner_key_hash = ${ownerKeyHash}
           and a.status in ('draft','published','revoked')
           and not exists (
-            select 1 from ${deletionJobs} j where j.apology_id = a.id
+            select 1 from ${deletionJobs} j where j.resource_type = 'apology' and j.resource_id = a.id
           )
         for update
       )
@@ -202,8 +202,8 @@ export class PostgresRepository implements ApologyRepository {
       set status = 'published',
           private_token_hash = ${tokenHash},
           published_at = coalesce(a.published_at, now()),
-          expires_at = now() + (${days} || ' days')::interval,
-          link_duration_days = ${days},
+          expires_at = null,
+          link_duration_days = null,
           updated_at = now()
       where a.id in (select id from locked)
       returning a.id,
@@ -274,10 +274,10 @@ export class PostgresRepository implements ApologyRepository {
         where x.apology_id = (select id from locked)
       ),
       intent as (
-        insert into ${deletionJobs} (apology_id, owner_key_hash, object_keys, state, reason)
-        select locked.id, locked.owner_key_hash, keys.k, 'pending', 'manual'
+        insert into ${deletionJobs} (resource_type, resource_id, owner_key_hash, object_keys, state, reason, fencing_token)
+        select 'apology', locked.id, locked.owner_key_hash, keys.k, 'pending', 'manual', 1
         from locked, keys
-        on conflict (apology_id) do update
+        on conflict (resource_type, resource_id) do update
           set object_keys = (
                 select to_jsonb(array(
                   select distinct value
@@ -286,11 +286,11 @@ export class PostgresRepository implements ApologyRepository {
               ),
               updated_at = now()
           where ${deletionJobs}.state <> 'completed'
-        returning apology_id
+        returning resource_id
       )
       update ${apologies} a
       set status = 'deleted', expires_at = null, updated_at = now()
-      where a.id in (select apology_id from intent)
+      where a.id in (select resource_id from intent)
       returning a.id
     `);
 
@@ -301,7 +301,7 @@ export class PostgresRepository implements ApologyRepository {
     const [row] = await this.db
       .select({ id: deletionJobs.id })
       .from(deletionJobs)
-      .where(eq(deletionJobs.apologyId, apologyId))
+      .where(and(eq(deletionJobs.resourceType, "apology"), eq(deletionJobs.resourceId, apologyId)))
       .limit(1);
     return Boolean(row);
   }
@@ -402,7 +402,7 @@ export class PostgresRepository implements ApologyRepository {
           and a.owner_key_hash = ${input.ownerKeyHash}
           and a.status in ('draft','published')
           and not exists (
-            select 1 from ${deletionJobs} j where j.apology_id = a.id
+            select 1 from ${deletionJobs} j where j.resource_type = 'apology' and j.resource_id = a.id
           )
           and (
             select count(*) from ${apologyAssets} x

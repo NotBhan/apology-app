@@ -69,6 +69,7 @@ export function BirthdayEditor() {
   useEffect(() => {
     const stored = loadDraft();
     if (stored) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setValues(stored);
       setRestored(true);
     }

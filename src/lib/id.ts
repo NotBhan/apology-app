@@ -42,6 +42,22 @@ export function hashLinkToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("base64url");
 }
 
+/**
+ * Mint dual capability tokens for response creation:
+ * - publicToken: bearer access for viewing the response.
+ * - manageToken: capability access for revocation and deletion by the author.
+ */
+export function createResponseTokens(): { publicToken: string; manageToken: string } {
+  return {
+    publicToken: createLinkToken(),
+    manageToken: createLinkToken(),
+  };
+}
+
+export function hashResponseToken(token: string): string {
+  return hashLinkToken(token);
+}
+
 export function constantTimeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;

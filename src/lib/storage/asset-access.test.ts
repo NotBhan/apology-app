@@ -22,18 +22,10 @@ describe("canServeAsset", () => {
     ).toBe(true);
   });
 
-  it("serves to a stranger only while the letter is live", () => {
+  it("serves to recipients permanently while published", () => {
     expect(canServeAsset({ asset: asset(), now: NOW })).toBe(true);
-  });
-
-  it("stops the moment the window closes, including the boundary", () => {
-    expect(canServeAsset({ asset: asset({ expiresAt: past }), now: NOW })).toBe(false);
-    expect(
-      canServeAsset({
-        asset: asset({ expiresAt: new Date(NOW).toISOString() }),
-        now: NOW,
-      }),
-    ).toBe(false);
+    expect(canServeAsset({ asset: asset({ expiresAt: null }), now: NOW })).toBe(true);
+    expect(canServeAsset({ asset: asset({ expiresAt: past }), now: NOW })).toBe(true);
   });
 
   it("refuses revoked, deleted and draft apologies to strangers", () => {
@@ -48,10 +40,6 @@ describe("canServeAsset", () => {
         canServeAsset({ asset: asset({ state }), ownerKeyHash: "owner-1", now: NOW }),
       ).toBe(false);
     }
-  });
-
-  it("refuses a missing expiry", () => {
-    expect(canServeAsset({ asset: asset({ expiresAt: null }), now: NOW })).toBe(false);
   });
 
   it("does not treat a different owner as the owner", () => {
