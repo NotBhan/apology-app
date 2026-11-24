@@ -3,12 +3,15 @@
 import { useCallback, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import type { BirthdayTheme } from "@/experiences/birthday/themes";
+import { Icon } from "@/components/ui/icons";
 
 type Stage = "sealed" | "cracking" | "opening" | "rising" | "unfolded";
 
-interface BirthdayEnvelopeProps {
+export interface BirthdayEnvelopeProps {
   recipientName: string;
   senderName: string;
+  message?: string;
+  photos?: string[];
   theme: BirthdayTheme;
   onOpened?: () => void;
   className?: string;
@@ -17,6 +20,8 @@ interface BirthdayEnvelopeProps {
 export function BirthdayEnvelope({
   recipientName,
   senderName,
+  message,
+  photos = [],
   theme,
   onOpened,
   className = "",
@@ -33,11 +38,11 @@ export function BirthdayEnvelope({
     }
     setStage("cracking");
     window.setTimeout(() => setStage("opening"), 350);
-    window.setTimeout(() => setStage("rising"), 1050);
+    window.setTimeout(() => setStage("rising"), 900);
     window.setTimeout(() => {
       setStage("unfolded");
       onOpened?.();
-    }, 1700);
+    }, 1500);
   }, [stage, reduce, onOpened]);
 
   const revealed = stage === "unfolded";
@@ -48,44 +53,49 @@ export function BirthdayEnvelope({
     <div className={`relative flex w-full flex-col items-center ${className}`}>
       {/* Outer Envelope Container */}
       <motion.div
-        className="relative"
+        className="relative cursor-pointer"
         style={{
-          width: "min(88vw, 350px)",
-          height: "calc(min(88vw, 350px) / 1.45)",
+          width: "min(88vw, 360px)",
+          height: "calc(min(88vw, 360px) / 1.45)",
         }}
-        animate={{ opacity: revealed ? 0.35 : 1, scale: revealed ? 0.95 : 1 }}
+        onClick={open}
+        animate={{
+          opacity: revealed ? 0.35 : 1,
+          scale: revealed ? 0.94 : 1,
+          y: revealed ? -10 : 0,
+        }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       >
         {/* Envelope Back Panel */}
         <div
-          className="absolute inset-0 rounded-[12px] shadow-[0_24px_50px_-20px_rgba(0,0,0,0.35)]"
+          className="absolute inset-0 rounded-[14px] shadow-[0_24px_50px_-20px_rgba(0,0,0,0.35)]"
           style={{ background: theme.envelope.paper }}
         />
 
-        {/* Interior Card peeking out */}
+        {/* Interior Letter Peeking out / Rising */}
         <motion.div
-          className="absolute left-[6%] right-[6%] origin-bottom overflow-hidden rounded-[8px] p-4 text-center shadow-sm"
+          className="absolute left-[5%] right-[5%] origin-bottom overflow-hidden rounded-[10px] p-4 text-center shadow-sm"
           style={{
-            top: "12%",
-            height: "82%",
+            top: "10%",
+            height: "85%",
             background: theme.palette.surface,
             border: `1.5px solid ${theme.palette.border}`,
             zIndex: letterRising ? 30 : 5,
           }}
           initial={false}
           animate={{
-            y: letterRising ? "-22%" : "4%",
+            y: letterRising ? "-26%" : "4%",
             scale: letterRising ? 1 : 0.94,
             rotateX: letterRising ? 0 : 10,
           }}
           transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
         >
-          <div className="flex h-full flex-col items-center justify-center gap-1.5">
+          <div className="flex h-full flex-col items-center justify-center gap-1.5 px-2">
             <span
               className="text-[10px] font-semibold uppercase tracking-[0.24em]"
               style={{ color: theme.palette.accent }}
             >
-              Happy Birthday
+              Personal Letter
             </span>
             <span
               className="text-base font-bold truncate max-w-full"
@@ -96,29 +106,41 @@ export function BirthdayEnvelope({
             >
               {recipientName || "Friend"}
             </span>
-            <span
-              className="text-xs italic opacity-75 truncate max-w-full"
-              style={{ color: theme.palette.mutedText }}
-            >
-              A special wish for your day
+            {message ? (
+              <p
+                className="line-clamp-2 text-xs opacity-80 italic max-w-full"
+                style={{ color: theme.palette.mutedText }}
+              >
+                {message}
+              </p>
+            ) : (
+              <span
+                className="text-xs italic opacity-75 truncate max-w-full"
+                style={{ color: theme.palette.mutedText }}
+              >
+                A special wish for your day
+              </span>
+            )}
+            <span className="text-[11px] font-medium opacity-65" style={{ color: theme.palette.mutedText }}>
+              Sent with love
             </span>
           </div>
         </motion.div>
 
         {/* Envelope Pocket Front */}
-        <div className="absolute inset-0 z-20 overflow-hidden rounded-[12px] pointer-events-none">
-          <svg viewBox="0 0 350 240" className="h-full w-full" preserveAspectRatio="none">
+        <div className="absolute inset-0 z-20 overflow-hidden rounded-[14px] pointer-events-none">
+          <svg viewBox="0 0 360 248" className="h-full w-full" preserveAspectRatio="none">
             {/* Left triangle flap */}
-            <path d="M 0 0 L 175 145 L 0 240 Z" fill={theme.envelope.paper} opacity="0.95" />
+            <path d="M 0 0 L 180 150 L 0 248 Z" fill={theme.envelope.paper} opacity="0.96" />
             {/* Right triangle flap */}
-            <path d="M 350 0 L 175 145 L 350 240 Z" fill={theme.envelope.paper} opacity="0.95" />
+            <path d="M 360 0 L 180 150 L 360 248 Z" fill={theme.envelope.paper} opacity="0.96" />
             {/* Bottom trapezoid fold */}
             <path
-              d="M 0 240 L 175 125 L 350 240 Z"
+              d="M 0 248 L 180 130 L 360 248 Z"
               fill={theme.envelope.flap}
               stroke={theme.envelope.accent}
-              strokeWidth="0.8"
-              opacity="0.9"
+              strokeWidth="1"
+              opacity="0.92"
             />
           </svg>
         </div>
@@ -127,22 +149,22 @@ export function BirthdayEnvelope({
         <motion.div
           className="absolute inset-x-0 top-0 z-[25] origin-top overflow-visible"
           style={{
-            height: "60%",
+            height: "62%",
             transformStyle: "preserve-3d",
           }}
           initial={false}
           animate={{
-            rotateX: flapOpen ? -165 : 0,
+            rotateX: flapOpen ? -168 : 0,
             zIndex: flapOpen ? 0 : 25,
           }}
-          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 0.72, ease: [0.22, 1, 0.36, 1] }}
         >
-          <svg viewBox="0 0 350 150" className="h-full w-full" preserveAspectRatio="none">
+          <svg viewBox="0 0 360 155" className="h-full w-full" preserveAspectRatio="none">
             <path
-              d="M 0 0 L 175 140 L 350 0 Z"
+              d="M 0 0 L 180 148 L 360 0 Z"
               fill={theme.envelope.flap}
               stroke={theme.envelope.accent}
-              strokeWidth="1"
+              strokeWidth="1.2"
             />
           </svg>
 
@@ -155,10 +177,13 @@ export function BirthdayEnvelope({
           >
             <motion.button
               type="button"
-              onClick={open}
+              onClick={(e) => {
+                e.stopPropagation();
+                open();
+              }}
               disabled={revealed}
               aria-label={`Open birthday letter from ${senderName || "your friend"}`}
-              className="group relative flex h-12 w-12 items-center justify-center rounded-full shadow-md transition-transform hover:scale-105 active:scale-95 cursor-pointer focus:outline-none focus-visible:ring-2"
+              className="group relative flex h-12 w-12 items-center justify-center rounded-full shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer focus:outline-none focus-visible:ring-2"
               style={{
                 background: theme.envelope.seal,
                 color: theme.palette.surface,
@@ -203,6 +228,120 @@ export function BirthdayEnvelope({
           </div>
         </motion.div>
       </motion.div>
+
+      {/* Sealed Instruction Prompt */}
+      {!revealed && (
+        <div className="mt-4 text-center">
+          <p
+            className="text-xs font-semibold tracking-wide"
+            style={{ color: theme.palette.mutedText }}
+          >
+            {stage === "sealed" ? "Tap the seal to open your letter" : "Opening letter…"}
+          </p>
+        </div>
+      )}
+
+      {/* Unfolded Full Personal Letter Stationery */}
+      {revealed && (
+        <motion.div
+          initial={reduce ? false : { opacity: 0, y: 24, scale: 0.96 }}
+          animate={reduce ? undefined : { opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+          className="mt-6 w-full max-w-[520px] rounded-3xl p-6 sm:p-9 shadow-xl text-left"
+          style={{
+            background: theme.palette.surface,
+            border: `1.5px solid ${theme.palette.border}`,
+            color: theme.palette.text,
+          }}
+        >
+          {/* Stationery Header */}
+          <div
+            className="flex items-center justify-between border-b pb-4 mb-6"
+            style={{ borderColor: theme.palette.border }}
+          >
+            <div>
+              <p
+                className="text-[10px] uppercase font-bold tracking-[0.2em]"
+                style={{ color: theme.palette.accent }}
+              >
+                Personal Letter
+              </p>
+              <p className="text-sm font-semibold opacity-85" style={{ color: theme.palette.text }}>
+                Dear {recipientName || "Friend"},
+              </p>
+            </div>
+            <div
+              className="flex h-8 w-8 items-center justify-center rounded-full"
+              style={{
+                background: `${theme.palette.accent}20`,
+                color: theme.palette.primary,
+              }}
+            >
+              <Icon name="message" size={16} />
+            </div>
+          </div>
+
+          {/* Main Message Body */}
+          <div className="space-y-4">
+            <p
+              className="whitespace-pre-line text-[clamp(1.05rem,3.2vw,1.3rem)] leading-relaxed font-normal"
+              style={{
+                fontFamily: theme.typography.bodyFont,
+                color: theme.palette.text,
+              }}
+            >
+              {message || "Wishing you another wonderful year filled with happiness, adventures, and unforgettable moments!"}
+            </p>
+          </div>
+
+          {/* Attached Celebration Photos (if present) */}
+          {photos.length > 0 && (
+            <div className="mt-8 pt-6 border-t" style={{ borderColor: theme.palette.border }}>
+              <p
+                className="text-[11px] uppercase tracking-[0.16em] font-semibold mb-3 text-left"
+                style={{ color: theme.palette.mutedText }}
+              >
+                Celebration Moments
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                {photos.map((photo, i) => (
+                  <div
+                    key={`photo-${i}`}
+                    className="overflow-hidden rounded-2xl p-1.5 shadow-sm"
+                    style={{
+                      background: theme.palette.background,
+                      border: `1px solid ${theme.palette.border}`,
+                    }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photo}
+                      alt={`Birthday memory ${i + 1}`}
+                      className="h-32 sm:h-36 w-full rounded-xl object-cover"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Signature Sign-Off */}
+          <div className="mt-8 pt-4 text-right border-t border-dashed" style={{ borderColor: theme.palette.border }}>
+            <p className="text-xs italic opacity-75" style={{ color: theme.palette.mutedText }}>
+              With warmest wishes,
+            </p>
+            <p
+              className="text-lg font-bold"
+              style={{
+                fontFamily: theme.typography.headingFont,
+                color: theme.palette.primary,
+              }}
+            >
+              {senderName || "Your friend"}
+            </p>
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 }

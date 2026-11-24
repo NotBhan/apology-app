@@ -9,10 +9,10 @@ import { QuickReplyModal } from "@/components/response/QuickReplyModal";
 import { ExperienceReplyModal } from "@/components/response/ExperienceReplyModal";
 import { getExperience } from "@/experiences/registry";
 import { BirthdayCelebration } from "./birthday/BirthdayCelebration";
+import { BirthdayGiftBox } from "./birthday/BirthdayGiftBox";
 import { BirthdayEnvelope } from "./birthday/BirthdayEnvelope";
 import { BirthdayCake } from "./birthday/BirthdayCake";
 import { BirthdayCard } from "./birthday/BirthdayCard";
-import { BirthdayMessageCard } from "./birthday/BirthdayMessageCard";
 
 export const BIRTHDAY_SCENES = ["opening", "wish", "message", "gallery", "finale"] as const;
 export type BirthdayScene = (typeof BIRTHDAY_SCENES)[number];
@@ -148,7 +148,7 @@ export function BirthdayLetter({
                 <p className="text-sm opacity-80">Specially prepared for {content.recipientName}</p>
               </div>
 
-              <BirthdayEnvelope
+              <BirthdayGiftBox
                 recipientName={content.recipientName}
                 senderName={content.senderName}
                 theme={theme}
@@ -236,33 +236,38 @@ export function BirthdayLetter({
               transition={{ duration: 0.5 }}
               className="w-full flex flex-col items-center space-y-6"
             >
-              <p
-                className="text-[11px] font-bold uppercase tracking-[0.24em]"
-                style={{ color: theme.palette.accent }}
-              >
-                from {content.senderName}
-              </p>
+              <div className="space-y-1 text-center">
+                <p
+                  className="text-[11px] font-bold uppercase tracking-[0.24em]"
+                  style={{ color: theme.palette.accent }}
+                >
+                  from {content.senderName}
+                </p>
+                <p className="text-sm opacity-80">A personal letter for your special day</p>
+              </div>
 
-              <BirthdayMessageCard
-                senderName={content.senderName}
+              <BirthdayEnvelope
                 recipientName={content.recipientName}
+                senderName={content.senderName}
                 message={content.message}
-                photos={[]}
+                photos={content.photos}
                 theme={theme}
               />
 
-              <button
-                type="button"
-                onClick={next}
-                className="inline-flex items-center gap-2 rounded-full px-7 py-3 text-sm font-semibold shadow-md transition hover:shadow-lg active:scale-95 cursor-pointer"
-                style={{
-                  background: theme.palette.primary,
-                  color: theme.palette.surface,
-                }}
-              >
-                <span>Continue</span>
-                <Icon name="arrow-right" size={16} />
-              </button>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={next}
+                  className="inline-flex items-center gap-2 rounded-full px-7 py-3 text-sm font-semibold shadow-md transition hover:shadow-lg active:scale-95 cursor-pointer"
+                  style={{
+                    background: theme.palette.primary,
+                    color: theme.palette.surface,
+                  }}
+                >
+                  <span>Continue</span>
+                  <Icon name="arrow-right" size={16} />
+                </button>
+              </div>
             </motion.div>
           ) : null}
 
