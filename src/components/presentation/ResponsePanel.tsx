@@ -299,26 +299,31 @@ export function ResponsePanel({
                   </button>
                 ) : null}
               </div>
-              <QuickReplyModal
-                apologyId={apologyId}
-                senderName={senderName}
-                isOpen={quickReplyOpen}
-                onClose={() => setQuickReplyOpen(false)}
-                experienceId="apology"
-              />
-              {isExperienceReplyEnabled ? (
-                <ExperienceReplyModal
-                  apologyId={apologyId}
-                  parentSenderName={senderName}
-                  parentRecipientName={recipientName ?? ""}
-                  isOpen={experienceReplyOpen}
-                  onClose={() => setExperienceReplyOpen(false)}
-                />
-              ) : null}
             </div>
           );
         })()}
       </motion.div>
+
+      {apologyId ? (
+        <>
+          <QuickReplyModal
+            apologyId={apologyId}
+            senderName={senderName}
+            isOpen={quickReplyOpen}
+            onClose={() => setQuickReplyOpen(false)}
+            experienceId="apology"
+          />
+          {Boolean(getExperience("apology")?.replyConfig?.allowExperienceReply) ? (
+            <ExperienceReplyModal
+              apologyId={apologyId}
+              parentSenderName={senderName}
+              parentRecipientName={recipientName ?? ""}
+              isOpen={experienceReplyOpen}
+              onClose={() => setExperienceReplyOpen(false)}
+            />
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }

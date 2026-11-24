@@ -322,4 +322,18 @@ describe("QuickReplyModal", () => {
       expect(screen.getByRole("heading", { name: "Reply Sent" })).toBeInTheDocument();
     });
   });
+
+  it("portals into presentation-modal-root with responsive contained styling when root exists", () => {
+    const root = document.createElement("div");
+    root.id = "presentation-modal-root";
+    document.body.appendChild(root);
+
+    render(<QuickReplyModal {...defaultProps} />);
+
+    const dialog = screen.getByRole("dialog");
+    expect(root.contains(dialog)).toBe(true);
+    expect(dialog).toHaveClass("absolute", "inset-0", "z-50");
+
+    document.body.removeChild(root);
+  });
 });

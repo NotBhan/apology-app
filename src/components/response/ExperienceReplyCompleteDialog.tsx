@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Icon } from "@/components/ui/icons";
 import { ShareQrDialog } from "@/components/share/ShareQrDialog";
 
@@ -23,6 +24,8 @@ export function ExperienceReplyCompleteDialog({
   const [showQr, setShowQr] = useState(false);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  const portalNode = typeof document !== "undefined" ? document.body : null;
 
   const fullUrl = typeof window !== "undefined" ? `${window.location.origin}${publicUrl}` : publicUrl;
 
@@ -66,10 +69,12 @@ export function ExperienceReplyCompleteDialog({
     }
   }
 
-  return (
+  if (!isOpen || !portalNode) return null;
+
+  return createPortal(
     <div
       role="presentation"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -79,7 +84,7 @@ export function ExperienceReplyCompleteDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="reply-complete-title"
-        className="w-full max-w-md rounded-3xl border border-[#eeddf5] bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200"
+        className="w-full max-w-[calc(100%-0.75rem)] sm:max-w-[420px] max-h-[90vh] overflow-y-auto rounded-3xl border border-[#eeddf5] bg-white p-4 sm:p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200"
       >
         <div className="text-center">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200 shadow-sm">
@@ -155,6 +160,7 @@ export function ExperienceReplyCompleteDialog({
           onClose={() => setShowQr(false)}
         />
       ) : null}
-    </div>
+    </div>,
+    portalNode,
   );
 }

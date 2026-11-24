@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
+import { cn } from "@/lib/cn";
 import { Icon } from "@/components/ui/icons";
 import { sendQuickReply, uploadResponsePhoto, type QuickReplyResult } from "@/lib/api/client";
 import { getExperience } from "@/experiences/registry";
@@ -37,6 +39,11 @@ export function QuickReplyModal({
   const [copiedPublic, setCopiedPublic] = useState(false);
   const [copiedManage, setCopiedManage] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  const portalNode = typeof document !== "undefined"
+    ? (document.getElementById("presentation-modal-root") ?? document.body)
+    : null;
+  const isContained = portalNode?.id === "presentation-modal-root";
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -210,25 +217,36 @@ export function QuickReplyModal({
     }
   }
 
-  return (
+  if (!isOpen || !portalNode) return null;
+
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="quick-reply-title"
       ref={dialogRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-4 backdrop-blur-sm"
+      className={
+        isContained
+          ? "pointer-events-auto absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-2 sm:p-3 backdrop-blur-xs"
+          : "pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-sm"
+      }
       onClick={(e) => {
         if (e.target === e.currentTarget && !uploading && !isPending) onClose();
       }}
     >
-      <div className="flex max-h-[85dvh] sm:max-h-[90vh] w-full max-w-[460px] flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+      <div
+        className={cn(
+          "flex w-full max-w-[calc(100%-0.75rem)] sm:max-w-[420px] flex-col overflow-hidden rounded-3xl bg-white shadow-2xl",
+          isContained ? "max-h-[94%]" : "max-h-[85dvh] sm:max-h-[90vh]"
+        )}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#f0e8f7] px-4 py-3.5 sm:px-5 sm:py-4">
-          <div>
-            <h2 id="quick-reply-title" className="text-[1.05rem] font-semibold text-[#33203f]">
+        <div className="flex shrink-0 items-center justify-between border-b border-[#f0e8f7] px-4 py-2.5 sm:px-5 sm:py-3.5">
+          <div className="min-w-0 pr-2">
+            <h2 id="quick-reply-title" className="text-[0.98rem] font-semibold text-[#33203f] truncate">
               {result ? "Reply Sent" : config.modalTitle(senderName)}
             </h2>
-            <p className="text-[0.72rem] text-[#8a7a9c]">
+            <p className="text-[0.7rem] text-[#8a7a9c] truncate">
               {result ? "Your words have been shared" : config.modalSubtitle}
             </p>
           </div>
@@ -236,15 +254,15 @@ export function QuickReplyModal({
             type="button"
             onClick={onClose}
             disabled={uploading || isPending}
-            className="rounded-full p-2 text-[#8a7a9c] hover:bg-[#f6f0fb] hover:text-[#33203f] disabled:opacity-40"
+            className="shrink-0 rounded-full p-1.5 text-[#8a7a9c] hover:bg-[#f6f0fb] hover:text-[#33203f] disabled:opacity-40"
             aria-label="Close reply modal"
           >
-            <Icon name="x" size={18} />
+            <Icon name="x" size={16} />
           </button>
         </div>
 
         {/* Content */}
-        <div className="overflow-y-auto px-4 py-3.5 sm:px-5 sm:py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-5 sm:py-4">
           {result ? (
             /* Success State */
             <div className="space-y-5">
@@ -422,14 +440,14 @@ export function QuickReplyModal({
                 </div>
                 <textarea
                   id="reply-message"
-                  rows={4}
+                  rows={3}
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   maxLength={2000}
                   placeholder={config.messagePlaceholder}
                   aria-invalid={Boolean(error)}
                   aria-describedby={error ? "reply-error" : undefined}
-                  className="mt-1.5 w-full resize-none rounded-2xl border border-[#e5daf0] p-3 text-[0.85rem] text-[#33203f] placeholder:text-[#b8a9c8] focus:border-[#6d3fa8] focus:outline-none"
+                  className="mt-1.5 w-full resize-none rounded-2xl border border-[#e5daf0] p-2.5 text-[0.82rem] text-[#33203f] placeholder:text-[#b8a9c8] focus:border-[#6d3fa8] focus:outline-none"
                 />
               </div>
 
@@ -450,7 +468,7 @@ export function QuickReplyModal({
                   {photos.map((photo, pIdx) => (
                     <div
                       key={photo.id}
-                      className="group relative h-16 w-16 overflow-hidden rounded-xl border border-[#e0d4ec]"
+                      className="group relative h-14 w-14 overflow-hidden rounded-xl border border-[#e0d4ec]"
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={photo.previewUrl} alt={`Attached moment ${pIdx + 1}`} className="h-full w-full object-cover" />
@@ -470,10 +488,10 @@ export function QuickReplyModal({
                       type="button"
                       disabled={uploading}
                       onClick={() => fileInputRef.current?.click()}
-                      className="flex h-16 w-16 flex-col items-center justify-center rounded-xl border border-dashed border-[#d1bfdf] text-[#8a7a9c] transition hover:border-[#6d3fa8] hover:text-[#6d3fa8] disabled:opacity-50"
+                      className="flex h-14 w-14 flex-col items-center justify-center rounded-xl border border-dashed border-[#d1bfdf] text-[#8a7a9c] transition hover:border-[#6d3fa8] hover:text-[#6d3fa8] disabled:opacity-50"
                       aria-label="Add photo"
                     >
-                      <Icon name="image" size={18} />
+                      <Icon name="image" size={16} />
                       <span className="mt-0.5 text-[0.62rem] font-medium">Add</span>
                     </button>
                   ) : null}
@@ -514,6 +532,7 @@ export function QuickReplyModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    portalNode,
   );
 }

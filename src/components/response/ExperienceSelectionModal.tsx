@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
+import { cn } from "@/lib/cn";
 import { Icon } from "@/components/ui/icons";
 import { listExperiences } from "@/experiences/registry";
 import type { ExperienceId } from "@/experiences/types";
@@ -21,6 +23,11 @@ export function ExperienceSelectionModal({
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
   const firstButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  const portalNode = typeof document !== "undefined"
+    ? (document.getElementById("presentation-modal-root") ?? document.body)
+    : null;
+  const isContained = portalNode?.id === "presentation-modal-root";
 
   const experiences = listExperiences();
 
@@ -66,12 +73,16 @@ export function ExperienceSelectionModal({
     };
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !portalNode) return null;
 
-  return (
+  return createPortal(
     <div
       role="presentation"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+      className={
+        isContained
+          ? "pointer-events-auto absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-2 sm:p-4 backdrop-blur-xs"
+          : "pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      }
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -82,7 +93,10 @@ export function ExperienceSelectionModal({
         aria-modal="true"
         aria-labelledby="experience-selection-title"
         aria-describedby="experience-selection-desc"
-        className="w-full max-w-md rounded-3xl border border-[#eeddf5] bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200"
+        className={cn(
+          "flex w-full max-w-[calc(100%-0.75rem)] sm:max-w-[380px] flex-col overflow-hidden rounded-3xl border border-[#eeddf5] bg-white p-4 sm:p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-200",
+          isContained ? "max-h-[92%]" : "max-h-[90vh]"
+        )}
       >
         <div className="flex items-center justify-between border-b border-[#f3eaf8] pb-3.5">
           <div className="min-w-0 pr-2">
@@ -151,6 +165,7 @@ export function ExperienceSelectionModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    portalNode,
   );
 }

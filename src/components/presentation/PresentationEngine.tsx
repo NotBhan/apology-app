@@ -280,6 +280,8 @@ export function PresentationEngine({
             </span>
           </div>
         ) : null}
+
+        <div id="presentation-modal-root" className="pointer-events-none absolute inset-0 z-50 overflow-hidden" />
       </div>
     </div>
   );

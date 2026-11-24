@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Icon } from "@/components/ui/icons";
 import type { ApologyDraft } from "@/types/apology";
 import type { BirthdayContent } from "@/experiences/birthday/schema";
@@ -47,6 +48,8 @@ export function ExperienceReplyModal({
 
   const apologyDraftRef = useRef<ApologyDraft | null>(null);
   const responseIdRef = useRef<string | null>(null);
+
+  const portalNode = typeof document !== "undefined" ? document.body : null;
 
   const initialApologyDraft = useMemo<ApologyDraft>(() => {
     const now = new Date().toISOString();
@@ -173,12 +176,14 @@ export function ExperienceReplyModal({
     );
   }
 
-  return (
+  if (!portalNode) return null;
+
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="experience-editor-title"
-      className="fixed inset-0 z-50 overflow-y-auto bg-[#faf6ff]"
+      className="pointer-events-auto fixed inset-0 z-50 flex flex-col overflow-y-auto bg-[#faf6ff]"
     >
       {/* Top Navigation Bar */}
       <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#eeddf5] bg-white/95 px-4 py-3 backdrop-blur-sm sm:px-6">
@@ -247,6 +252,7 @@ export function ExperienceReplyModal({
           />
         )}
       </div>
-    </div>
+    </div>,
+    portalNode,
   );
 }

@@ -60,4 +60,17 @@ describe("ExperienceSelectionModal", () => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     expect(onClose).toHaveBeenCalled();
   });
+
+  it("portals into presentation-modal-root with responsive contained styling when root exists", () => {
+    const root = document.createElement("div");
+    root.id = "presentation-modal-root";
+    document.body.appendChild(root);
+
+    render(<ExperienceSelectionModal {...defaultProps} />);
+
+    const dialog = screen.getByRole("dialog");
+    expect(root.contains(dialog)).toBe(true);
+
+    document.body.removeChild(root);
+  });
 });
