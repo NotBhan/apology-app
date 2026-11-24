@@ -80,7 +80,7 @@ export function BirthdayLetter({
           <button
             type="button"
             onClick={back}
-            aria-label="Previous step"
+            aria-label="Previous scene"
             className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold opacity-75 hover:opacity-100 transition-opacity cursor-pointer"
             style={{
               background: `${theme.palette.surface}80`,
@@ -101,7 +101,7 @@ export function BirthdayLetter({
               key={s}
               type="button"
               onClick={() => goTo(s)}
-              aria-label={`Go to ${s} step`}
+              aria-label={`Go to scene ${idx + 1}`}
               className="h-1.5 rounded-full transition-all cursor-pointer"
               style={{
                 width: idx === sceneIndex ? "22px" : "6px",

@@ -203,11 +203,11 @@ export function BirthdayCake({
                 {theme.cake.topping === "stars" && (
                   <>
                     <polygon
-                      points="86,101 88,105 92,105 89,107 90,111 86,108 82,111 83,107 80,105 84,105"
+                      points="76,101 78,105 82,105 79,107 80,111 76,108 72,111 73,107 70,105 74,105"
                       fill="#ffd43b"
                     />
                     <polygon
-                      points="214,101 216,105 220,105 217,107 218,111 214,108 210,111 211,107 208,105 212,105"
+                      points="224,101 226,105 230,105 227,107 228,111 224,108 220,111 221,107 218,105 222,105"
                       fill="#ffd43b"
                     />
                   </>
@@ -399,13 +399,19 @@ export function BirthdayCake({
           {/* Candles and Flames */}
           {candlePositions.map((cx, idx) => {
             const candleColor = idx % 2 === 0 ? theme.palette.primary : theme.cake.accent;
+            const glowRadius = count <= 2 ? 15 : count <= 4 ? 12 : count <= 5 ? 10 : 8.5;
+            const glowOpacity = count > 4 ? 0.65 : reduce ? 0.6 : 0.85;
+            const flameScale = count >= 6 ? 0.88 : 1;
+            const normX = count > 1 ? Math.abs(cx - 150) / (candleSpan / 2) : 0;
+            const curveOffset = Math.round((1 - normX * normX) * (isThreeTier ? 2.5 : 4) * 10) / 10;
+            const candleY = topY + curveOffset;
 
             return (
               <g key={`candle-${idx}`} id={`candle-${idx}`}>
                 {/* Candle Stick */}
                 <rect
                   x={cx - 3.5}
-                  y={topY}
+                  y={candleY}
                   width="7"
                   height={candleHeight}
                   rx="2"
@@ -415,9 +421,9 @@ export function BirthdayCake({
                 />
                 {/* Spiral Stripes on Candle */}
                 <path
-                  d={`M ${cx - 3.5} ${topY + 6} L ${cx + 3.5} ${topY + 11}
-                      M ${cx - 3.5} ${topY + 15} L ${cx + 3.5} ${topY + 20}
-                      ${!isThreeTier ? `M ${cx - 3.5} ${topY + 24} L ${cx + 3.5} ${topY + 29}` : ""}`}
+                  d={`M ${cx - 3.5} ${candleY + 6} L ${cx + 3.5} ${candleY + 11}
+                      M ${cx - 3.5} ${candleY + 15} L ${cx + 3.5} ${candleY + 20}
+                      ${!isThreeTier ? `M ${cx - 3.5} ${candleY + 24} L ${cx + 3.5} ${candleY + 29}` : ""}`}
                   stroke={candleColor}
                   strokeWidth="2.2"
                   strokeLinecap="round"
@@ -427,9 +433,9 @@ export function BirthdayCake({
                 {/* Candle Wick */}
                 <line
                   x1={cx}
-                  y1={topY}
+                  y1={candleY}
                   x2={cx}
-                  y2={topY - 5}
+                  y2={candleY - 5}
                   stroke="#495057"
                   strokeWidth="1.2"
                 />
@@ -440,10 +446,10 @@ export function BirthdayCake({
                     {/* Radial Flame Glow Halo */}
                     <circle
                       cx={cx}
-                      cy={topY - 12}
-                      r="16"
+                      cy={candleY - 12}
+                      r={glowRadius}
                       fill={`url(#${idPrefix}-flame-glow)`}
-                      opacity={reduce ? "0.6" : "0.85"}
+                      opacity={glowOpacity}
                     />
 
                     {/* Flickering SVG Flame (Grouped Flame Tear + Core) */}
@@ -463,18 +469,18 @@ export function BirthdayCake({
                         ease: "easeInOut",
                       }}
                       style={{
-                        transformOrigin: `${cx}px ${topY - 5}px`,
+                        transformOrigin: `${cx}px ${candleY - 5}px`,
                       }}
                     >
                       <path
-                        d={`M ${cx} ${topY - 22}
-                            C ${cx + 5} ${topY - 14}, ${cx + 5} ${topY - 7}, ${cx} ${topY - 5}
-                            C ${cx - 5} ${topY - 7}, ${cx - 5} ${topY - 14}, ${cx} ${topY - 22} Z`}
+                        d={`M ${cx} ${candleY - 22}
+                            C ${cx + 5 * flameScale} ${candleY - 14}, ${cx + 5 * flameScale} ${candleY - 7}, ${cx} ${candleY - 5}
+                            C ${cx - 5 * flameScale} ${candleY - 7}, ${cx - 5 * flameScale} ${candleY - 14}, ${cx} ${candleY - 22} Z`}
                         fill="#ffd43b"
                         stroke="#ff922b"
                         strokeWidth="0.7"
                       />
-                      <ellipse cx={cx} cy={topY - 10} rx="1.8" ry="3.8" fill="#ffffff" />
+                      <ellipse cx={cx} cy={candleY - 10} rx={1.8 * flameScale} ry={3.8 * flameScale} fill="#ffffff" />
                     </motion.g>
                   </g>
                 ) : (
@@ -485,7 +491,7 @@ export function BirthdayCake({
                     transition={{ duration: 1.8, delay: idx * 0.1, ease: "easeOut" }}
                   >
                     <path
-                      d={`M ${cx} ${topY - 6} Q ${cx - 4} ${topY - 14} ${cx + 2} ${topY - 22} T ${cx - 2} ${topY - 32}`}
+                      d={`M ${cx} ${candleY - 6} Q ${cx - 4} ${candleY - 14} ${cx + 2} ${candleY - 22} T ${cx - 2} ${candleY - 32}`}
                       fill="none"
                       stroke="#adb5bd"
                       strokeWidth="1.5"

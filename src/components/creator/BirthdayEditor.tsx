@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BirthdayLetter } from "@/components/presentation/BirthdayLetter";
 import { BirthdayCake } from "@/components/presentation/birthday/BirthdayCake";
@@ -73,11 +73,11 @@ export interface BirthdayEditorProps {
 }
 
 const STAGES = [
-  { id: "who", num: 1, label: "Who & When", subtitle: "Names & headline" },
-  { id: "theme", num: 2, label: "Choose Theme", subtitle: "Visual styling" },
-  { id: "words", num: 3, label: "Words & Wish", subtitle: "Personal letter" },
-  { id: "cake", num: 4, label: "Cake & Candles", subtitle: "Decorate cake" },
-  { id: "preview", num: 5, label: "Preview & Send", subtitle: "Review gift" },
+  { id: "who", num: 1, label: "Who & When", shortLabel: "Who", subtitle: "Names & headline" },
+  { id: "theme", num: 2, label: "Choose Theme", shortLabel: "Theme", subtitle: "Visual styling" },
+  { id: "words", num: 3, label: "Words & Wish", shortLabel: "Words", subtitle: "Personal letter" },
+  { id: "cake", num: 4, label: "Cake & Candles", shortLabel: "Cake", subtitle: "Decorate cake" },
+  { id: "preview", num: 5, label: "Preview & Send", shortLabel: "Preview", subtitle: "Review gift" },
 ] as const;
 
 export function BirthdayEditor({
@@ -98,8 +98,24 @@ export function BirthdayEditor({
   const [showQr, setShowQr] = useState(false);
   const [includeAge, setIncludeAge] = useState(() => typeof initialValues?.age === "number");
   const [activeStage, setActiveStage] = useState<number>(1);
+  const [fullPreview, setFullPreview] = useState(false);
 
   const currentTheme = resolveBirthdayTheme(values.themeId);
+
+  const previewContent: BirthdayContent = useMemo(() => ({
+    recipientName: values.recipientName.trim() || "Aria",
+    senderName: values.senderName.trim() || "Leo",
+    headline: values.headline.trim() || "Happy Birthday!",
+    age: includeAge && typeof values.age === "number" && values.age > 0 ? values.age : undefined,
+    themeId: values.themeId,
+    message:
+      values.message.trim() ||
+      "Wishing you another wonderful year filled with happiness, adventures, and unforgettable moments!",
+    wish: values.wish.trim() ? values.wish.trim() : undefined,
+    candleCount: values.candleCount,
+    photos: [],
+    audio: "none",
+  }), [values, includeAge]);
 
   useEffect(() => {
     if (isResponse) return;
@@ -216,34 +232,37 @@ export function BirthdayEditor({
       ) : null}
 
       {/* Staged Creation Navigation Bar */}
-      <nav aria-label="Creation stages" className="sticky top-16 z-20 overflow-x-auto pb-1 bg-[#faf6ff]/90 backdrop-blur-sm pt-1">
-        <ol className="flex items-center min-w-max space-x-1.5 sm:space-x-2">
+      <nav
+        aria-label="Creation stages"
+        className="sticky top-16 z-20 py-2 bg-[#faf6ff]/95 backdrop-blur-md border-b border-stone-200/60 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        <ol className="flex items-center justify-between gap-1 sm:gap-2 w-full">
           {STAGES.map((s) => {
             const isActive = activeStage === s.num;
             return (
-              <li key={s.id} className="flex items-center">
+              <li key={s.id} className="flex-1 min-w-0">
                 <button
                   type="button"
                   onClick={() => scrollToStage(s.num, s.id)}
-                  className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                  className={`flex w-full items-center justify-center gap-1 sm:gap-1.5 rounded-full px-1.5 sm:px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
                     isActive
-                      ? "bg-[#e8590c] text-white shadow-sm scale-105"
+                      ? "bg-[#e8590c] text-white shadow-sm scale-[1.02]"
                       : "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50"
                   }`}
                   aria-current={isActive ? "step" : undefined}
                 >
                   <span
-                    className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold ${
+                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
                       isActive ? "bg-white text-[#e8590c]" : "bg-stone-100 text-stone-600"
                     }`}
                   >
                     {s.num}
                   </span>
-                  <span>{s.label}</span>
+                  <span className="truncate">
+                    <span className="sm:hidden">{s.shortLabel}</span>
+                    <span className="hidden sm:inline">{s.label}</span>
+                  </span>
                 </button>
-                {s.num < STAGES.length && (
-                  <span className="mx-1 text-stone-300 select-none text-xs">→</span>
-                )}
               </li>
             );
           })}
@@ -327,21 +346,39 @@ export function BirthdayEditor({
           </label>
 
           {includeAge && (
-            <div className="pt-1">
-              <label className="block space-y-1">
-                <span className="text-xs text-stone-600">Age</span>
+            <div className="pt-1.5 flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-stone-700">Age:</span>
                 <input
                   type="number"
                   min={1}
                   max={130}
                   value={values.age ?? ""}
-                  onChange={(e) =>
-                    set("age", e.target.value ? Number.parseInt(e.target.value, 10) : undefined)
-                  }
-                  placeholder="e.g. 25"
-                  className="w-32 rounded-lg border border-stone-300 px-3 py-1.5 text-sm transition focus:border-[#e8590c] focus:outline-none focus:ring-1 focus:ring-[#e8590c]"
+                  onChange={(e) => {
+                    const val = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
+                    set("age", val && !Number.isNaN(val) ? Math.max(1, Math.min(130, val)) : undefined);
+                  }}
+                  placeholder="e.g. 10"
+                  className="w-24 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm font-semibold text-stone-900 transition focus:border-[#e8590c] focus:outline-none focus:ring-1 focus:ring-[#e8590c] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </label>
+              <div className="flex flex-wrap items-center gap-1.5 text-xs text-stone-500">
+                <span className="text-[11px] text-stone-400">Popular:</span>
+                {[10, 18, 21, 25, 30, 50].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => set("age", preset)}
+                    className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition cursor-pointer ${
+                      values.age === preset
+                        ? "bg-[#e8590c] text-white"
+                        : "bg-stone-200/60 text-stone-700 hover:bg-stone-200"
+                    }`}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
           <p className="text-[11px] text-stone-500">
@@ -574,15 +611,32 @@ export function BirthdayEditor({
         </div>
 
         {/* In-Editor Live Presentation Preview */}
-        {parsed.success ? (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-stone-500">
+              Interactive Preview {parsed.success ? "• Ready to send" : "• Live Draft"}
+            </span>
+            <button
+              type="button"
+              onClick={() => setFullPreview(true)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-stone-300 bg-white px-3.5 py-1 text-xs font-semibold text-stone-700 shadow-sm hover:bg-stone-50 transition cursor-pointer"
+            >
+              <Icon name="eye" size={13} />
+              <span>Full screen walkthrough</span>
+            </button>
+          </div>
+
+          {!parsed.success && (
+            <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50/80 px-3.5 py-2 text-xs text-amber-900">
+              <span className="font-semibold shrink-0">Draft note:</span>
+              <span>Showing live preview with placeholder text. Complete required fields above to publish.</span>
+            </div>
+          )}
+
           <div className="overflow-hidden rounded-2xl border border-stone-200 shadow-inner">
-            <BirthdayLetter content={parsed.data} />
+            <BirthdayLetter content={previewContent} />
           </div>
-        ) : (
-          <div className="rounded-xl border border-stone-200 bg-stone-50 p-6 text-center text-xs text-stone-500">
-            Fill in their name, your name, headline, and message above to preview the complete experience.
-          </div>
-        )}
+        </div>
 
         {/* Permanent Link Info Banner */}
         <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-xs text-emerald-900">
@@ -664,6 +718,31 @@ export function BirthdayEditor({
           </div>
         </div>
       </section>
+
+      {/* Full-screen Walkthrough Modal */}
+      {fullPreview && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Recipient Walkthrough Preview"
+          className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/85 backdrop-blur-sm flex flex-col items-center p-3 sm:p-6"
+        >
+          <div className="sticky top-3 z-50 mb-4 flex items-center justify-between gap-4 rounded-full bg-white/95 backdrop-blur-md px-5 py-2 shadow-xl border border-stone-200 w-full max-w-[620px]">
+            <span className="text-xs font-semibold text-stone-700">Recipient Walkthrough Preview</span>
+            <button
+              type="button"
+              onClick={() => setFullPreview(false)}
+              aria-label="Exit preview"
+              className="rounded-full bg-stone-900 px-3.5 py-1 text-xs font-semibold text-white hover:bg-stone-800 transition cursor-pointer"
+            >
+              Exit Preview
+            </button>
+          </div>
+          <div className="w-full max-w-[620px] my-auto">
+            <BirthdayLetter content={previewContent} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
