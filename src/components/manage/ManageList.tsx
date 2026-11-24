@@ -13,7 +13,7 @@ import { Icon } from "@/components/ui/icons";
 import { resolveEmotionBadge } from "@/experiences/emotion";
 import type { ApologyDraft } from "@/types/apology";
 import type { DeletionTombstone } from "@/lib/lifecycle/types";
-import type { PublishedResponse, QuickReplyPayload } from "@/types/response";
+import type { PublishedResponse, QuickReplyPayload, ExperienceReplyPayload } from "@/types/response";
 
 export interface ManageListProps {
   drafts: ApologyDraft[];
@@ -215,7 +215,9 @@ function ManageRow({
           <button
             type="button"
             onClick={() => setShowReplies((prev) => !prev)}
-            className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-[#f2eafc] px-3 text-[0.74rem] font-semibold text-[#6d3fa8] transition hover:bg-[#ebdcf8]"
+            aria-expanded={showReplies}
+            aria-controls={`replies-list-${draft.id}`}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-[#f2eafc] px-3 text-[0.74rem] font-semibold text-[#6d3fa8] transition hover:bg-[#ebdcf8] motion-safe:active:scale-95"
           >
             <Icon name="message" size={13} />
             <span>Replies ({responses.length})</span>
@@ -226,18 +228,60 @@ function ManageRow({
           type="button"
           disabled={pending}
           onClick={() => setConfirming("delete")}
-          className="inline-flex min-h-9 items-center rounded-full border border-[#ece2f6] px-3 text-[0.74rem] font-semibold text-[#8a7a9c] disabled:opacity-50"
+          className="inline-flex min-h-9 items-center rounded-full border border-[#ece2f6] px-3 text-[0.74rem] font-semibold text-[#8a7a9c] disabled:opacity-50 motion-safe:active:scale-95"
         >
           Delete now
         </button>
       </div>
 
       {showReplies && responses.length > 0 ? (
-        <div className="mt-4 border-t border-[#f0e8f7] pt-3 space-y-2.5">
+        <div id={`replies-list-${draft.id}`} className="mt-4 border-t border-[#f0e8f7] pt-3 space-y-2.5">
           <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#8a7a9c]">
             Incoming Responses ({responses.length})
           </p>
           {responses.map((resp) => {
+            if (resp.responseType === "experience") {
+              const expPayload = resp.content as ExperienceReplyPayload;
+              const expType = expPayload?.experienceType;
+              const expData = (expPayload?.content ?? {}) as Record<string, unknown>;
+              const sender = typeof expData.senderName === "string" ? expData.senderName : (draft.recipientName || "Recipient");
+              const headline = typeof expData.headline === "string" ? expData.headline : null;
+              const message = typeof expData.message === "string"
+                ? expData.message
+                : (expData.messages as Record<string, unknown> | undefined)?.message1
+                  ? String((expData.messages as Record<string, unknown>).message1)
+                  : "Created a complete experience";
+
+              return (
+                <div key={resp.id} className="rounded-2xl border border-[#ede3f5] bg-[#faf6ff] p-3 text-xs">
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <span className="rounded-full bg-[#f3eafc] px-2.5 py-0.5 text-[0.68rem] font-bold text-[#6d3fa8] border border-[#e4d3f5]">
+                      Experience Reply: {expType === "birthday" ? "Birthday" : "Apology"}
+                    </span>
+                    <span className="text-[0.65rem] text-[#a495b5]">
+                      {mounted && resp.publishedAt
+                        ? new Date(resp.publishedAt).toLocaleDateString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                          })
+                        : ""}
+                    </span>
+                  </div>
+                  <div className="mt-1">
+                    <p className="text-[0.7rem] font-medium text-[#7d6892]">
+                      From <span className="font-semibold text-[#33203f]">{sender}</span>
+                    </p>
+                    {headline ? (
+                      <p className="mt-1 font-semibold text-xs text-[#33203f]">{headline}</p>
+                    ) : null}
+                    <p className="mt-0.5 whitespace-pre-line text-[0.8rem] leading-relaxed text-[#523d68]">
+                      {message}
+                    </p>
+                  </div>
+                </div>
+              );
+            }
+
             const replyContent = resp.content as QuickReplyPayload;
             return (
               <div key={resp.id} className="rounded-2xl border border-[#ede3f5] bg-[#faf6ff] p-3 text-xs">

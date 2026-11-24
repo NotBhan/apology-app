@@ -272,6 +272,14 @@ export interface QuickReplyResult {
   manageUrl: string;
 }
 
+export interface ExperienceReplyResult {
+  ok: boolean;
+  publicToken: string;
+  manageToken: string;
+  publicUrl: string;
+  manageUrl: string;
+}
+
 export interface ResponseUploadResult {
   asset: {
     id: string;
@@ -316,15 +324,34 @@ export async function sendQuickReply(
   );
 }
 
+export async function sendExperienceReply(
+  apologyId: string,
+  input: {
+    experienceType: "apology" | "birthday";
+    content: Record<string, unknown>;
+    responseId?: string;
+  },
+): Promise<ExperienceReplyResult> {
+  return apiRequest<ExperienceReplyResult>(
+    `/api/experiences/${encodeURIComponent(apologyId)}/responses/experience`,
+    {
+      method: "POST",
+      body: input,
+    },
+  );
+}
+
 export async function uploadResponsePhoto(
   apologyId: string,
   file: File,
   responseId?: string,
+  responseType?: "quick" | "experience",
 ): Promise<ResponseUploadResult> {
   const form = new FormData();
   form.append("file", file, file.name || "upload");
   form.append("apologyId", apologyId);
   if (responseId) form.append("responseId", responseId);
+  if (responseType) form.append("responseType", responseType);
 
   return apiRequest<ResponseUploadResult>("/api/responses/upload", {
     method: "POST",

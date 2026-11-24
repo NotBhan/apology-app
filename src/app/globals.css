@@ -2,6 +2,7 @@
 
 @theme inline {
   --font-display: var(--font-playfair);
+  --font-serif: var(--font-playfair);
   --font-hand: var(--font-caveat);
   --font-body: var(--font-nunito);
   --font-sans: var(--font-inter);

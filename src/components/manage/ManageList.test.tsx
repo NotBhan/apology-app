@@ -170,4 +170,63 @@ describe("ManageList response resolution", () => {
     expect(screen.queryByText(/Feeling/i)).not.toBeInTheDocument();
     expect(screen.getByText("Unique reply text")).toBeInTheDocument();
   });
+
+  it("sets aria-expanded and aria-controls on replies toggle button", async () => {
+    const user = userEvent.setup();
+    render(
+      <ManageList
+        drafts={[apologyDraft]}
+        tombstones={[]}
+        pendingDeletionIds={[]}
+        responsesByApology={{ [apologyDraft.id]: [apologyResponse] }}
+      />,
+    );
+
+    const toggleBtn = screen.getByRole("button", { name: /Replies \(1\)/i });
+    expect(toggleBtn).toHaveAttribute("aria-expanded", "false");
+    expect(toggleBtn).toHaveAttribute("aria-controls", `replies-list-${apologyDraft.id}`);
+
+    await user.click(toggleBtn);
+    expect(toggleBtn).toHaveAttribute("aria-expanded", "true");
+
+    const repliesContainer = document.getElementById(`replies-list-${apologyDraft.id}`);
+    expect(repliesContainer).toBeInTheDocument();
+  });
+
+  it("displays experience replies with Experience Reply badge and content", async () => {
+    const user = userEvent.setup();
+    const expResponse: PublishedResponse = {
+      id: "resp-exp-1",
+      apologyId: apologyDraft.id,
+      responseType: "experience",
+      status: "published",
+      content: {
+        experienceType: "birthday",
+        content: {
+          recipientName: apologyDraft.senderName,
+          senderName: apologyDraft.recipientName,
+          headline: "Happy Birthday Friend!",
+          message: "Celebrating you with all my heart.",
+        },
+      },
+      publishedAt: "2026-11-19T10:00:00.000Z",
+      createdAt: "2026-11-19T10:00:00.000Z",
+      updatedAt: "2026-11-19T10:00:00.000Z",
+    };
+
+    render(
+      <ManageList
+        drafts={[apologyDraft]}
+        tombstones={[]}
+        pendingDeletionIds={[]}
+        responsesByApology={{ [apologyDraft.id]: [expResponse] }}
+      />,
+    );
+
+    const toggleBtn = screen.getByRole("button", { name: /Replies \(1\)/i });
+    await user.click(toggleBtn);
+
+    expect(screen.getByText("Experience Reply: Birthday")).toBeInTheDocument();
+    expect(screen.getByText("Happy Birthday Friend!")).toBeInTheDocument();
+  });
 });

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ResponseViewClient } from "./ResponseViewClient";
 import type { PublishedResponse } from "@/types/response";
@@ -129,5 +129,115 @@ describe("ResponseViewClient", () => {
     expect(screen.getByText("curious")).toBeInTheDocument();
     expect(screen.queryByText(/Feeling/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Vibe/i)).not.toBeInTheDocument();
+  });
+
+  it("renders accessible photo thumbnails and manages lightbox dialog focus and Escape closing", async () => {
+    const user = (await import("@testing-library/user-event")).default.setup();
+    const photoResponse: PublishedResponse = {
+      ...baseResponse,
+      content: {
+        message: "Check these moments.",
+        photos: ["photo-123", "photo-456"],
+      },
+    };
+
+    render(
+      <ResponseViewClient
+        response={photoResponse}
+        parent={baseParent}
+        token="token-123"
+      />,
+    );
+
+    const photoThumb = screen.getByRole("button", { name: "View enlarged photo 1" });
+    expect(photoThumb).toBeInTheDocument();
+
+    await user.click(photoThumb);
+
+    const lightboxDialog = screen.getByRole("dialog", { name: "Enlarged photo view" });
+    expect(lightboxDialog).toBeInTheDocument();
+    expect(lightboxDialog).toHaveAttribute("aria-modal", "true");
+
+    const closeBtn = screen.getByRole("button", { name: "Close photo" });
+    expect(closeBtn).toBeInTheDocument();
+    expect(closeBtn).toHaveFocus();
+
+    // Escape closes lightbox
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Enlarged photo view" })).not.toBeInTheDocument();
+    });
+    expect(photoThumb).toHaveFocus();
+  });
+
+  it("renders birthday experience reply using Birthday presentation with response context banner", () => {
+    const bdayExpResponse: PublishedResponse = {
+      ...baseResponse,
+      responseType: "experience",
+      content: {
+        experienceType: "birthday",
+        content: {
+          recipientName: "Aarav",
+          senderName: "Riya",
+          headline: "Happy Birthday Aarav!",
+          message: "Celebrating you today and always.",
+          themeId: "confetti",
+        },
+      },
+    };
+
+    render(
+      <ResponseViewClient
+        response={bdayExpResponse}
+        parent={baseParent}
+        token="token-exp-123"
+      />,
+    );
+
+    expect(screen.getByText("In response to")).toBeInTheDocument();
+    expect(screen.getAllByText("Aarav").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "Happy Birthday Aarav!" })).toBeInTheDocument();
+  });
+
+  it("renders apology experience reply using Apology presentation with response context banner", () => {
+    const apologyExpResponse: PublishedResponse = {
+      ...baseResponse,
+      responseType: "experience",
+      content: {
+        experienceType: "apology",
+        content: {
+          recipientName: "Aarav",
+          senderName: "Riya",
+          situation: "other",
+          language: "en",
+          messages: {
+            message1: "I am truly sorry.",
+            message2: "I want to make it right.",
+            message3: "Thank you for listening.",
+            personalNote: "",
+          },
+          themeId: "warm",
+          stickerPackId: "cats",
+          customization: {
+            audio: { source: "none", volume: 0 },
+            photos: [],
+            memoryStyle: "polaroid",
+          },
+          linkDurationDays: 1,
+        },
+      },
+    };
+
+    render(
+      <ResponseViewClient
+        response={apologyExpResponse}
+        parent={baseParent}
+        token="token-exp-456"
+      />,
+    );
+
+    expect(screen.getByText("In response to")).toBeInTheDocument();
+    expect(screen.getByText("Aarav")).toBeInTheDocument();
   });
 });

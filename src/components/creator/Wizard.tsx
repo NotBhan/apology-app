@@ -44,6 +44,7 @@ interface WizardProps {
    * local copy in this tab, since it cannot save through the gateway first.
    */
   onDraftChange?: (draft: ApologyDraft) => void;
+  isResponse?: boolean;
 }
 
 /**
@@ -65,7 +66,7 @@ const STEP_LABELS = [
   "Publish",
 ] as const;
 
-export function Wizard({ initialDraft, gateway, onDraftChange }: WizardProps) {
+export function Wizard({ initialDraft, gateway, onDraftChange, isResponse = false }: WizardProps) {
   const router = useRouter();
   const [draft, setDraft] = useState<ApologyDraft>(() => ({
     ...initialDraft,
@@ -260,6 +261,7 @@ export function Wizard({ initialDraft, gateway, onDraftChange }: WizardProps) {
                   void persist().then(() => router.push(`/preview/${draft.id}`));
                 }}
                 onBack={() => setStep(5)}
+                isResponse={isResponse}
               />
             ) : null}
           </motion.div>

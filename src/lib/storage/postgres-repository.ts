@@ -10,6 +10,8 @@ import {
   apologyAssets,
   deletionJobs,
   deletionTombstones,
+  responses,
+  responseAssets,
 } from "@/db/schema";
 import type { ApologyAssetRow, ApologyRow } from "@/db/schema";
 import type {
@@ -208,6 +210,8 @@ export class PostgresRepository implements ApologyRepository {
       where a.id in (select id from locked)
       returning a.id,
                 a.owner_key_hash as "ownerKeyHash",
+                a.experience_type as "experienceType",
+                a.content,
                 a.recipient_name as "recipientName",
                 a.sender_name as "senderName",
                 a.situation,
@@ -269,9 +273,14 @@ export class PostgresRepository implements ApologyRepository {
         for update
       ),
       keys as (
-        select coalesce(jsonb_agg(x.object_key), '[]'::jsonb) as k
-        from ${apologyAssets} x
-        where x.apology_id = (select id from locked)
+        select coalesce(jsonb_agg(k), '[]'::jsonb) as k
+        from (
+          select x.object_key as k from ${apologyAssets} x where x.apology_id = (select id from locked)
+          union all
+          select ra.object_key as k from ${responseAssets} ra
+          join ${responses} r on r.id = ra.response_id
+          where r.apology_id = (select id from locked)
+        ) all_keys
       ),
       intent as (
         insert into ${deletionJobs} (resource_type, resource_id, owner_key_hash, object_keys, state, reason, fencing_token)
@@ -446,7 +455,7 @@ export class PostgresRepository implements ApologyRepository {
             and a.owner_key_hash = ${ownerKeyHash}
             and a.status in ('draft','published')
             and not exists (
-              select 1 from ${deletionJobs} j where j.apology_id = a.id
+              select 1 from ${deletionJobs} j where j.resource_type = 'apology' and j.resource_id = a.id
             )
         )
       returning x.id,

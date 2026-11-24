@@ -1,47 +1,63 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { BirthdayLetter } from "@/components/presentation/BirthdayLetter";
-import { birthdayContentSchema } from "@/experiences/birthday/schema";
+import { BirthdayCake } from "@/components/presentation/birthday/BirthdayCake";
+import {
+  birthdayContentSchema,
+  type BirthdayContent,
+  type BirthdayThemeId,
+} from "@/experiences/birthday/schema";
+import { BIRTHDAY_THEMES, resolveBirthdayTheme } from "@/experiences/birthday/themes";
 import { ShareQrDialog } from "@/components/share/ShareQrDialog";
-
-const THEMES = [
-  { id: "confetti", name: "Confetti" },
-  { id: "midnight-gold", name: "Midnight Gold" },
-] as const;
+import { Icon } from "@/components/ui/icons";
 
 const STORAGE_KEY = "koi.birthday.draft";
 
-interface FormValues {
+export interface BirthdayEditorValues {
   recipientName: string;
   senderName: string;
   headline: string;
+  age?: number;
+  themeId: BirthdayThemeId;
   message: string;
   wish: string;
-  themeId: "confetti" | "midnight-gold";
+  candleCount: number;
 }
 
-const EMPTY: FormValues = {
+const EMPTY: BirthdayEditorValues = {
   recipientName: "",
   senderName: "",
   headline: "",
+  age: undefined,
+  themeId: "confetti",
   message: "",
   wish: "",
-  themeId: "confetti",
+  candleCount: 3,
 };
 
-function loadDraft(): FormValues | null {
+function loadDraft(): BirthdayEditorValues | null {
   try {
     const raw = window.sessionStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<FormValues>;
-    return { ...EMPTY, ...parsed };
+    const parsed = JSON.parse(raw) as Partial<BirthdayEditorValues>;
+    return {
+      recipientName: parsed.recipientName ?? "",
+      senderName: parsed.senderName ?? "",
+      headline: parsed.headline ?? "",
+      age: typeof parsed.age === "number" ? parsed.age : undefined,
+      themeId: parsed.themeId ?? "confetti",
+      message: parsed.message ?? "",
+      wish: parsed.wish ?? "",
+      candleCount: typeof parsed.candleCount === "number" ? parsed.candleCount : 3,
+    };
   } catch {
     return null;
   }
 }
 
-function saveDraftLocal(values: FormValues) {
+function saveDraftLocal(values: BirthdayEditorValues) {
   try {
     window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(values));
   } catch {
@@ -49,61 +65,106 @@ function saveDraftLocal(values: FormValues) {
   }
 }
 
-/**
- * Birthday editor with an anonymous path.
- *
- * Anyone may open it, edit and preview. Nothing is written to the database
- * until a verified session exists: without one, the draft is kept in this
- * tab's sessionStorage and the visitor is sent to sign in, returning here.
- * This is why no anonymous identity has to exist.
- */
-export function BirthdayEditor() {
-  const [values, setValues] = useState<FormValues>(EMPTY);
+export interface BirthdayEditorProps {
+  initialValues?: Partial<BirthdayEditorValues>;
+  onPublishResponse?: (content: BirthdayContent) => Promise<{ path: string; publicToken: string }>;
+  onCancel?: () => void;
+  isResponse?: boolean;
+}
+
+const STAGES = [
+  { id: "who", num: 1, label: "Who & When", subtitle: "Names & headline" },
+  { id: "theme", num: 2, label: "Choose Theme", subtitle: "Visual styling" },
+  { id: "words", num: 3, label: "Words & Wish", subtitle: "Personal letter" },
+  { id: "cake", num: 4, label: "Cake & Candles", subtitle: "Decorate cake" },
+  { id: "preview", num: 5, label: "Preview & Send", subtitle: "Review gift" },
+] as const;
+
+export function BirthdayEditor({
+  initialValues,
+  onPublishResponse,
+  onCancel,
+  isResponse = false,
+}: BirthdayEditorProps = {}) {
+  const router = useRouter();
+  const [values, setValues] = useState<BirthdayEditorValues>(() => ({
+    ...EMPTY,
+    ...initialValues,
+  }));
   const [restored, setRestored] = useState(false);
-  const [preview, setPreview] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [published, setPublished] = useState<string | null>(null);
   const [showQr, setShowQr] = useState(false);
+  const [includeAge, setIncludeAge] = useState(() => typeof initialValues?.age === "number");
+  const [activeStage, setActiveStage] = useState<number>(1);
+
+  const currentTheme = resolveBirthdayTheme(values.themeId);
 
   useEffect(() => {
+    if (isResponse) return;
     const stored = loadDraft();
     if (stored) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setValues(stored);
+      if (typeof stored.age === "number") {
+        setIncludeAge(true);
+      }
       setRestored(true);
     }
-  }, []);
+  }, [isResponse]);
 
   useEffect(() => {
+    if (isResponse) return;
     saveDraftLocal(values);
-  }, [values]);
+  }, [values, isResponse]);
 
-  function set<K extends keyof FormValues>(key: K, value: FormValues[K]) {
+  function set<K extends keyof BirthdayEditorValues>(key: K, value: BirthdayEditorValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
   }
 
   const parsed = birthdayContentSchema.safeParse({
-    ...values,
-    wish: values.wish || undefined,
+    recipientName: values.recipientName,
+    senderName: values.senderName,
+    headline: values.headline,
+    age: includeAge && values.age ? values.age : undefined,
+    themeId: values.themeId,
+    message: values.message,
+    wish: values.wish.trim() ? values.wish.trim() : undefined,
+    candleCount: values.candleCount,
     photos: [],
     audio: "none",
   });
+
+  function scrollToStage(num: number, id: string) {
+    setActiveStage(num);
+    const element = document.getElementById(`stage-${id}`);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
 
   async function submit(publish: boolean) {
     setBusy(true);
     setError(null);
 
     if (!parsed.success) {
-      setError("Fill in the names, headline and message first.");
+      setError("Please complete all required fields (names, headline, message) before publishing.");
       setBusy(false);
       return;
     }
 
-    // Persist locally before any network hop: a redirect must not lose work.
-    saveDraftLocal(values);
+    if (!isResponse) {
+      saveDraftLocal(values);
+    }
 
     try {
+      if (onPublishResponse && publish) {
+        const result = await onPublishResponse(parsed.data);
+        setPublished(result.path);
+        return;
+      }
+
       const created = await fetch("/api/drafts", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -111,7 +172,7 @@ export function BirthdayEditor() {
       });
 
       if (created.status === 401) {
-        window.location.href = `/auth/sign-in?callbackURL=${encodeURIComponent("/create/birthday")}`;
+        router.push(`/auth/sign-in?callbackURL=${encodeURIComponent("/create/birthday")}`);
         return;
       }
 
@@ -137,150 +198,472 @@ export function BirthdayEditor() {
     }
   }
 
-  if (preview && parsed.success) {
-    return (
-      <div className="space-y-4">
-        <div className="overflow-hidden rounded-2xl border border-stone-200">
-          <BirthdayLetter content={parsed.data} />
-        </div>
-        <button
-          type="button"
-          onClick={() => setPreview(false)}
-          className="rounded-lg border border-stone-300 px-4 py-2 text-sm"
-        >
-          Back to editing
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Restored from Storage Notice */}
       {restored ? (
-        <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          Draft restored from this browser. Sign in to save it to your account.
-        </p>
-      ) : null}
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block space-y-1">
-          <span className="text-xs uppercase tracking-[0.15em] text-stone-500">Their name</span>
-          <input
-            value={values.recipientName}
-            onChange={(event) => set("recipientName", event.target.value)}
-            required
-            className="w-full rounded-lg border border-stone-300 px-3 py-2"
-          />
-        </label>
-        <label className="block space-y-1">
-          <span className="text-xs uppercase tracking-[0.15em] text-stone-500">Your name</span>
-          <input
-            value={values.senderName}
-            onChange={(event) => set("senderName", event.target.value)}
-            required
-            className="w-full rounded-lg border border-stone-300 px-3 py-2"
-          />
-        </label>
-      </div>
-
-      <label className="block space-y-1">
-        <span className="text-xs uppercase tracking-[0.15em] text-stone-500">Headline</span>
-        <input
-          value={values.headline}
-          onChange={(event) => set("headline", event.target.value)}
-          required
-          maxLength={80}
-          className="w-full rounded-lg border border-stone-300 px-3 py-2"
-        />
-      </label>
-
-      <label className="block space-y-1">
-        <span className="text-xs uppercase tracking-[0.15em] text-stone-500">Message</span>
-        <textarea
-          value={values.message}
-          onChange={(event) => set("message", event.target.value)}
-          required
-          rows={4}
-          maxLength={600}
-          className="w-full rounded-lg border border-stone-300 px-3 py-2"
-        />
-      </label>
-
-      <label className="block space-y-1">
-        <span className="text-xs uppercase tracking-[0.15em] text-stone-500">One wish (optional)</span>
-        <input
-          value={values.wish}
-          onChange={(event) => set("wish", event.target.value)}
-          maxLength={200}
-          className="w-full rounded-lg border border-stone-300 px-3 py-2"
-        />
-      </label>
-
-      <label className="block space-y-1">
-        <span className="text-xs uppercase tracking-[0.15em] text-stone-500">Theme</span>
-        <select
-          value={values.themeId}
-          onChange={(event) => set("themeId", event.target.value as FormValues["themeId"])}
-          className="w-full rounded-lg border border-stone-300 px-3 py-2"
-        >
-          {THEMES.map((theme) => (
-            <option key={theme.id} value={theme.id}>
-              {theme.name}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      {error ? (
-        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
-        </p>
-      ) : null}
-
-      {published ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800">
-          <span>
-            Published: <span className="font-mono text-xs">{published}</span>
-          </span>
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-2.5 text-xs text-amber-900">
+          <span>Draft restored from this browser. Sign in to save it to your account.</span>
           <button
             type="button"
-            onClick={() => setShowQr(true)}
-            className="rounded-full border border-green-300 px-3 py-1 text-xs font-semibold text-green-900"
+            onClick={() => setRestored(false)}
+            aria-label="Dismiss notice"
+            className="text-amber-700 hover:text-amber-900 font-bold"
           >
-            Share QR
+            ×
           </button>
         </div>
       ) : null}
 
-      {showQr && published ? (
-        <ShareQrDialog path={published} experienceType="birthday" onClose={() => setShowQr(false)} />
-      ) : null}
+      {/* Staged Creation Navigation Bar */}
+      <nav aria-label="Creation stages" className="sticky top-16 z-20 overflow-x-auto pb-1 bg-[#faf6ff]/90 backdrop-blur-sm pt-1">
+        <ol className="flex items-center min-w-max space-x-1.5 sm:space-x-2">
+          {STAGES.map((s) => {
+            const isActive = activeStage === s.num;
+            return (
+              <li key={s.id} className="flex items-center">
+                <button
+                  type="button"
+                  onClick={() => scrollToStage(s.num, s.id)}
+                  className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                    isActive
+                      ? "bg-[#e8590c] text-white shadow-sm scale-105"
+                      : "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50"
+                  }`}
+                  aria-current={isActive ? "step" : undefined}
+                >
+                  <span
+                    className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold ${
+                      isActive ? "bg-white text-[#e8590c]" : "bg-stone-100 text-stone-600"
+                    }`}
+                  >
+                    {s.num}
+                  </span>
+                  <span>{s.label}</span>
+                </button>
+                {s.num < STAGES.length && (
+                  <span className="mx-1 text-stone-300 select-none text-xs">→</span>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      </nav>
 
-      <div className="flex flex-wrap gap-3">
-        <button
-          type="button"
-          onClick={() => setPreview(true)}
-          className="rounded-lg border border-stone-300 px-4 py-2 text-sm"
+      {/* Stage 1: Who & When */}
+      <section
+        id="stage-who"
+        className="rounded-2xl border border-stone-200/80 bg-white p-5 sm:p-7 shadow-sm space-y-5"
+      >
+        <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[#e8590c]">
+              Stage 1 of 5
+            </span>
+            <h2 className="text-base font-semibold text-stone-900">Who is this celebration for?</h2>
+          </div>
+          <span className="text-xs text-stone-400 font-medium">Names & Headline</span>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block space-y-1.5">
+            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-600">
+              Their name
+            </span>
+            <input
+              value={values.recipientName}
+              onChange={(e) => set("recipientName", e.target.value)}
+              required
+              placeholder="e.g. Maya"
+              maxLength={60}
+              className="w-full rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm transition focus:border-[#e8590c] focus:outline-none focus:ring-1 focus:ring-[#e8590c]"
+            />
+          </label>
+
+          <label className="block space-y-1.5">
+            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-600">
+              Your name
+            </span>
+            <input
+              value={values.senderName}
+              onChange={(e) => set("senderName", e.target.value)}
+              required
+              placeholder="e.g. Liam"
+              maxLength={60}
+              className="w-full rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm transition focus:border-[#e8590c] focus:outline-none focus:ring-1 focus:ring-[#e8590c]"
+            />
+          </label>
+        </div>
+
+        <label className="block space-y-1.5">
+          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-600">
+            Headline
+          </span>
+          <input
+            value={values.headline}
+            onChange={(e) => set("headline", e.target.value)}
+            required
+            maxLength={80}
+            placeholder="e.g. Happy 25th Birthday!"
+            className="w-full rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm transition focus:border-[#e8590c] focus:outline-none focus:ring-1 focus:ring-[#e8590c]"
+          />
+        </label>
+
+        {/* Optional Age Toggle & Input */}
+        <div className="rounded-xl border border-stone-200 bg-stone-50/60 p-4 space-y-3">
+          <label className="flex items-center gap-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includeAge}
+              onChange={(e) => {
+                setIncludeAge(e.target.checked);
+                if (!e.target.checked) set("age", undefined);
+              }}
+              className="h-4 w-4 rounded border-stone-300 text-[#e8590c] focus:ring-[#e8590c]"
+            />
+            <span className="text-xs font-semibold text-stone-800">
+              Include milestone age (optional)
+            </span>
+          </label>
+
+          {includeAge && (
+            <div className="pt-1">
+              <label className="block space-y-1">
+                <span className="text-xs text-stone-600">Age</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={130}
+                  value={values.age ?? ""}
+                  onChange={(e) =>
+                    set("age", e.target.value ? Number.parseInt(e.target.value, 10) : undefined)
+                  }
+                  placeholder="e.g. 25"
+                  className="w-32 rounded-lg border border-stone-300 px-3 py-1.5 text-sm transition focus:border-[#e8590c] focus:outline-none focus:ring-1 focus:ring-[#e8590c]"
+                />
+              </label>
+            </div>
+          )}
+          <p className="text-[11px] text-stone-500">
+            Age is optional — leave unchecked to celebrate without a number.
+          </p>
+        </div>
+      </section>
+
+      {/* Stage 2: Choose Theme */}
+      <section
+        id="stage-theme"
+        className="rounded-2xl border border-stone-200/80 bg-white p-5 sm:p-7 shadow-sm space-y-5"
+      >
+        <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[#e8590c]">
+              Stage 2 of 5
+            </span>
+            <h2 className="text-base font-semibold text-stone-900">Choose a visual theme</h2>
+          </div>
+          <span className="text-xs text-stone-400 font-medium">6 Custom Themes</span>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {BIRTHDAY_THEMES.map((theme) => {
+            const isSelected = values.themeId === theme.id;
+            return (
+              <button
+                key={theme.id}
+                type="button"
+                onClick={() => set("themeId", theme.id)}
+                className={`group relative flex flex-col text-left rounded-xl p-4 border transition-all cursor-pointer ${
+                  isSelected
+                    ? "shadow-sm scale-[1.01]"
+                    : "border-stone-200 hover:border-stone-300 hover:bg-stone-50/50"
+                }`}
+                style={{
+                  background: isSelected ? theme.palette.surface : undefined,
+                  borderColor: isSelected ? theme.palette.primary : undefined,
+                  boxShadow: isSelected ? `0 0 0 2px ${theme.palette.primary}33` : undefined,
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <span
+                    className="text-xs font-bold transition-colors"
+                    style={{ color: isSelected ? theme.palette.text : "#1c1917" }}
+                  >
+                    {theme.name}
+                  </span>
+                  {isSelected && (
+                    <span
+                      className="flex h-5 w-5 items-center justify-center rounded-full text-white text-[10px]"
+                      style={{ background: theme.palette.primary }}
+                    >
+                      <Icon name="check" size={12} />
+                    </span>
+                  )}
+                </div>
+                <p
+                  className="mt-1 text-[11px] line-clamp-2 transition-colors"
+                  style={{ color: isSelected ? theme.palette.mutedText : "#57534e" }}
+                >
+                  {theme.tagline}
+                </p>
+
+                {/* Palette Swatches */}
+                <div className="mt-3 flex items-center gap-1.5">
+                  <span
+                    className="h-4 w-4 rounded-full border border-black/10 shadow-inner"
+                    style={{ background: theme.palette.background }}
+                    title="Background"
+                  />
+                  <span
+                    className="h-4 w-4 rounded-full border border-black/10 shadow-inner"
+                    style={{ background: theme.palette.primary }}
+                    title="Primary"
+                  />
+                  <span
+                    className="h-4 w-4 rounded-full border border-black/10 shadow-inner"
+                    style={{ background: theme.palette.secondary }}
+                    title="Secondary"
+                  />
+                  <span
+                    className="h-4 w-4 rounded-full border border-black/10 shadow-inner"
+                    style={{ background: theme.palette.accent }}
+                    title="Accent"
+                  />
+                  <span
+                    className="ml-auto text-[10px] font-semibold uppercase tracking-wider transition-colors"
+                    style={{ color: isSelected ? theme.palette.mutedText : "#a8a29e" }}
+                  >
+                    {theme.envelope.sealSymbol}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Stage 3: Words & Wish */}
+      <section
+        id="stage-words"
+        className="rounded-2xl border border-stone-200/80 bg-white p-5 sm:p-7 shadow-sm space-y-5"
+      >
+        <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[#e8590c]">
+              Stage 3 of 5
+            </span>
+            <h2 className="text-base font-semibold text-stone-900">Your heartfelt message</h2>
+          </div>
+          <span className="text-xs text-stone-400 font-medium">Personal Letter</span>
+        </div>
+
+        <label className="block space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-600">
+              Message
+            </span>
+            <span className="text-[11px] text-stone-400">{values.message.length} / 600</span>
+          </div>
+          <textarea
+            value={values.message}
+            onChange={(e) => set("message", e.target.value)}
+            required
+            rows={5}
+            maxLength={600}
+            placeholder="Write something warm, memorable, and sincere..."
+            className="w-full rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm transition focus:border-[#e8590c] focus:outline-none focus:ring-1 focus:ring-[#e8590c]"
+          />
+        </label>
+
+        <label className="block space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-600">
+              One wish (optional)
+            </span>
+            <span className="text-[11px] text-stone-400">{values.wish.length} / 200</span>
+          </div>
+          <input
+            value={values.wish}
+            onChange={(e) => set("wish", e.target.value)}
+            maxLength={200}
+            placeholder="e.g. May this year be filled with laughter and triumphs."
+            className="w-full rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm transition focus:border-[#e8590c] focus:outline-none focus:ring-1 focus:ring-[#e8590c]"
+          />
+          <p className="text-[11px] text-stone-500">
+            A special closing wish or inside joke that appears at the finale.
+          </p>
+        </label>
+      </section>
+
+      {/* Stage 4: Cake & Candles */}
+      <section
+        id="stage-cake"
+        className="rounded-2xl border border-stone-200/80 bg-white p-5 sm:p-7 shadow-sm space-y-5"
+      >
+        <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[#e8590c]">
+              Stage 4 of 5
+            </span>
+            <h2 className="text-base font-semibold text-stone-900">Decorate their birthday cake</h2>
+          </div>
+          <span className="text-xs text-stone-400 font-medium">Interactive Cake</span>
+        </div>
+
+        <div className="space-y-2">
+          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-600">
+            Number of candles: <span className="text-[#e8590c]">{values.candleCount}</span>
+          </span>
+          <p className="text-xs text-stone-500">
+            Select the number of candles (1 to 7). Candles are decorative and independent of age.
+          </p>
+          <div className="flex flex-wrap gap-2 pt-1">
+            {[1, 2, 3, 4, 5, 6, 7].map((num) => {
+              const isSelected = values.candleCount === num;
+              return (
+                <button
+                  key={num}
+                  type="button"
+                  onClick={() => set("candleCount", num)}
+                  aria-pressed={isSelected}
+                  className={`flex h-11 w-11 items-center justify-center rounded-xl font-bold text-sm transition-all cursor-pointer ${
+                    isSelected
+                      ? "bg-[#e8590c] text-white shadow-md scale-105"
+                      : "border border-stone-200 bg-stone-50 text-stone-700 hover:border-stone-300 hover:bg-stone-100"
+                  }`}
+                >
+                  {num}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Live Interactive Preview of Cake */}
+        <div
+          className="rounded-2xl border p-4 sm:p-6 flex flex-col items-center transition-colors"
+          style={{
+            background: currentTheme.palette.background,
+            borderColor: currentTheme.palette.border,
+            color: currentTheme.palette.text,
+          }}
         >
-          Preview
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void submit(false)}
-          className="rounded-lg bg-stone-900 px-4 py-2 text-sm text-white disabled:opacity-60"
-        >
-          {busy ? "Saving…" : "Save to my account"}
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void submit(true)}
-          className="rounded-lg border border-stone-300 px-4 py-2 text-sm disabled:opacity-60"
-        >
-          Publish for 1 day
-        </button>
-      </div>
+          <p
+            className="text-[11px] font-semibold uppercase tracking-widest mb-3 opacity-70"
+            style={{ color: currentTheme.palette.mutedText }}
+          >
+            Cake Preview ({currentTheme.name})
+          </p>
+          <BirthdayCake theme={currentTheme} candleCount={values.candleCount} />
+        </div>
+      </section>
+
+      {/* Stage 5: Preview & Send */}
+      <section
+        id="stage-preview"
+        className="rounded-2xl border border-stone-200/80 bg-white p-5 sm:p-7 shadow-sm space-y-6"
+      >
+        <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[#e8590c]">
+              Stage 5 of 5
+            </span>
+            <h2 className="text-base font-semibold text-stone-900">Review their gift</h2>
+          </div>
+          <span className="text-xs text-stone-400 font-medium">Live Presentation</span>
+        </div>
+
+        {/* In-Editor Live Presentation Preview */}
+        {parsed.success ? (
+          <div className="overflow-hidden rounded-2xl border border-stone-200 shadow-inner">
+            <BirthdayLetter content={parsed.data} />
+          </div>
+        ) : (
+          <div className="rounded-xl border border-stone-200 bg-stone-50 p-6 text-center text-xs text-stone-500">
+            Fill in their name, your name, headline, and message above to preview the complete experience.
+          </div>
+        )}
+
+        {/* Permanent Link Info Banner */}
+        <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-xs text-emerald-900">
+          <Icon name="lock" size={16} className="mt-0.5 shrink-0 text-emerald-700" />
+          <div>
+            <p className="font-semibold text-emerald-950">Permanent gift link</p>
+            <p className="mt-0.5 text-emerald-800">
+              This birthday experience does not expire. It will remain accessible via its private URL.
+            </p>
+          </div>
+        </div>
+
+        {/* Error Message */}
+        {error ? (
+          <p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-700">
+            {error}
+          </p>
+        ) : null}
+
+        {/* Published Result */}
+        {published ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-green-50 p-4 text-sm text-green-900 border border-green-200">
+            <div>
+              <p className="font-semibold">Your birthday gift is published!</p>
+              <p className="font-mono text-xs text-green-700 mt-0.5">{published}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowQr(true)}
+              className="rounded-full bg-green-700 px-4 py-1.5 text-xs font-semibold text-white hover:bg-green-800 transition"
+            >
+              Share QR
+            </button>
+          </div>
+        ) : null}
+
+        {showQr && published ? (
+          <ShareQrDialog
+            path={published}
+            experienceType="birthday"
+            onClose={() => setShowQr(false)}
+          />
+        ) : null}
+
+        {/* Controls */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-stone-100">
+          {onCancel ? (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-xl border border-stone-300 px-4 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50"
+            >
+              Back
+            </button>
+          ) : (
+            <div />
+          )}
+
+          <div className="flex flex-wrap gap-2.5">
+            {!isResponse ? (
+              <button
+                type="button"
+                disabled={busy || !parsed.success}
+                onClick={() => void submit(false)}
+                className="rounded-xl bg-stone-900 px-4 py-2.5 text-xs font-semibold text-white hover:bg-stone-800 disabled:opacity-50 cursor-pointer transition"
+              >
+                {busy ? "Saving…" : "Save to my account"}
+              </button>
+            ) : null}
+
+            <button
+              type="button"
+              disabled={busy || !parsed.success}
+              onClick={() => void submit(true)}
+              className="rounded-xl bg-[#e8590c] px-5 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-[#d9480f] disabled:opacity-50 cursor-pointer transition"
+            >
+              {isResponse ? "Publish Response" : "Publish Birthday Gift"}
+            </button>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

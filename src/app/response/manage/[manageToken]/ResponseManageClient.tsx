@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { useMounted } from "@/hooks/useMounted";
 import { Icon } from "@/components/ui/icons";
 import { manageResponse } from "@/lib/api/client";
 import { resolveEmotionBadge } from "@/experiences/emotion";
@@ -19,25 +20,52 @@ export interface ResponseManageClientProps {
 }
 
 export function ResponseManageClient({ initialRecord, manageToken }: ResponseManageClientProps) {
+  const mounted = useMounted();
   const [status, setStatus] = useState(initialRecord.status);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleted, setDeleted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedPublic, setCopiedPublic] = useState(false);
+  const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  // URL scrubbing on mount: remove manageToken from the browser address bar
-  // to avoid referrer leaks or sharing the management capability accidentally.
+  // Derive public URL from local capability store without cascading effect renders
+  const publicUrl = useMemo(() => {
+    if (!mounted || typeof window === "undefined") return null;
+    try {
+      const key = "koi_reply_capabilities";
+      const raw = localStorage.getItem(key);
+      const map = raw ? JSON.parse(raw) : {};
+      const existing = map[initialRecord.id] || Object.values(map).find(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (entry: any) => entry.manageToken === manageToken || entry.responseId === initialRecord.id
+      );
+      if (existing?.publicToken) {
+        return `${window.location.origin}/response/${existing.publicToken}`;
+      }
+    } catch {
+      // Safe to ignore in private browsing
+    }
+    return null;
+  }, [mounted, initialRecord.id, manageToken]);
+
+  // Synchronize to external platform APIs: persist manage capability and scrub URL
   useEffect(() => {
     if (typeof window !== "undefined") {
-      // Store manage capability in localStorage before scrubbing
       try {
         const key = "koi_reply_capabilities";
         const raw = localStorage.getItem(key);
         const map = raw ? JSON.parse(raw) : {};
+
+        const existing = map[initialRecord.id] || Object.values(map).find(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (entry: any) => entry.manageToken === manageToken || entry.responseId === initialRecord.id
+        );
+
         map[initialRecord.id] = {
           responseId: initialRecord.id,
           manageToken,
+          publicToken: existing?.publicToken,
           updatedAt: new Date().toISOString(),
         };
         localStorage.setItem(key, JSON.stringify(map));
@@ -54,7 +82,10 @@ export function ResponseManageClient({ initialRecord, manageToken }: ResponseMan
     startTransition(async () => {
       try {
         const res = await manageResponse(manageToken, "revoke");
-        if (res.ok) setStatus("revoked");
+        if (res.ok) {
+          setStatus("revoked");
+          setActionFeedback("Public link revoked. Your reply is now hidden.");
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Could not revoke reply.");
       }
@@ -66,7 +97,10 @@ export function ResponseManageClient({ initialRecord, manageToken }: ResponseMan
     startTransition(async () => {
       try {
         const res = await manageResponse(manageToken, "restore");
-        if (res.ok) setStatus("published");
+        if (res.ok) {
+          setStatus("published");
+          setActionFeedback("Public link restored. Your reply is live.");
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Could not restore reply.");
       }
@@ -80,6 +114,7 @@ export function ResponseManageClient({ initialRecord, manageToken }: ResponseMan
         const res = await manageResponse(manageToken, "delete");
         if (res.ok) {
           setDeleted(true);
+          setActionFeedback("Reply permanently deleted.");
           try {
             const key = "koi_reply_capabilities";
             const raw = localStorage.getItem(key);
@@ -155,6 +190,11 @@ export function ResponseManageClient({ initialRecord, manageToken }: ResponseMan
           </span>
         </div>
 
+        {/* Action feedback live region */}
+        <div role="status" aria-live="polite" className="sr-only">
+          {actionFeedback}
+        </div>
+
         {/* Content Preview Card */}
         <div className="rounded-3xl border border-[#ece2f6] bg-white p-6 shadow-md">
           {(() => {
@@ -168,7 +208,7 @@ export function ResponseManageClient({ initialRecord, manageToken }: ResponseMan
             ) : null;
           })()}
 
-          <p className="whitespace-pre-line text-sm text-[#33203f] leading-relaxed">
+          <p className="whitespace-pre-line break-words text-sm text-[#33203f] leading-relaxed">
             {content.message}
           </p>
 
@@ -181,38 +221,49 @@ export function ResponseManageClient({ initialRecord, manageToken }: ResponseMan
 
         {/* Public Link Card (if active) */}
         {status === "published" ? (
-          <div className="mt-4 rounded-2xl border border-[#eddcf5] bg-white p-4 shadow-sm">
-            <label className="text-[0.74rem] font-semibold text-[#4e3661]">
-              Public Link
-            </label>
-            <p className="text-[0.68rem] text-[#8a7a9c]">
-              Anyone with this link can read your reply.
-            </p>
-            <div className="mt-2 flex items-center gap-2">
-              <input
-                type="text"
-                readOnly
-                value={typeof window !== "undefined" ? window.location.href.replace("/manage", "") : ""}
-                className="flex-1 rounded-xl border border-[#e5d9f2] bg-[#fbf9fe] px-3 py-2 text-xs text-[#33203f] focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(window.location.href.replace("/manage", ""));
-                    setCopiedPublic(true);
-                    setTimeout(() => setCopiedPublic(false), 2000);
-                  } catch {
-                    setCopiedPublic(false);
-                  }
-                }}
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-[#6d3fa8] px-3.5 py-2 text-xs font-semibold text-white transition active:scale-95"
-              >
-                <Icon name={copiedPublic ? "check" : "copy"} size={14} />
-                {copiedPublic ? "Copied" : "Copy"}
-              </button>
+          publicUrl ? (
+            <div className="mt-4 rounded-2xl border border-[#eddcf5] bg-white p-4 shadow-sm">
+              <label htmlFor="manage-public-link" className="text-[0.74rem] font-semibold text-[#4e3661]">
+                Public Link
+              </label>
+              <p className="text-[0.68rem] text-[#8a7a9c]">
+                Anyone with this link can read your reply.
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  id="manage-public-link"
+                  type="text"
+                  readOnly
+                  value={publicUrl}
+                  className="min-w-0 flex-1 rounded-xl border border-[#e5d9f2] bg-[#fbf9fe] px-3 py-2 text-xs text-[#33203f] focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(publicUrl);
+                      setCopiedPublic(true);
+                      setTimeout(() => setCopiedPublic(false), 2000);
+                    } catch {
+                      setCopiedPublic(false);
+                    }
+                  }}
+                  aria-label="Copy public response link"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-[#6d3fa8] px-3.5 py-2 text-xs font-semibold text-white transition motion-safe:active:scale-95"
+                >
+                  <Icon name={copiedPublic ? "check" : "copy"} size={14} />
+                  {copiedPublic ? "Copied" : "Copy"}
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="mt-4 rounded-2xl border border-[#ede3f5] bg-[#faf6ff] p-4 text-xs text-[#5c476f]">
+              <p className="font-semibold text-[#33203f]">Public link is live</p>
+              <p className="mt-1 text-[0.72rem] leading-relaxed text-[#7a6a8c]">
+                The public link was created on your original device. Because you opened this on a different browser, the viewing token is not stored locally.
+              </p>
+            </div>
+          )
         ) : (
           <div className="mt-4 rounded-2xl border border-[#fed7aa] bg-[#fffbf5] p-4 text-xs text-[#9a3412]">
             <p className="font-semibold">Public link is disabled</p>
@@ -225,7 +276,7 @@ export function ResponseManageClient({ initialRecord, manageToken }: ResponseMan
         {/* Action Controls */}
         <div className="mt-6 space-y-3">
           {error ? (
-            <p className="rounded-xl bg-[#fdf0f0] p-3 text-xs text-[#b03030]">
+            <p role="alert" className="rounded-xl bg-[#fdf0f0] p-3 text-xs text-[#b03030]">
               {error}
             </p>
           ) : null}
@@ -235,7 +286,7 @@ export function ResponseManageClient({ initialRecord, manageToken }: ResponseMan
               type="button"
               disabled={isPending}
               onClick={handleRevoke}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-[#eddcf5] bg-white py-3 text-xs font-semibold text-[#6d3fa8] shadow-sm transition hover:bg-[#faf5ff] active:scale-[0.99] disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-[#eddcf5] bg-white py-3 text-xs font-semibold text-[#6d3fa8] shadow-sm transition hover:bg-[#faf5ff] motion-safe:active:scale-[0.99] disabled:opacity-50"
             >
               <Icon name="link-off" size={15} />
               {isPending ? "Updating…" : "Revoke Public Link"}
@@ -245,7 +296,7 @@ export function ResponseManageClient({ initialRecord, manageToken }: ResponseMan
               type="button"
               disabled={isPending}
               onClick={handleRestore}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#6d3fa8] py-3 text-xs font-semibold text-white shadow-sm transition active:scale-[0.99] disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#6d3fa8] py-3 text-xs font-semibold text-white shadow-sm transition motion-safe:active:scale-[0.99] disabled:opacity-50"
             >
               <Icon name="refresh" size={15} />
               {isPending ? "Updating…" : "Restore Public Link"}
@@ -253,19 +304,25 @@ export function ResponseManageClient({ initialRecord, manageToken }: ResponseMan
           )}
 
           {confirmingDelete ? (
-            <div className="rounded-2xl border border-[#fca5a5] bg-[#fff5f5] p-4 text-center">
-              <p className="text-xs font-semibold text-[#991b1b]">
+            <div
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="delete-confirm-title"
+              aria-describedby="delete-confirm-desc"
+              className="rounded-2xl border border-[#fca5a5] bg-[#fff5f5] p-4 text-center"
+            >
+              <p id="delete-confirm-title" className="text-xs font-semibold text-[#991b1b]">
                 Permanently delete this reply?
               </p>
-              <p className="mt-1 text-[0.7rem] text-[#b91c1c] leading-relaxed">
+              <p id="delete-confirm-desc" className="mt-1 text-[0.7rem] text-[#b91c1c] leading-relaxed">
                 This cannot be undone. All photos and messages will be removed permanently.
               </p>
-              <div className="mt-3 flex items-center justify-center gap-2">
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                 <button
                   type="button"
                   disabled={isPending}
                   onClick={handleDelete}
-                  className="rounded-xl bg-[#dc2626] px-4 py-2 text-xs font-semibold text-white transition active:scale-95 disabled:opacity-50"
+                  className="rounded-xl bg-[#dc2626] px-4 py-2 text-xs font-semibold text-white transition motion-safe:active:scale-95 disabled:opacity-50"
                 >
                   {isPending ? "Deleting…" : "Yes, Delete Permanently"}
                 </button>
@@ -273,7 +330,7 @@ export function ResponseManageClient({ initialRecord, manageToken }: ResponseMan
                   type="button"
                   disabled={isPending}
                   onClick={() => setConfirmingDelete(false)}
-                  className="rounded-xl border border-[#e5e7eb] bg-white px-4 py-2 text-xs font-medium text-[#4b5563] transition hover:bg-gray-50"
+                  className="rounded-xl border border-[#e5e7eb] bg-white px-4 py-2 text-xs font-medium text-[#4b5563] transition hover:bg-gray-50 motion-safe:active:scale-95"
                 >
                   Cancel
                 </button>
@@ -283,7 +340,7 @@ export function ResponseManageClient({ initialRecord, manageToken }: ResponseMan
             <button
               type="button"
               onClick={() => setConfirmingDelete(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-[#fee2e2] py-3 text-xs font-semibold text-[#dc2626] transition hover:bg-[#fef2f2] active:scale-[0.99]"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-[#fee2e2] py-3 text-xs font-semibold text-[#dc2626] transition hover:bg-[#fef2f2] motion-safe:active:scale-[0.99]"
             >
               <Icon name="trash" size={15} />
               Delete Reply Permanently

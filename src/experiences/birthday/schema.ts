@@ -7,7 +7,16 @@ import { z } from "zod";
  * wish and an optional age, not an apology's three-message arc. Keeping the
  * shapes separate is what stops one experience's fields leaking into another.
  */
-export const BIRTHDAY_THEME_IDS = ["confetti", "midnight-gold"] as const;
+export const BIRTHDAY_THEME_IDS = [
+  "confetti",
+  "midnight-gold",
+  "pastel",
+  "floral",
+  "vintage",
+  "playful",
+] as const;
+
+export type BirthdayThemeId = (typeof BIRTHDAY_THEME_IDS)[number];
 
 const name = (label: string) =>
   z
@@ -38,6 +47,8 @@ export const birthdayContentSchema = z.object({
     .max(600, "Keep the message under 600 characters."),
   wish: z.string().trim().max(200, "Keep the wish under 200 characters.").optional(),
   themeId: z.enum(BIRTHDAY_THEME_IDS),
+  /** Decorative candle count on the cake (1–7, defaults to 3, strictly independent of age). */
+  candleCount: z.number().int().min(1).max(7).default(3),
   photos: z.array(z.string().trim().min(1).max(2048)).max(5, "Up to 5 photos.").default([]),
   audio: z.enum(["none", "celebration", "soft"]).default("none"),
 });

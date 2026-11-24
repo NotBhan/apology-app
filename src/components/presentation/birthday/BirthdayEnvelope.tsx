@@ -1,0 +1,208 @@
+"use client";
+
+import { useCallback, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
+import type { BirthdayTheme } from "@/experiences/birthday/themes";
+
+type Stage = "sealed" | "cracking" | "opening" | "rising" | "unfolded";
+
+interface BirthdayEnvelopeProps {
+  recipientName: string;
+  senderName: string;
+  theme: BirthdayTheme;
+  onOpened?: () => void;
+  className?: string;
+}
+
+export function BirthdayEnvelope({
+  recipientName,
+  senderName,
+  theme,
+  onOpened,
+  className = "",
+}: BirthdayEnvelopeProps) {
+  const reduce = useReducedMotion();
+  const [stage, setStage] = useState<Stage>("sealed");
+
+  const open = useCallback(() => {
+    if (stage !== "sealed") return;
+    if (reduce) {
+      setStage("unfolded");
+      onOpened?.();
+      return;
+    }
+    setStage("cracking");
+    window.setTimeout(() => setStage("opening"), 350);
+    window.setTimeout(() => setStage("rising"), 1050);
+    window.setTimeout(() => {
+      setStage("unfolded");
+      onOpened?.();
+    }, 1700);
+  }, [stage, reduce, onOpened]);
+
+  const revealed = stage === "unfolded";
+  const flapOpen = stage === "opening" || stage === "rising" || revealed;
+  const letterRising = stage === "rising" || revealed;
+
+  return (
+    <div className={`relative flex w-full flex-col items-center ${className}`}>
+      {/* Outer Envelope Container */}
+      <motion.div
+        className="relative"
+        style={{
+          width: "min(88vw, 350px)",
+          height: "calc(min(88vw, 350px) / 1.45)",
+        }}
+        animate={{ opacity: revealed ? 0.35 : 1, scale: revealed ? 0.95 : 1 }}
+        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+      >
+        {/* Envelope Back Panel */}
+        <div
+          className="absolute inset-0 rounded-[12px] shadow-[0_24px_50px_-20px_rgba(0,0,0,0.35)]"
+          style={{ background: theme.envelope.paper }}
+        />
+
+        {/* Interior Card peeking out */}
+        <motion.div
+          className="absolute left-[6%] right-[6%] origin-bottom overflow-hidden rounded-[8px] p-4 text-center shadow-sm"
+          style={{
+            top: "12%",
+            height: "82%",
+            background: theme.palette.surface,
+            border: `1.5px solid ${theme.palette.border}`,
+            zIndex: letterRising ? 30 : 5,
+          }}
+          initial={false}
+          animate={{
+            y: letterRising ? "-22%" : "4%",
+            scale: letterRising ? 1 : 0.94,
+            rotateX: letterRising ? 0 : 10,
+          }}
+          transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <div className="flex h-full flex-col items-center justify-center gap-1.5">
+            <span
+              className="text-[10px] font-semibold uppercase tracking-[0.24em]"
+              style={{ color: theme.palette.accent }}
+            >
+              Happy Birthday
+            </span>
+            <span
+              className="text-base font-bold truncate max-w-full"
+              style={{
+                fontFamily: theme.typography.headingFont,
+                color: theme.palette.text,
+              }}
+            >
+              {recipientName || "Friend"}
+            </span>
+            <span
+              className="text-xs italic opacity-75 truncate max-w-full"
+              style={{ color: theme.palette.mutedText }}
+            >
+              A special wish for your day
+            </span>
+          </div>
+        </motion.div>
+
+        {/* Envelope Pocket Front */}
+        <div className="absolute inset-0 z-20 overflow-hidden rounded-[12px] pointer-events-none">
+          <svg viewBox="0 0 350 240" className="h-full w-full" preserveAspectRatio="none">
+            {/* Left triangle flap */}
+            <path d="M 0 0 L 175 145 L 0 240 Z" fill={theme.envelope.paper} opacity="0.95" />
+            {/* Right triangle flap */}
+            <path d="M 350 0 L 175 145 L 350 240 Z" fill={theme.envelope.paper} opacity="0.95" />
+            {/* Bottom trapezoid fold */}
+            <path
+              d="M 0 240 L 175 125 L 350 240 Z"
+              fill={theme.envelope.flap}
+              stroke={theme.envelope.accent}
+              strokeWidth="0.8"
+              opacity="0.9"
+            />
+          </svg>
+        </div>
+
+        {/* Top Folding Flap with Seal */}
+        <motion.div
+          className="absolute inset-x-0 top-0 z-[25] origin-top overflow-visible"
+          style={{
+            height: "60%",
+            transformStyle: "preserve-3d",
+          }}
+          initial={false}
+          animate={{
+            rotateX: flapOpen ? -165 : 0,
+            zIndex: flapOpen ? 0 : 25,
+          }}
+          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <svg viewBox="0 0 350 150" className="h-full w-full" preserveAspectRatio="none">
+            <path
+              d="M 0 0 L 175 140 L 350 0 Z"
+              fill={theme.envelope.flap}
+              stroke={theme.envelope.accent}
+              strokeWidth="1"
+            />
+          </svg>
+
+          {/* Decorative Seal Sticker (Centrally Placed on Flap Point) */}
+          <div
+            className="absolute left-1/2 -translate-x-1/2"
+            style={{
+              top: "calc(100% - 24px)",
+            }}
+          >
+            <motion.button
+              type="button"
+              onClick={open}
+              disabled={revealed}
+              aria-label={`Open birthday letter from ${senderName || "your friend"}`}
+              className="group relative flex h-12 w-12 items-center justify-center rounded-full shadow-md transition-transform hover:scale-105 active:scale-95 cursor-pointer focus:outline-none focus-visible:ring-2"
+              style={{
+                background: theme.envelope.seal,
+                color: theme.palette.surface,
+              }}
+              animate={
+                stage === "cracking"
+                  ? { scale: [1, 1.25, 0.85], rotate: [0, -10, 10, 0] }
+                  : undefined
+              }
+            >
+              {theme.envelope.sealSymbol === "cake" ? (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2C11.45 2 11 2.45 11 3C11 3.55 11.45 4 12 4C12.55 4 13 3.55 13 3C13 2.45 12.55 2 12 2ZM6 8C4.9 8 4 8.9 4 10V11H20V10C20 8.9 19.1 8 18 8H15V6H13V8H11V6H9V8H6ZM4 13V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V13H4Z" />
+                </svg>
+              ) : theme.envelope.sealSymbol === "star" ? (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                  <polygon points="12,2 15,9 22,9 17,14 19,21 12,17 5,21 7,14 2,9 9,9" />
+                </svg>
+              ) : theme.envelope.sealSymbol === "heart" ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                </svg>
+              ) : theme.envelope.sealSymbol === "flower" ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <circle cx="12" cy="12" r="3" />
+                  <circle cx="12" cy="6" r="2.5" opacity="0.9" />
+                  <circle cx="12" cy="18" r="2.5" opacity="0.9" />
+                  <circle cx="6" cy="12" r="2.5" opacity="0.9" />
+                  <circle cx="18" cy="12" r="2.5" opacity="0.9" />
+                </svg>
+              ) : theme.envelope.sealSymbol === "stamp" ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="2 2" />
+                  <circle cx="12" cy="12" r="4" />
+                </svg>
+              ) : (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 13C10.9 13 10 12.1 10 11C10 9.9 10.9 9 12 9C13.1 9 14 9.9 14 11C14 12.1 13.1 13 12 13ZM18 7C17.4 7 16.8 7.2 16.3 7.6L14 9.9C13.5 9.4 12.8 9 12 9C11.2 9 10.5 9.4 10 9.9L7.7 7.6C7.2 7.2 6.6 7 6 7C4.3 7 3 8.3 3 10C3 11.2 3.7 12.3 4.8 12.7L8 15L4 21L7 21L10 16L12 17.5L14 16L17 21L20 21L16 15L19.2 12.7C20.3 12.3 21 11.2 21 10C21 8.3 19.7 7 18 7Z" />
+                </svg>
+              )}
+            </motion.button>
+          </div>
+        </motion.div>
+      </motion.div>
+    </div>
+  );
+}

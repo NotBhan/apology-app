@@ -8,10 +8,13 @@ import { RESPONSE_COPY } from "@/lib/api/responses";
 import { cn } from "@/lib/cn";
 import { Icon } from "@/components/ui/icons";
 import { QuickReplyModal } from "@/components/response/QuickReplyModal";
+import { ExperienceReplyModal } from "@/components/response/ExperienceReplyModal";
+import { getExperience } from "@/experiences/registry";
 
 interface ResponsePanelProps {
   apologyId?: string;
   senderName: string;
+  recipientName?: string;
   onReplay: () => void;
   onCharacterState: (state: CharacterState) => void;
   /** Lets the scene render a restrained celebration for one answer only. */
@@ -40,6 +43,7 @@ const EMOTIONS: { key: EmotionOption; label: string }[] = [
 export function ResponsePanel({
   apologyId,
   senderName,
+  recipientName,
   onReplay,
   onCharacterState,
   onChoiceChange,
@@ -51,6 +55,7 @@ export function ResponsePanel({
   const [showShare, setShowShare] = useState(false);
   const [copied, setCopied] = useState(false);
   const [quickReplyOpen, setQuickReplyOpen] = useState(false);
+  const [experienceReplyOpen, setExperienceReplyOpen] = useState(false);
 
   const copy = choice ? RESPONSE_COPY[choice] : null;
 
@@ -240,30 +245,79 @@ export function ResponsePanel({
           </div>
         )}
 
-        {apologyId ? (
-          <div className="mt-5 border-t pt-4" style={{ borderColor: "var(--t-border)" }}>
-            <button
-              type="button"
-              onClick={() => setQuickReplyOpen(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition active:scale-[0.985]"
-              style={{
-                borderColor: "var(--t-primary)",
-                background: "color-mix(in oklab, var(--t-primary) 10%, transparent)",
-                color: "var(--t-primary)",
-              }}
-            >
-              <Icon name="message" size={15} />
-              <span>Send a quick reply to {senderName}</span>
-            </button>
-            <QuickReplyModal
-              apologyId={apologyId}
-              senderName={senderName}
-              isOpen={quickReplyOpen}
-              onClose={() => setQuickReplyOpen(false)}
-              experienceId="apology"
-            />
-          </div>
-        ) : null}
+        {(() => {
+          const apologyExp = getExperience("apology");
+          const replyConfig = apologyExp?.replyConfig;
+          const isReplyEnabled = Boolean(apologyId && replyConfig?.enabled === true);
+          if (!isReplyEnabled || !apologyId) return null;
+
+          const inviteLabel = typeof replyConfig?.inviteLabel === "function"
+            ? replyConfig.inviteLabel(senderName)
+            : `Send a quick reply to ${senderName}`;
+
+          const isExperienceReplyEnabled = Boolean(
+            apologyId &&
+            replyConfig?.enabled === true &&
+            replyConfig?.allowExperienceReply === true
+          );
+          const experienceInviteLabel = typeof replyConfig?.experienceInviteLabel === "function"
+            ? replyConfig.experienceInviteLabel(senderName)
+            : `Create an experience for ${senderName}`;
+
+          return (
+            <div className="mt-5 border-t pt-4" style={{ borderColor: "var(--t-border)" }}>
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => setQuickReplyOpen(true)}
+                  aria-haspopup="dialog"
+                  aria-expanded={quickReplyOpen}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition motion-safe:active:scale-[0.985]"
+                  style={{
+                    borderColor: "var(--t-primary)",
+                    background: "color-mix(in oklab, var(--t-primary) 10%, transparent)",
+                    color: "var(--t-primary)",
+                  }}
+                >
+                  <Icon name="message" size={15} />
+                  <span>{inviteLabel}</span>
+                </button>
+                {isExperienceReplyEnabled ? (
+                  <button
+                    type="button"
+                    onClick={() => setExperienceReplyOpen(true)}
+                    aria-haspopup="dialog"
+                    aria-expanded={experienceReplyOpen}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl border px-4 py-2 text-xs font-medium transition hover:bg-black/5 motion-safe:active:scale-[0.985]"
+                    style={{
+                      borderColor: "var(--t-border)",
+                      color: "var(--t-muted)",
+                    }}
+                  >
+                    <Icon name="pen-line" size={14} />
+                    <span>{experienceInviteLabel}</span>
+                  </button>
+                ) : null}
+              </div>
+              <QuickReplyModal
+                apologyId={apologyId}
+                senderName={senderName}
+                isOpen={quickReplyOpen}
+                onClose={() => setQuickReplyOpen(false)}
+                experienceId="apology"
+              />
+              {isExperienceReplyEnabled ? (
+                <ExperienceReplyModal
+                  apologyId={apologyId}
+                  parentSenderName={senderName}
+                  parentRecipientName={recipientName ?? ""}
+                  isOpen={experienceReplyOpen}
+                  onClose={() => setExperienceReplyOpen(false)}
+                />
+              ) : null}
+            </div>
+          );
+        })()}
       </motion.div>
     </div>
   );

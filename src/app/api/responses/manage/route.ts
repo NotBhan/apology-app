@@ -97,14 +97,25 @@ export async function POST(request: Request) {
   const repository = getResponseRepository();
 
   try {
+    const existing = await repository.getByManageToken(manageToken);
+    if (!existing) {
+      return jsonError(404, "Response not found or management token invalid.", undefined, SECURE_MANAGE_HEADERS);
+    }
+
     if (action === "revoke") {
+      if (existing.status !== "published") {
+        return jsonError(409, "The response cannot transition to the requested state.", undefined, SECURE_MANAGE_HEADERS);
+      }
       const record = await repository.revokeResponse(manageToken);
-      return jsonOk({ ok: true, status: record.status }, 200, SECURE_MANAGE_HEADERS);
+      return jsonOk({ ok: true, status: record?.status ?? "revoked" }, 200, SECURE_MANAGE_HEADERS);
     }
 
     if (action === "restore") {
+      if (existing.status !== "revoked") {
+        return jsonError(409, "The response cannot transition to the requested state.", undefined, SECURE_MANAGE_HEADERS);
+      }
       const record = await repository.restoreResponse(manageToken);
-      return jsonOk({ ok: true, status: record.status }, 200, SECURE_MANAGE_HEADERS);
+      return jsonOk({ ok: true, status: record?.status ?? "published" }, 200, SECURE_MANAGE_HEADERS);
     }
 
     if (action === "delete") {

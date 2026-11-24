@@ -39,6 +39,8 @@ export function QuickReplyModal({
   const [isPending, startTransition] = useTransition();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const previousActiveElement = useRef<HTMLElement | null>(null);
 
   // Resolution semantics:
   // - Omitted experienceId -> default to "apology" for backward compatibility.
@@ -49,17 +51,59 @@ export function QuickReplyModal({
   const experience = getExperience(targetId);
   const config = experience?.replyConfig;
 
-  // Close on Escape key
+  // Keyboard trap, return focus, and Escape key handling
   useEffect(() => {
-    if (!isOpen || !config || config.enabled === false) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose, config]);
+    if (!isOpen || config?.enabled !== true) return;
 
-  if (!isOpen || !config || config.enabled === false) return null;
+    previousActiveElement.current = document.activeElement as HTMLElement | null;
+
+    // Focus first interactive control within modal on open
+    if (dialogRef.current) {
+      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length > 0) {
+        focusable[0]?.focus();
+      }
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        // Prevent accidental closing during upload or submission
+        if (!uploading && !isPending) {
+          onClose();
+        }
+      } else if (event.key === "Tab") {
+        if (!dialogRef.current) return;
+        const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+
+        if (event.shiftKey) {
+          if (document.activeElement === first) {
+            last?.focus();
+            event.preventDefault();
+          }
+        } else {
+          if (document.activeElement === last) {
+            first?.focus();
+            event.preventDefault();
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      previousActiveElement.current?.focus();
+    };
+  }, [isOpen, onClose, config, uploading, isPending]);
+
+  if (!isOpen || config?.enabled !== true) return null;
 
   async function handlePhotoSelected(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -120,9 +164,13 @@ export function QuickReplyModal({
           const key = "koi_reply_capabilities";
           const raw = localStorage.getItem(key);
           const map = raw ? JSON.parse(raw) : {};
-          map[replyResult.publicToken] = {
+          const entryKey = responseId ?? replyResult.manageToken;
+          map[entryKey] = {
+            responseId: responseId ?? undefined,
             publicToken: replyResult.publicToken,
             manageToken: replyResult.manageToken,
+            publicUrl: replyResult.publicUrl,
+            manageUrl: replyResult.manageUrl,
             apologyId,
             createdAt: new Date().toISOString(),
           };
@@ -167,14 +215,15 @@ export function QuickReplyModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="quick-reply-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+      ref={dialogRef}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-4 backdrop-blur-sm"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget && !uploading && !isPending) onClose();
       }}
     >
-      <div className="flex max-h-[90vh] w-full max-w-[460px] flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+      <div className="flex max-h-[85dvh] sm:max-h-[90vh] w-full max-w-[460px] flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#f0e8f7] px-5 py-4">
+        <div className="flex items-center justify-between border-b border-[#f0e8f7] px-4 py-3.5 sm:px-5 sm:py-4">
           <div>
             <h2 id="quick-reply-title" className="text-[1.05rem] font-semibold text-[#33203f]">
               {result ? "Reply Sent" : config.modalTitle(senderName)}
@@ -186,15 +235,16 @@ export function QuickReplyModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-2 text-[#8a7a9c] hover:bg-[#f6f0fb] hover:text-[#33203f]"
-            aria-label="Close"
+            disabled={uploading || isPending}
+            className="rounded-full p-2 text-[#8a7a9c] hover:bg-[#f6f0fb] hover:text-[#33203f] disabled:opacity-40"
+            aria-label="Close reply modal"
           >
             <Icon name="x" size={18} />
           </button>
         </div>
 
         {/* Content */}
-        <div className="overflow-y-auto px-5 py-4">
+        <div className="overflow-y-auto px-4 py-3.5 sm:px-5 sm:py-4">
           {result ? (
             /* Success State */
             <div className="space-y-5">
@@ -218,20 +268,22 @@ export function QuickReplyModal({
 
               {/* Public Link Card */}
               <div className="space-y-1.5">
-                <label className="text-[0.74rem] font-semibold text-[#4e3661]">
+                <label htmlFor="modal-public-link" className="text-[0.74rem] font-semibold text-[#4e3661]">
                   Public Response Link
                 </label>
                 <div className="flex items-center gap-2">
                   <input
+                    id="modal-public-link"
                     type="text"
                     readOnly
                     value={typeof window !== "undefined" ? `${window.location.origin}${result.publicUrl}` : result.publicUrl}
-                    className="flex-1 rounded-xl border border-[#e5d9f2] bg-[#fbf9fe] px-3 py-2 text-[0.75rem] text-[#33203f] focus:outline-none"
+                    className="min-w-0 flex-1 rounded-xl border border-[#e5d9f2] bg-[#fbf9fe] px-3 py-2 text-[0.75rem] text-[#33203f] focus:outline-none"
                   />
                   <button
                     type="button"
                     onClick={copyPublicLink}
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-[0.75rem] font-semibold text-white transition active:scale-95"
+                    aria-label="Copy public response link"
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-[0.75rem] font-semibold text-white transition motion-safe:active:scale-95"
                     style={{ backgroundColor: config.accent }}
                   >
                     <Icon name={copiedPublic ? "check" : "copy"} size={14} />
@@ -255,15 +307,17 @@ export function QuickReplyModal({
                 </p>
                 <div className="flex items-center gap-2 pt-1">
                   <input
+                    id="modal-manage-link"
                     type="text"
                     readOnly
                     value={typeof window !== "undefined" ? `${window.location.origin}${result.manageUrl}` : result.manageUrl}
-                    className="flex-1 rounded-xl border border-[#ecdbe4] bg-white px-3 py-2 text-[0.72rem] text-[#33203f] focus:outline-none"
+                    className="min-w-0 flex-1 rounded-xl border border-[#ecdbe4] bg-white px-3 py-2 text-[0.72rem] text-[#33203f] focus:outline-none"
                   />
                   <button
                     type="button"
                     onClick={copyManageLink}
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-[#7a3b69] px-3.5 py-2 text-[0.72rem] font-semibold text-[#7a3b69] transition active:scale-95 hover:bg-[#faeef5]"
+                    aria-label="Copy private management link"
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-[#7a3b69] px-3.5 py-2 text-[0.72rem] font-semibold text-[#7a3b69] transition hover:bg-[#faeef5] motion-safe:active:scale-95"
                   >
                     <Icon name={copiedManage ? "check" : "copy"} size={14} />
                     {copiedManage ? "Copied" : "Copy"}
@@ -283,7 +337,7 @@ export function QuickReplyModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="rounded-full px-5 py-2 text-[0.75rem] font-semibold text-white transition active:scale-95"
+                  className="rounded-full px-5 py-2 text-[0.75rem] font-semibold text-white transition motion-safe:active:scale-95"
                   style={{ backgroundColor: config.accent }}
                 >
                   Done
@@ -307,6 +361,7 @@ export function QuickReplyModal({
                       <button
                         key={item.key}
                         type="button"
+                        aria-pressed={active}
                         onClick={() => setEmotion(active ? null : item.key)}
                         title={item.description}
                         className={`rounded-full border px-3 py-1 text-[0.72rem] transition ${
@@ -343,7 +398,7 @@ export function QuickReplyModal({
                         key={preset}
                         type="button"
                         onClick={() => setMessage(preset)}
-                        className="rounded-xl border border-[#ece1f5] bg-[#faf7fd] px-2.5 py-1 text-left text-[0.72rem] text-[#5c476f] transition hover:border-[#d7c3e6] hover:bg-[#f4edf9] active:scale-[0.98]"
+                        className="rounded-xl border border-[#ece1f5] bg-[#faf7fd] px-2.5 py-1 text-left text-[0.72rem] text-[#5c476f] transition hover:border-[#d7c3e6] hover:bg-[#f4edf9] motion-safe:active:scale-[0.98]"
                       >
                         {preset}
                       </button>
@@ -358,7 +413,10 @@ export function QuickReplyModal({
                   <label htmlFor="reply-message" className="text-[0.72rem] font-medium uppercase tracking-[0.16em] text-[#8a7a9c]">
                     Your message
                   </label>
-                  <span className={`text-[0.68rem] ${message.length > 2000 ? "text-red-500 font-semibold" : "text-[#b0a2be]"}`}>
+                  <span
+                    aria-live="polite"
+                    className={`text-[0.68rem] ${message.length > 2000 ? "text-red-500 font-semibold" : "text-[#b0a2be]"}`}
+                  >
                     {message.length} / 2000
                   </span>
                 </div>
@@ -369,6 +427,8 @@ export function QuickReplyModal({
                   onChange={(e) => setMessage(e.target.value)}
                   maxLength={2000}
                   placeholder={config.messagePlaceholder}
+                  aria-invalid={Boolean(error)}
+                  aria-describedby={error ? "reply-error" : undefined}
                   className="mt-1.5 w-full resize-none rounded-2xl border border-[#e5daf0] p-3 text-[0.85rem] text-[#33203f] placeholder:text-[#b8a9c8] focus:border-[#6d3fa8] focus:outline-none"
                 />
               </div>
@@ -380,25 +440,25 @@ export function QuickReplyModal({
                     Attach Photos ({photos.length}/10)
                   </span>
                   {uploading ? (
-                    <span className="text-[0.68rem] font-medium" style={{ color: config.accent }}>
+                    <span role="status" aria-live="polite" className="text-[0.68rem] font-medium" style={{ color: config.accent }}>
                       Uploading photo…
                     </span>
                   ) : null}
                 </div>
 
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {photos.map((photo) => (
+                  {photos.map((photo, pIdx) => (
                     <div
                       key={photo.id}
                       className="group relative h-16 w-16 overflow-hidden rounded-xl border border-[#e0d4ec]"
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={photo.previewUrl} alt="Attached moment" className="h-full w-full object-cover" />
+                      <img src={photo.previewUrl} alt={`Attached moment ${pIdx + 1}`} className="h-full w-full object-cover" />
                       <button
                         type="button"
                         onClick={() => removePhoto(photo.id)}
                         className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white opacity-80 transition hover:opacity-100"
-                        aria-label="Remove photo"
+                        aria-label={`Remove photo ${pIdx + 1}`}
                       >
                         <Icon name="x" size={10} />
                       </button>
@@ -429,7 +489,7 @@ export function QuickReplyModal({
               </div>
 
               {error ? (
-                <p className="rounded-xl bg-[#fdf0f0] p-2.5 text-[0.72rem] text-[#b03030]">
+                <p id="reply-error" role="alert" className="rounded-xl bg-[#fdf0f0] p-2.5 text-[0.72rem] text-[#b03030]">
                   {error}
                 </p>
               ) : null}
@@ -439,7 +499,8 @@ export function QuickReplyModal({
                 <button
                   type="submit"
                   disabled={isPending || uploading || !message.trim()}
-                  className="flex w-full items-center justify-center gap-2 rounded-full py-2.5 text-[0.82rem] font-semibold text-white transition active:scale-[0.99] disabled:opacity-50"
+                  aria-busy={isPending}
+                  className="flex w-full items-center justify-center gap-2 rounded-full py-2.5 text-[0.82rem] font-semibold text-white transition motion-safe:active:scale-[0.99] disabled:opacity-50"
                   style={{ backgroundColor: config.accent }}
                 >
                   <Icon name="send" size={15} />

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
@@ -98,17 +98,143 @@ describe("QuickReplyModal", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("allows selecting and toggling an emotion tag", async () => {
+  it("allows selecting and toggling an emotion tag with correct aria-pressed states", async () => {
     const user = userEvent.setup();
     render(<QuickReplyModal {...defaultProps} />);
 
     const forgiveBtn = screen.getByRole("button", { name: "I forgive you" });
+    const timeBtn = screen.getByRole("button", { name: "I need some time" });
+
+    expect(forgiveBtn).toHaveAttribute("aria-pressed", "false");
+    expect(timeBtn).toHaveAttribute("aria-pressed", "false");
+
     await user.click(forgiveBtn);
+    expect(forgiveBtn).toHaveAttribute("aria-pressed", "true");
+    expect(timeBtn).toHaveAttribute("aria-pressed", "false");
     expect(forgiveBtn).toHaveClass("font-semibold");
 
     // Toggle off
     await user.click(forgiveBtn);
+    expect(forgiveBtn).toHaveAttribute("aria-pressed", "false");
     expect(forgiveBtn).not.toHaveClass("font-semibold");
+  });
+
+  it("associates submission errors with textarea and announces with role=alert", async () => {
+    const user = userEvent.setup();
+    render(<QuickReplyModal {...defaultProps} />);
+
+    const textarea = screen.getByPlaceholderText("Write your reply...");
+    expect(textarea).toHaveAttribute("aria-invalid", "false");
+    expect(textarea).not.toHaveAttribute("aria-describedby");
+
+    const sendBtn = screen.getByRole("button", { name: /Send Quick Reply/i });
+    // Attempt submit without text
+    await user.click(sendBtn);
+
+    // If disabled via HTML attribute, trigger form submit via enter or fireEvent
+    const form = textarea.closest("form")!;
+    fireEvent.submit(form);
+
+    const errorAlert = screen.getByRole("alert");
+    expect(errorAlert).toBeInTheDocument();
+    expect(errorAlert).toHaveTextContent("Please write a message before sending.");
+    expect(textarea).toHaveAttribute("aria-invalid", "true");
+    expect(textarea).toHaveAttribute("aria-describedby", "reply-error");
+  });
+
+  it("moves initial focus into dialog on open", () => {
+    render(<QuickReplyModal {...defaultProps} isOpen={true} />);
+
+    // First focusable element inside dialog is the close button
+    const closeBtn = screen.getByRole("button", { name: "Close reply modal" });
+    expect(closeBtn).toHaveFocus();
+  });
+
+  it("contains focus within dialog during Tab and Shift+Tab cycling", () => {
+    render(<QuickReplyModal {...defaultProps} isOpen={true} />);
+
+    const dialog = screen.getByRole("dialog");
+    const focusable = dialog.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    // Focus last and press Tab -> cycles to first
+    last.focus();
+    expect(document.activeElement).toBe(last);
+
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true })
+    );
+    expect(document.activeElement).toBe(first);
+
+    // Focus first and press Shift+Tab -> cycles to last
+    first.focus();
+    expect(document.activeElement).toBe(first);
+
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, cancelable: true })
+    );
+    expect(document.activeElement).toBe(last);
+  });
+
+  it("closes on Escape key when idle, but restores focus to previously active element", async () => {
+    const onClose = vi.fn();
+    const trigger = document.createElement("button");
+    trigger.textContent = "Trigger";
+    document.body.appendChild(trigger);
+    trigger.focus();
+
+    const { unmount } = render(
+      <QuickReplyModal {...defaultProps} isOpen={true} onClose={onClose} />
+    );
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    unmount();
+    expect(document.activeElement).toBe(trigger);
+    document.body.removeChild(trigger);
+  });
+
+  it("does not dismiss dialog on Escape during active upload", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+
+    let finishUpload: (value: clientApi.ResponseUploadResult | PromiseLike<clientApi.ResponseUploadResult>) => void = () => {};
+    vi.spyOn(clientApi, "uploadResponsePhoto").mockImplementationOnce(
+      () => new Promise((resolve) => { finishUpload = resolve; })
+    );
+
+    render(<QuickReplyModal {...defaultProps} isOpen={true} onClose={onClose} />);
+
+    const file = new File(["dummy"], "photo.jpg", { type: "image/jpeg" });
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, file);
+
+    // Expect uploading indicator to be present
+    expect(screen.getByText("Uploading photo…")).toBeInTheDocument();
+
+    // Press Escape during upload
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(onClose).not.toHaveBeenCalled();
+
+    // Finish upload
+    finishUpload({
+      asset: { id: "photo-1", url: "https://example.com/photo-1.jpg" },
+      responseId: "resp-1",
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Uploading photo…")).not.toBeInTheDocument();
+    });
+
+    // Now Escape works when idle
+    await waitFor(() => {
+      fireEvent.keyDown(window, { key: "Escape" });
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("populates message textarea when a preset is clicked", async () => {

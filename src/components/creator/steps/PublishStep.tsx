@@ -27,6 +27,7 @@ interface PublishStepProps {
   onPublish: () => void;
   onPreview: () => void;
   onBack: () => void;
+  isResponse?: boolean;
 }
 
 const DAY_OPTIONS = Array.from(
@@ -44,6 +45,7 @@ export function PublishStep({
   onPublish,
   onPreview,
   onBack,
+  isResponse = false,
 }: PublishStepProps) {
   const [copied, setCopied] = useState(false);
   const theme = getTheme(draft.themeId);
@@ -108,46 +110,57 @@ export function PublishStep({
       </dl>
 
       {!publishedToken ? (
-        <section className="space-y-2.5 rounded-2xl border border-[#ece2f6] bg-white p-4">
-          <div className="flex items-baseline justify-between gap-3">
+        isResponse ? (
+          <section className="space-y-1.5 rounded-2xl border border-[#ece2f6] bg-white p-4">
             <p className="text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-[#7c6892]">
-              Link stays live for
+              Permanent Response Link
             </p>
-            <span className="text-[0.72rem] text-[#8a7a9c]">
-              {MIN_LINK_DAYS}–{MAX_LINK_DAYS} days
-            </span>
-          </div>
+            <p className="text-[0.74rem] leading-relaxed text-[#8a7a9c]">
+              Your response stays accessible until you explicitly revoke or delete it.
+            </p>
+          </section>
+        ) : (
+          <section className="space-y-2.5 rounded-2xl border border-[#ece2f6] bg-white p-4">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-[#7c6892]">
+                Link stays live for
+              </p>
+              <span className="text-[0.72rem] text-[#8a7a9c]">
+                {MIN_LINK_DAYS}–{MAX_LINK_DAYS} days
+              </span>
+            </div>
 
-          <div role="radiogroup" aria-label="Link lifetime in days" className="flex gap-1.5">
-            {DAY_OPTIONS.map((option) => {
-              const active = option === duration;
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  aria-label={formatDuration(option)}
-                  onClick={() => onDurationChange(option)}
-                  className={cn(
-                    "h-10 flex-1 rounded-xl border text-[0.8rem] font-semibold transition active:scale-95",
-                    active
-                      ? "border-[#6d3fa8] bg-[#6d3fa8] text-white"
-                      : "border-[#ece2f6] bg-white text-[#6b5580] hover:border-[#d9c8ec]",
-                  )}
-                >
-                  {option}
-                </button>
-              );
-            })}
-          </div>
+            <div role="radiogroup" aria-label="Link lifetime in days" className="flex gap-1.5">
+              {DAY_OPTIONS.map((option) => {
+                const active = option === duration;
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    aria-label={formatDuration(option)}
+                    onClick={() => onDurationChange(option)}
+                    className={cn(
+                      "h-10 flex-1 rounded-xl border text-[0.8rem] font-semibold transition active:scale-95",
+                      active
+                        ? "border-[#6d3fa8] bg-[#6d3fa8] text-white"
+                        : "border-[#ece2f6] bg-white text-[#6b5580] hover:border-[#d9c8ec]",
+                    )}
+                  >
+                    {option}
+                  </button>
+                );
+              })}
+            </div>
 
-          <p className="text-[0.74rem] leading-relaxed text-[#8a7a9c]">
-            Expires{" "}
-            <span className="font-semibold text-[#4b2f6b]">{formatExpiry(projectedExpiry)}</span>.
-            After that the link stops opening for anyone — you can publish again for a fresh window.
-          </p>
-        </section>
+            <p className="text-[0.74rem] leading-relaxed text-[#8a7a9c]">
+              Expires{" "}
+              <span className="font-semibold text-[#4b2f6b]">{formatExpiry(projectedExpiry)}</span>.
+              After that the link stops opening for anyone — you can publish again for a fresh window.
+            </p>
+          </section>
+        )
       ) : null}
 
       {error ? (
@@ -208,7 +221,7 @@ export function PublishStep({
               Preview the experience
             </Button>
             <Button size="lg" full onClick={onPublish} disabled={publishing}>
-              {publishing ? "Publishing…" : `Publish for ${formatDuration(duration)}`}
+              {publishing ? "Publishing…" : isResponse ? "Publish Response" : `Publish for ${formatDuration(duration)}`}
             </Button>
           </>
         ) : (

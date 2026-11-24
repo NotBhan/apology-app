@@ -39,6 +39,12 @@ export interface ExperienceReplyConfig {
   readonly presets?: readonly string[];
   /** Accent color matching the experience's visual identity */
   readonly accent: string;
+  /** Invitation CTA label generator. Optional; defaults to module or generic wording */
+  readonly inviteLabel?: (senderName: string) => string;
+  /** Invitation CTA label generator for creating an experience reply. Optional */
+  readonly experienceInviteLabel?: (senderName: string) => string;
+  /** Whether experience replies are allowed for this module. Defaults to true if enabled */
+  readonly allowExperienceReply?: boolean;
 }
 
 export interface ExperienceModule {

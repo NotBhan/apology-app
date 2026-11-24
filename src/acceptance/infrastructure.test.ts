@@ -86,7 +86,7 @@ suite("production infrastructure acceptance", { timeout: 60_000 }, () => {
       select id from apologies where owner_key_hash = ${OWNER})`);
     await db.execute(sql`delete from apologies where owner_key_hash = ${OWNER}`);
     await db.execute(sql`
-      delete from deletion_jobs where apology_id not in (select id from apologies)
+      delete from deletion_jobs where resource_id not in (select id from apologies)
         and owner_key_hash = ${OWNER}`);
   }
 

@@ -127,6 +127,10 @@ export class PostgresLifecycleStore implements LifecycleStore {
   async objectKeys(apologyId: string): Promise<string[]> {
     const apologyKeys = await this.db.execute(sql`
       select object_key from ${apologyAssets} where apology_id = ${apologyId}
+      union
+      select ra.object_key from ${responseAssets} ra
+      join ${responses} r on r.id = ra.response_id
+      where r.apology_id = ${apologyId}
     `);
     const responseKeys = await this.db.execute(sql`
       select object_key from ${responseAssets} where response_id = ${apologyId}
@@ -142,6 +146,11 @@ export class PostgresLifecycleStore implements LifecycleStore {
       select id, object_key, created_at
       from ${apologyAssets}
       where apology_id = ${apologyId} and state = 'pending'
+      union all
+      select ra.id, ra.object_key, ra.created_at
+      from ${responseAssets} ra
+      join ${responses} r on r.id = ra.response_id
+      where r.apology_id = ${apologyId} and ra.state = 'pending'
     `);
     const responseRes = await this.db.execute(sql`
       select id, object_key, created_at
@@ -199,6 +208,51 @@ export class PostgresLifecycleStore implements LifecycleStore {
     const resourceType = job.resourceType ?? "apology";
     const resourceId = job.resourceId ?? job.apologyId;
     const fencingToken = job.fencingToken ?? 1;
+
+    const hasBatch = typeof (this.db as unknown as { batch?: unknown }).batch === "function";
+    if (hasBatch) {
+      if (resourceType === "response") {
+        await (this.db as unknown as { batch: (ops: unknown[]) => Promise<unknown> }).batch([
+          this.db.execute(sql`delete from ${responseAssets} where response_id = ${resourceId}`),
+          this.db.execute(sql`delete from ${responses} where id = ${resourceId}`),
+          this.db.execute(sql`
+            update ${deletionJobs}
+            set state = 'completed', lease_until = null, last_error = null, updated_at = now()
+            where resource_type = 'response'
+              and resource_id = ${resourceId}
+              and fencing_token = ${fencingToken}
+          `),
+        ]);
+      } else {
+        await (this.db as unknown as { batch: (ops: unknown[]) => Promise<unknown> }).batch([
+          this.db.execute(sql`
+            update ${deletionJobs}
+            set state = 'completed', lease_until = null, last_error = 'absorbed_by_parent_deletion', updated_at = now()
+            where resource_type = 'response'
+              and resource_id in (select id from ${responses} where apology_id = ${resourceId})
+          `),
+          this.db.execute(sql`delete from ${responseAssets} where response_id in (select id from ${responses} where apology_id = ${resourceId})`),
+          this.db.execute(sql`delete from ${responses} where apology_id = ${resourceId}`),
+          this.db.execute(sql`delete from ${apologyAssets} where apology_id = ${resourceId}`),
+          this.db.execute(sql`delete from ${apologies} where id = ${resourceId}`),
+          this.db.execute(sql`
+            insert into ${deletionTombstones}
+              (apology_id, owner_key_hash, deleted_at, assets_deleted, reason)
+            values (${resourceId}, ${job.ownerKeyHash ?? ""}, ${now.toISOString()},
+                    ${assetsDeleted}, ${job.reason})
+            on conflict (apology_id) do nothing
+          `),
+          this.db.execute(sql`
+            update ${deletionJobs}
+            set state = 'completed', lease_until = null, last_error = null, updated_at = now()
+            where resource_type = 'apology'
+              and resource_id = ${resourceId}
+              and fencing_token = ${fencingToken}
+          `),
+        ]);
+      }
+      return;
+    }
 
     await this.db.transaction(async (tx) => {
       if (resourceType === "response") {

@@ -3,6 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BirthdayEditor } from "./BirthdayEditor";
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }),
+}));
+
 describe("birthday editor, anonymous path", () => {
   beforeEach(() => {
     window.sessionStorage.clear();
@@ -52,9 +56,80 @@ describe("birthday editor, anonymous path", () => {
     await user.type(screen.getByLabelText(/your name/i), "Arjun");
     await user.type(screen.getByLabelText(/headline/i), "Happy birthday");
     await user.type(screen.getByLabelText(/message/i), "Hope this year is kind.");
-    await user.click(screen.getByRole("button", { name: "Preview" }));
 
     expect(screen.getByRole("heading", { name: "Happy birthday" })).toBeInTheDocument();
+    expect(screen.getByText(/Permanent gift link/i)).toBeInTheDocument();
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("supports theme selection across all six themes", async () => {
+    const user = userEvent.setup();
+    render(
+      <BirthdayEditor
+        initialValues={{
+          recipientName: "Riya",
+          senderName: "Arjun",
+          headline: "Happy birthday",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Confetti Celebration")).toBeInTheDocument();
+    expect(screen.getByText("Midnight Gold")).toBeInTheDocument();
+    expect(screen.getByText("Pastel Dream")).toBeInTheDocument();
+    expect(screen.getByText("Botanical Bloom")).toBeInTheDocument();
+    expect(screen.getByText("Vintage Postcard")).toBeInTheDocument();
+    expect(screen.getByText("Doodle Scrapbook")).toBeInTheDocument();
+
+    // Select Midnight Gold
+    await user.click(screen.getByText("Midnight Gold"));
+    const stored = window.sessionStorage.getItem("koi.birthday.draft");
+    expect(stored).toContain("midnight-gold");
+  });
+
+  it("allows selecting candle count independently of age", async () => {
+    const user = userEvent.setup();
+    render(
+      <BirthdayEditor
+        initialValues={{
+          recipientName: "Riya",
+          senderName: "Arjun",
+          headline: "Happy birthday",
+          message: "Have a wonderful year!",
+        }}
+      />,
+    );
+
+    // Select 5 candles
+    const candle5Btn = screen.getByRole("button", { name: "5" });
+    await user.click(candle5Btn);
+    expect(candle5Btn).toHaveAttribute("aria-pressed", "true");
+
+    const stored = window.sessionStorage.getItem("koi.birthday.draft");
+    expect(stored).toContain('"candleCount":5');
+  });
+
+  it("renders 'Publish Response' when in response mode and invokes onPublishResponse", async () => {
+    const user = userEvent.setup();
+    const handlePublish = vi.fn().mockResolvedValue({ path: "/response/test-path", publicToken: "tok-123" });
+
+    render(
+      <BirthdayEditor
+        initialValues={{
+          recipientName: "ParentSender",
+          senderName: "ParentRecipient",
+          headline: "Warm wishes",
+          message: "Thank you for thinking of me!",
+        }}
+        isResponse={true}
+        onPublishResponse={handlePublish}
+      />,
+    );
+
+    const publishBtn = screen.getByRole("button", { name: "Publish Response" });
+    expect(publishBtn).toBeInTheDocument();
+
+    await user.click(publishBtn);
+    expect(handlePublish).toHaveBeenCalled();
   });
 });

@@ -1,16 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useMounted } from "@/hooks/useMounted";
 import { Icon } from "@/components/ui/icons";
 import { resolveEmotionBadge } from "@/experiences/emotion";
-import type { PublishedResponse, QuickReplyPayload } from "@/types/response";
+import type { PublishedResponse, QuickReplyPayload, ExperienceReplyPayload } from "@/types/response";
 import type { PublishedApology } from "@/types/apology";
+import { birthdayContentSchema } from "@/experiences/birthday/schema";
+import { BirthdayLetter } from "@/components/presentation/BirthdayLetter";
+import { draftPayloadSchema } from "@/lib/validation/apology";
+import { PresentationEngine } from "@/components/presentation/PresentationEngine";
+import { getTheme, THEMES } from "@/themes/registry";
+import type { ApologyContent } from "@/presentation/build-scenes";
 
 export interface ResponseViewClientProps {
   response: PublishedResponse;
   parent: Pick<PublishedApology, "recipientName" | "senderName" | "publishedAt"> & {
+    token?: string;
     experienceType?: string;
   };
   token: string;
@@ -19,10 +26,111 @@ export interface ResponseViewClientProps {
 export function ResponseViewClient({ response, parent, token }: ResponseViewClientProps) {
   const mounted = useMounted();
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
+  const triggerPhotoRef = useRef<HTMLButtonElement | null>(null);
+  const lightboxCloseRef = useRef<HTMLButtonElement | null>(null);
 
   const content = response.content as QuickReplyPayload;
   const photos = content.photos ?? [];
-  const emotionBadge = resolveEmotionBadge(parent.experienceType, content.recipientEmotion);
+  const emotionBadge = resolveEmotionBadge(parent?.experienceType, content.recipientEmotion);
+
+  // Close lightbox on Escape key and restore focus
+  useEffect(() => {
+    if (!selectedPhoto) return;
+
+    // Focus lightbox close button on open
+    lightboxCloseRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSelectedPhoto(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      triggerPhotoRef.current?.focus();
+    };
+  }, [selectedPhoto]);
+
+  // Handle Experience Replies (Apology / Birthday)
+  if (response.responseType === "experience") {
+    const expPayload = response.content as ExperienceReplyPayload;
+
+    if (expPayload?.experienceType === "birthday") {
+      const parsed = birthdayContentSchema.safeParse(expPayload.content);
+      if (parsed.success) {
+        return (
+          <div className="relative min-h-svh w-full bg-[#faf6ff]">
+            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-full border border-[#eeddf5] bg-white/95 px-4 py-1.5 shadow-md backdrop-blur-sm">
+              <Link
+                href="/"
+                className="text-[0.68rem] font-bold uppercase tracking-wider text-[#7c4ddb] hover:opacity-80"
+              >
+                Koi Koi
+              </Link>
+              <span className="text-[#d8c3e8]">·</span>
+              <span className="text-xs font-medium text-[#6b5580]">
+                In response to <span className="font-semibold text-[#33203f]">{parent?.senderName ?? "them"}</span>
+              </span>
+              {parent?.token ? (
+                <>
+                  <span className="text-[#d8c3e8]">·</span>
+                  <Link
+                    href={`/letter/${parent.token}`}
+                    className="text-xs font-semibold text-[#7c4ddb] hover:underline"
+                  >
+                    View original letter
+                  </Link>
+                </>
+              ) : null}
+            </div>
+            <BirthdayLetter content={parsed.data} />
+          </div>
+        );
+      }
+    }
+
+    if (expPayload?.experienceType === "apology") {
+      const parsed = draftPayloadSchema.safeParse(expPayload.content);
+      if (parsed.success) {
+        const theme = getTheme(parsed.data.themeId) ?? THEMES.romantic;
+        return (
+          <div className="relative min-h-svh w-full bg-[#faf6ff]">
+            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-full border border-[#eeddf5] bg-white/95 px-4 py-1.5 shadow-md backdrop-blur-sm">
+              <Link
+                href="/"
+                className="text-[0.68rem] font-bold uppercase tracking-wider text-[#7c4ddb] hover:opacity-80"
+              >
+                Koi Koi
+              </Link>
+              <span className="text-[#d8c3e8]">·</span>
+              <span className="text-xs font-medium text-[#6b5580]">
+                In response to <span className="font-semibold text-[#33203f]">{parent?.senderName ?? "them"}</span>
+              </span>
+              {parent?.token ? (
+                <>
+                  <span className="text-[#d8c3e8]">·</span>
+                  <Link
+                    href={`/letter/${parent.token}`}
+                    className="text-xs font-semibold text-[#7c4ddb] hover:underline"
+                  >
+                    View original letter
+                  </Link>
+                </>
+              ) : null}
+            </div>
+            <PresentationEngine
+              content={parsed.data as ApologyContent}
+              theme={theme}
+              mode="live"
+              className="h-svh w-full"
+            />
+          </div>
+        );
+      }
+    }
+  }
 
   return (
     <div className="flex min-h-svh w-full flex-col items-center justify-center bg-[#faf6ff] px-4 py-10 sm:py-16">
@@ -58,7 +166,7 @@ export function ResponseViewClient({ response, parent, token }: ResponseViewClie
 
           {/* Letter Message */}
           <div className="space-y-4">
-            <p className="whitespace-pre-line text-[clamp(1.02rem,3vw,1.18rem)] leading-relaxed text-[#33203f]">
+            <p className="whitespace-pre-line break-words text-[clamp(1.02rem,3vw,1.18rem)] leading-relaxed text-[#33203f]">
               {content.message}
             </p>
           </div>
@@ -76,15 +184,19 @@ export function ResponseViewClient({ response, parent, token }: ResponseViewClie
                     <button
                       key={photoId}
                       type="button"
-                      onClick={() => setSelectedPhoto(assetUrl)}
-                      className="group relative aspect-square overflow-hidden rounded-2xl border border-[#e4d7f0] bg-[#fbf9fe] p-1.5 shadow-sm transition active:scale-95"
+                      onClick={(e) => {
+                        triggerPhotoRef.current = e.currentTarget;
+                        setSelectedPhoto(assetUrl);
+                      }}
+                      aria-label={`View enlarged photo ${idx + 1}`}
+                      className="group relative aspect-square overflow-hidden rounded-2xl border border-[#e4d7f0] bg-[#fbf9fe] p-1.5 shadow-sm transition motion-safe:active:scale-95"
                     >
                       <div className="relative h-full w-full overflow-hidden rounded-xl">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={assetUrl}
                           alt={`Memory moment ${idx + 1}`}
-                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          className="h-full w-full object-cover transition-transform duration-300 motion-safe:group-hover:scale-105"
                           loading="lazy"
                         />
                       </div>
@@ -123,11 +235,15 @@ export function ResponseViewClient({ response, parent, token }: ResponseViewClie
         <div
           role="dialog"
           aria-modal="true"
+          aria-label="Enlarged photo view"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
-          onClick={() => setSelectedPhoto(null)}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedPhoto(null);
+          }}
         >
           <div className="relative max-h-[90vh] max-w-[90vw]">
             <button
+              ref={lightboxCloseRef}
               type="button"
               onClick={() => setSelectedPhoto(null)}
               className="absolute -top-10 right-0 rounded-full bg-black/60 p-2 text-white hover:bg-black/80"

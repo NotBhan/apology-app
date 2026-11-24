@@ -4,6 +4,9 @@ import { BIRTHDAY_THEMES } from "./themes";
 
 export const birthdayReplyConfig: ExperienceReplyConfig = {
   enabled: true,
+  inviteLabel: () => "Say Thank You",
+  experienceInviteLabel: (senderName: string) => `Send a letter to ${senderName}`,
+  allowExperienceReply: true,
   modalTitle: (senderName: string) => `Thank ${senderName}`,
   modalSubtitle: "Send a thank-you note, joyous wish, or celebration photos",
   messagePlaceholder: "Write a thank-you note, share a birthday wish, or describe your day...",

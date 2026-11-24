@@ -73,7 +73,9 @@ export async function POST(request: Request) {
 
   try {
     if (!responseId) {
-      const draft = await repository.createDraft(apologyId, "quick");
+      const requestedType = form.get("responseType");
+      const resType = requestedType === "experience" ? "experience" : "quick";
+      const draft = await repository.createDraft(apologyId, resType);
       responseId = draft.id;
     }
 
@@ -82,6 +84,7 @@ export async function POST(request: Request) {
 
     const reservation = await repository.reserveResponseAsset({
       responseId,
+      apologyId,
       objectKey,
       kind: "photo",
       contentType: mime,

@@ -208,7 +208,7 @@ export class ResponseRepository {
             select 1 from ${deletionJobs} j
             where j.resource_type = 'apology' and j.resource_id = a.id
           )
-        for update
+        for update of r
       )
       update ${responses} r
       set status = 'published',
@@ -370,6 +370,7 @@ export class ResponseRepository {
    */
   async reserveResponseAsset(input: {
     responseId: string;
+    apologyId?: string;
     manageToken?: string;
     objectKey: string;
     kind: "photo" | "audio";
@@ -380,60 +381,51 @@ export class ResponseRepository {
   }): Promise<AssetRecord | null> {
     const totalBytesLimit = input.maxTotalBytes ?? 16 * 1024 * 1024;
 
-    return await this.db.transaction(async (tx) => {
-      // 1. Explicitly serialize concurrent reservations for this response by locking the parent response row FOR UPDATE
-      const lockResult = await tx.execute(sql`
-        select id from ${responses}
-        where id = ${input.responseId}
-          and status in ('draft', 'published')
+    const result = await this.db.execute(sql`
+      with locked as (
+        select r.id
+        from ${responses} r
+        inner join ${apologies} a on a.id = r.apology_id
+        where r.id = ${input.responseId}
+          ${input.apologyId ? sql`and r.apology_id = ${input.apologyId}` : sql``}
+          ${input.manageToken ? sql`and r.manage_token_hash = ${hashResponseToken(input.manageToken)}` : sql``}
+          and r.status in ('draft', 'published')
+          and a.status = 'published'
+          and not exists (
+            select 1 from ${deletionJobs} ja
+            where ja.resource_type = 'apology' and ja.resource_id = a.id
+          )
           and not exists (
             select 1 from ${deletionJobs} j
             where j.resource_type = 'response' and j.resource_id = ${input.responseId}
           )
-        for update
-      `);
-      const [locked] = rowsOf(lockResult);
-      if (!locked) return null;
+          and (
+            select count(*) from ${responseAssets} x
+            where x.response_id = r.id and x.state <> 'failed'
+          ) < ${input.maxAssets}
+          and (
+            select coalesce(sum(size_bytes), 0) from ${responseAssets} x
+            where x.response_id = r.id and x.state <> 'failed'
+          ) + ${input.sizeBytes} <= ${totalBytesLimit}
+        for update of r
+      )
+      insert into ${responseAssets}
+        (response_id, object_key, kind, content_type, size_bytes, state)
+      select locked.id, ${input.objectKey}, ${input.kind},
+             ${input.contentType}, ${input.sizeBytes}, 'pending'
+      from locked
+      returning id,
+                response_id as "responseId",
+                state,
+                object_key as "objectKey",
+                kind,
+                content_type as "contentType",
+                size_bytes as "sizeBytes",
+                created_at as "createdAt"
+    `);
 
-      // 2. Query current usage under the exclusive lock (all pending and ready count, failed are excluded)
-      const usageResult = await tx.execute(sql`
-        select count(*)::int as asset_count,
-               coalesce(sum(size_bytes), 0)::bigint as total_bytes
-        from ${responseAssets}
-        where response_id = ${input.responseId} and state <> 'failed'
-      `);
-      const [usage] = rowsOf(usageResult) as unknown as [{ asset_count: number; total_bytes: string | number }];
-      const currentCount = Number(usage?.asset_count ?? 0);
-      const currentBytes = Number(usage?.total_bytes ?? 0);
-
-      // 3. Evaluate quota boundaries
-      if (currentCount >= input.maxAssets) {
-        return null;
-      }
-      if (currentBytes + input.sizeBytes > totalBytesLimit) {
-        return null;
-      }
-
-      // 4. Insert pending reservation within the serialized transaction
-      const insertResult = await tx.execute(sql`
-        insert into ${responseAssets}
-          (response_id, object_key, kind, content_type, size_bytes, state)
-        values
-          (${input.responseId}, ${input.objectKey}, ${input.kind},
-           ${input.contentType}, ${input.sizeBytes}, 'pending')
-        returning id,
-                  response_id as "responseId",
-                  state,
-                  object_key as "objectKey",
-                  kind,
-                  content_type as "contentType",
-                  size_bytes as "sizeBytes",
-                  created_at as "createdAt"
-      `);
-
-      const [raw] = rowsOf(insertResult);
-      return raw ? rowToResponseAsset(raw as unknown as ResponseAssetRow) : null;
-    });
+    const [raw] = rowsOf(result);
+    return raw ? rowToResponseAsset(raw as unknown as ResponseAssetRow) : null;
   }
 
   /**

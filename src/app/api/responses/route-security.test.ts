@@ -31,6 +31,7 @@ import { GET as getPublicResponse } from "./[token]/route";
 import { GET as getManageResponse, POST as postManageResponse } from "./manage/route";
 import { GET as getResponseAsset } from "./assets/[assetId]/route";
 import { POST as quickReplyHandler } from "../experiences/[experienceId]/responses/quick/route";
+import { POST as experienceReplyHandler } from "../experiences/[experienceId]/responses/experience/route";
 import { GET as listCreatorResponses } from "../experiences/[experienceId]/responses/route";
 import { POST as uploadResponseAsset } from "./upload/route";
 
@@ -128,7 +129,7 @@ describe("API Authorization & Security Route Suite", () => {
     });
 
     it("returns 409 when attempting to revoke an already deleted or invalid state response", async () => {
-      mockRepo.revokeResponse.mockRejectedValue(new Error("REVOKE_NOT_ALLOWED"));
+      mockRepo.getByManageToken.mockResolvedValue({ status: "revoked" });
       const req = new Request("http://localhost/api/responses/manage", {
         method: "POST",
         headers: {
@@ -224,6 +225,7 @@ describe("API Authorization & Security Route Suite", () => {
     });
 
     it("header-based manage endpoint executes revoke action with zero tokens in URL", async () => {
+      mockRepo.getByManageToken.mockResolvedValue({ status: "published" });
       mockRepo.revokeResponse.mockResolvedValue({ status: "revoked" });
       const req = new Request("http://localhost/api/responses/manage", {
         method: "POST",
@@ -239,6 +241,7 @@ describe("API Authorization & Security Route Suite", () => {
     });
 
     it("header-based manage endpoint executes delete action with zero tokens in URL", async () => {
+      mockRepo.getByManageToken.mockResolvedValue({ status: "published" });
       mockRepo.deleteResponse.mockResolvedValue(true);
       const req = new Request("http://localhost/api/responses/manage", {
         method: "POST",
@@ -251,6 +254,48 @@ describe("API Authorization & Security Route Suite", () => {
       const res = await postManageResponse(req);
       expect(res.status).toBe(200);
       expect(mockRepo.deleteResponse).toHaveBeenCalledWith("header-token-delete-action");
+    });
+
+    it("strictly isolates capabilities: rejects a public token attempting management actions with 404", async () => {
+      mockRepo.getByManageToken.mockResolvedValue(null);
+      const publicBearerToken = "pub-bearer-token-attempting-manage";
+      const req = new Request("http://localhost/api/responses/manage", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${publicBearerToken}`,
+        },
+        body: JSON.stringify({ action: "revoke" }),
+      });
+      const res = await postManageResponse(req);
+      expect(res.status).toBe(404);
+      expect(mockRepo.getByManageToken).toHaveBeenCalledWith(publicBearerToken);
+      expect(mockRepo.revokeResponse).not.toHaveBeenCalled();
+    });
+
+    it("strictly isolates capabilities: rejects a management token attempting public-view route with 404", async () => {
+      mockRepo.getByPublicToken.mockResolvedValue(null);
+      const manageToken = "mgmt-token-attempting-public-route";
+      const req = new Request(`http://localhost/api/responses/${manageToken}`);
+      const res = await getPublicResponse(req, {
+        params: Promise.resolve({ token: manageToken }),
+      });
+      expect(res.status).toBe(404);
+      expect(mockRepo.getByPublicToken).toHaveBeenCalledWith(manageToken);
+    });
+
+    it("strictly isolates capabilities: rejects parent experience link token attempting to manage child response with 404", async () => {
+      mockRepo.getByManageToken.mockResolvedValue(null);
+      const parentLinkToken = "parent-link-token-cannot-manage-child";
+      const req = new Request("http://localhost/api/responses/manage", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${parentLinkToken}`,
+        },
+      });
+      const res = await getManageResponse(req);
+      expect(res.status).toBe(404);
+      expect(mockRepo.getByManageToken).toHaveBeenCalledWith(parentLinkToken);
     });
   });
 
@@ -529,6 +574,227 @@ describe("API Authorization & Security Route Suite", () => {
       expect(res.status).toBe(409);
       const json = await res.json();
       expect(json.error).toMatch(/16 MB total reached/i);
+    });
+  });
+
+  /* -------------------------------------------------------------------------- */
+  /* 9. Experience Reply publication security                                  */
+  /* -------------------------------------------------------------------------- */
+  describe("Experience Reply publication security", () => {
+    const validApologyId = "11111111-2222-4000-8000-111111111111";
+
+    it("rejects experience reply with malformed parent ID with 404", async () => {
+      const req = new Request("http://localhost/api/experiences/bad-id/responses/experience", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ experienceType: "birthday", content: {} }),
+      });
+      const res = await experienceReplyHandler(req, {
+        params: Promise.resolve({ experienceId: "bad-id" }),
+      });
+      expect(res.status).toBe(404);
+      expect(mockRepo.createDraft).not.toHaveBeenCalled();
+    });
+
+    it("enforces rate limits on experience reply publication with 429", async () => {
+      mockEnforceRateLimit.mockResolvedValueOnce({ allowed: false, remaining: 0, reset: 60 });
+      const req = new Request(`http://localhost/api/experiences/${validApologyId}/responses/experience`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ experienceType: "birthday", content: {} }),
+      });
+      const res = await experienceReplyHandler(req, {
+        params: Promise.resolve({ experienceId: validApologyId }),
+      });
+      expect(res.status).toBe(429);
+      expect(mockRepo.createDraft).not.toHaveBeenCalled();
+    });
+
+    it("rejects unknown experience types with 400", async () => {
+      const req = new Request(`http://localhost/api/experiences/${validApologyId}/responses/experience`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ experienceType: "unknown_exp", content: {} }),
+      });
+      const res = await experienceReplyHandler(req, {
+        params: Promise.resolve({ experienceId: validApologyId }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toMatch(/unknown experience type/i);
+      expect(mockRepo.createDraft).not.toHaveBeenCalled();
+    });
+
+    it("rejects experience payload that violates module draftSchema with 400", async () => {
+      const req = new Request(`http://localhost/api/experiences/${validApologyId}/responses/experience`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          experienceType: "birthday",
+          content: { recipientName: "", senderName: "" }, // Missing required headline & message
+        }),
+      });
+      const res = await experienceReplyHandler(req, {
+        params: Promise.resolve({ experienceId: validApologyId }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toMatch(/check the highlighted fields/i);
+      expect(mockRepo.createDraft).not.toHaveBeenCalled();
+    });
+
+    it("rejects when parent experience is revoked, deleted or inaccessible with 404", async () => {
+      mockRepo.createDraft.mockRejectedValueOnce(new Error("PARENT_NOT_ACCESSIBLE"));
+      const req = new Request(`http://localhost/api/experiences/${validApologyId}/responses/experience`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          experienceType: "birthday",
+          content: {
+            recipientName: "Taylor",
+            senderName: "Jordan",
+            headline: "Happy Birthday!",
+            message: "Have a wonderful year ahead.",
+            themeId: "confetti",
+          },
+        }),
+      });
+      const res = await experienceReplyHandler(req, {
+        params: Promise.resolve({ experienceId: validApologyId }),
+      });
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toMatch(/no longer accessible/i);
+    });
+
+    it("publishes experience reply successfully returning dual capability tokens with 201", async () => {
+      mockRepo.createDraft.mockResolvedValueOnce({ id: "draft-exp-123" });
+      mockRepo.publishResponse.mockResolvedValueOnce({
+        publicToken: "pub-exp-token",
+        manageToken: "mgmt-exp-token",
+      });
+
+      const req = new Request(`http://localhost/api/experiences/${validApologyId}/responses/experience`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          experienceType: "birthday",
+          content: {
+            recipientName: "Taylor",
+            senderName: "Jordan",
+            headline: "Happy Birthday!",
+            message: "Have a wonderful year ahead.",
+            themeId: "confetti",
+          },
+        }),
+      });
+      const res = await experienceReplyHandler(req, {
+        params: Promise.resolve({ experienceId: validApologyId }),
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      expect(body.publicToken).toBe("pub-exp-token");
+      expect(body.manageToken).toBe("mgmt-exp-token");
+      expect(body.publicUrl).toBe("/response/pub-exp-token");
+      expect(body.manageUrl).toBe("/response/manage/mgmt-exp-token");
+
+      expect(mockRepo.createDraft).toHaveBeenCalledWith(
+        validApologyId,
+        "experience",
+        expect.objectContaining({
+          experienceType: "birthday",
+        })
+      );
+      expect(mockRepo.publishResponse).toHaveBeenCalledWith(
+        "draft-exp-123",
+        expect.objectContaining({
+          experienceType: "birthday",
+        })
+      );
+    });
+
+    it("rejects publishing when responseId is not a valid UUID with 400", async () => {
+      const req = new Request(`http://localhost/api/experiences/${validApologyId}/responses/experience`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          responseId: "not-a-valid-uuid",
+          experienceType: "birthday",
+          content: {
+            recipientName: "Taylor",
+            senderName: "Jordan",
+            headline: "Happy Birthday!",
+            message: "Have a wonderful year ahead.",
+            themeId: "confetti",
+          },
+        }),
+      });
+      const res = await experienceReplyHandler(req, {
+        params: Promise.resolve({ experienceId: validApologyId }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toMatch(/Invalid draft ID/i);
+    });
+
+    it("rejects publishing when responseId draft belongs to a different parent apology with 404", async () => {
+      const foreignDraftId = "88888888-8888-4000-8000-888888888888";
+      mockRepo.getDraft.mockResolvedValueOnce({
+        id: foreignDraftId,
+        apologyId: "different-parent-apology-uuid",
+      });
+
+      const req = new Request(`http://localhost/api/experiences/${validApologyId}/responses/experience`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          responseId: foreignDraftId,
+          experienceType: "birthday",
+          content: {
+            recipientName: "Taylor",
+            senderName: "Jordan",
+            headline: "Happy Birthday!",
+            message: "Have a wonderful year ahead.",
+            themeId: "confetti",
+          },
+        }),
+      });
+      const res = await experienceReplyHandler(req, {
+        params: Promise.resolve({ experienceId: validApologyId }),
+      });
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toMatch(/Draft could not be found/i);
+      expect(mockRepo.publishResponse).not.toHaveBeenCalled();
+    });
+
+    it("rejects publishing when responseId draft does not exist with 404", async () => {
+      const nonexistentDraftId = "77777777-7777-4000-8000-777777777777";
+      mockRepo.getDraft.mockResolvedValueOnce(null);
+
+      const req = new Request(`http://localhost/api/experiences/${validApologyId}/responses/experience`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          responseId: nonexistentDraftId,
+          experienceType: "birthday",
+          content: {
+            recipientName: "Taylor",
+            senderName: "Jordan",
+            headline: "Happy Birthday!",
+            message: "Have a wonderful year ahead.",
+            themeId: "confetti",
+          },
+        }),
+      });
+      const res = await experienceReplyHandler(req, {
+        params: Promise.resolve({ experienceId: validApologyId }),
+      });
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toMatch(/Draft could not be found/i);
+      expect(mockRepo.publishResponse).not.toHaveBeenCalled();
     });
   });
 });

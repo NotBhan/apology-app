@@ -4,6 +4,9 @@ import type { ExperienceModule, ExperienceReplyConfig } from "../types";
 
 export const apologyReplyConfig: ExperienceReplyConfig = {
   enabled: true,
+  inviteLabel: (senderName: string) => `Send a quick reply to ${senderName}`,
+  experienceInviteLabel: (senderName: string) => `Create an experience for ${senderName}`,
+  allowExperienceReply: true,
   modalTitle: (senderName: string) => `Reply to ${senderName}`,
   modalSubtitle: "Leave an intimate, heartfelt note",
   messagePlaceholder: "Write your reply...",

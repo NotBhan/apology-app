@@ -77,7 +77,7 @@ export function AnonymousWizard({ signedIn = false }: { signedIn?: boolean }) {
 
       async publish() {
         persist(initial);
-        window.location.href = `/auth/sign-in?callbackURL=${encodeURIComponent("/create/start")}`;
+        router.push(`/auth/sign-in?callbackURL=${encodeURIComponent("/create/start")}`);
         throw new Error("Sign in to publish. Your draft is kept in this browser.");
       },
 
@@ -89,7 +89,7 @@ export function AnonymousWizard({ signedIn = false }: { signedIn?: boolean }) {
         throw new Error("Sign in to add photos.");
       },
     }),
-    [initial],
+    [initial, router],
   );
 
   async function adopt() {

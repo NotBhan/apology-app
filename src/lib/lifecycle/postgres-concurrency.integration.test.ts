@@ -616,5 +616,102 @@ describe("PostgreSQL Lifecycle Concurrency & Fencing (Real DB)", () => {
       );
       expect(countRes.rows[0].count).toBe(10); // Slot 10 is reserved by pending
     });
+
+    it("5. Repeated concurrency race: parent deletion racing with child asset reservation completes without deadlock across multiple iterations", async () => {
+      if (!dbAvailable || !pool) return;
+
+      const ITERATIONS = 5;
+      for (let i = 0; i < ITERATIONS; i++) {
+        const iterParentId = `11111111-1111-4000-8000-${String(i).padStart(12, "0")}`;
+        const iterChildId = `22222222-2222-4000-8000-${String(i).padStart(12, "0")}`;
+
+        // 1. Seed Parent apology and Child response
+        await pool.query(`
+          INSERT INTO apologies (id, owner_key_hash, recipient_name, sender_name, situation, messages, theme_id, sticker_pack_id, customization, status, published_at, private_token_hash)
+          VALUES ('${iterParentId}', 'owner-hash', 'Recipient', 'Sender', 'fight', '{"personalNote":""}', 'romantic', 'cats', '{}', 'published', now(), 'token-hash')
+        `);
+
+        await pool.query(`
+          INSERT INTO responses (id, apology_id, response_type, status, content, public_token_hash, manage_token_hash, published_at)
+          VALUES ('${iterChildId}', '${iterParentId}', 'quick', 'published', '{"message":"Race test"}', 'pub-${i}', 'man-${i}', now())
+        `);
+
+        await pool.query(`
+          INSERT INTO deletion_jobs (resource_type, resource_id, owner_key_hash, state, reason, fencing_token)
+          VALUES ('apology', '${iterParentId}', 'owner-hash', 'processing', 'manual', 1)
+        `);
+
+        const clientDeletion = await pool.connect();
+        const clientReservation = await pool.connect();
+
+        let deadlockDetected = false;
+
+        const runParentDeletion = async () => {
+          try {
+            await clientDeletion.query("BEGIN");
+            // 1. Lock parent apology row FIRST
+            await clientDeletion.query("SELECT id FROM apologies WHERE id = $1 FOR UPDATE", [iterParentId]);
+            // Jitter
+            await new Promise((r) => setTimeout(r, Math.floor(Math.random() * 5)));
+            // 2. Lock child response rows SECOND
+            await clientDeletion.query("SELECT id FROM responses WHERE apology_id = $1 ORDER BY id ASC FOR UPDATE", [iterParentId]);
+            // 3. Delete response assets and responses
+            await clientDeletion.query("DELETE FROM response_assets WHERE response_id IN (SELECT id FROM responses WHERE apology_id = $1)", [iterParentId]);
+            await clientDeletion.query("DELETE FROM responses WHERE apology_id = $1", [iterParentId]);
+            await clientDeletion.query("DELETE FROM apologies WHERE id = $1", [iterParentId]);
+            await clientDeletion.query("UPDATE deletion_jobs SET state = 'completed' WHERE resource_type = 'apology' AND resource_id = $1", [iterParentId]);
+            await clientDeletion.query("COMMIT");
+          } catch (err: unknown) {
+            await clientDeletion.query("ROLLBACK").catch(() => {});
+            if (String(err).includes("deadlock detected") || (err as { code?: string })?.code === "40P01") {
+              deadlockDetected = true;
+            }
+          }
+        };
+
+        const runChildReservation = async () => {
+          try {
+            // Exact SQL CTE from reserveResponseAsset with FOR UPDATE OF r
+            const key = `responses/${iterChildId}/race_${i}.jpg`;
+            await clientReservation.query(`
+              WITH locked AS (
+                SELECT r.id
+                FROM responses r
+                INNER JOIN apologies a ON a.id = r.apology_id
+                WHERE r.id = $1
+                  AND r.apology_id = $2
+                  AND r.status IN ('draft', 'published')
+                  AND a.status = 'published'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM deletion_jobs ja
+                    WHERE ja.resource_type = 'apology' AND ja.resource_id = a.id
+                  )
+                  AND NOT EXISTS (
+                    SELECT 1 FROM deletion_jobs j
+                    WHERE j.resource_type = 'response' AND j.resource_id = $1
+                  )
+                FOR UPDATE OF r
+              )
+              INSERT INTO response_assets (response_id, object_key, kind, content_type, size_bytes, state)
+              SELECT locked.id, $3, 'photo', 'image/jpeg', 1024, 'pending'
+              FROM locked
+              RETURNING id
+            `, [iterChildId, iterParentId, key]);
+          } catch (err: unknown) {
+            if (String(err).includes("deadlock detected") || (err as { code?: string })?.code === "40P01") {
+              deadlockDetected = true;
+            }
+          }
+        };
+
+        try {
+          await Promise.all([runParentDeletion(), runChildReservation()]);
+          expect(deadlockDetected).toBe(false);
+        } finally {
+          clientDeletion.release();
+          clientReservation.release();
+        }
+      }
+    }, 30000);
   });
 });
