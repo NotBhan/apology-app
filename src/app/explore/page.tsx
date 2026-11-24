@@ -3,6 +3,7 @@ import Link from "next/link";
 import { BRAND } from "@/platform/brand";
 import { PLATFORM_COPY } from "@/platform/content";
 import { CategorySections } from "@/components/experiences/CategorySections";
+import { getCreator } from "@/lib/security/creator";
 
 export const metadata: Metadata = {
   title: "Explore · Koi Koi",
@@ -17,7 +18,9 @@ export const dynamic = "force-dynamic";
  * Generic "create" actions land here rather than on the apology flow, so the
  * platform never assumes what someone came to make.
  */
-export default function ExplorePage() {
+export default async function ExplorePage() {
+  const creator = await getCreator();
+
   return (
     <main className="min-h-svh bg-[#faf6ff]">
       <div aria-hidden className="pointer-events-none fixed inset-x-0 top-0 h-[420px] overflow-hidden">
@@ -26,9 +29,19 @@ export default function ExplorePage() {
       </div>
 
       <div className="relative mx-auto w-full max-w-[940px] px-5 pb-20 pt-10">
-        <Link href="/" className="text-xs uppercase tracking-[0.16em] text-[#a394b4]">
-          ← {BRAND.name}
-        </Link>
+        <div className="flex items-center justify-between">
+          <Link href="/" className="text-xs uppercase tracking-[0.16em] text-[#a394b4]">
+            ← {BRAND.name}
+          </Link>
+          {!creator && (
+            <Link
+              href="/auth/sign-in?callbackURL=%2Fexplore"
+              className="rounded-full bg-[#6d3fa8]/10 px-3 py-1 text-xs font-semibold text-[#6d3fa8] hover:bg-[#6d3fa8]/20 transition-colors"
+            >
+              {PLATFORM_COPY.nav.account}
+            </Link>
+          )}
+        </div>
 
         <header className="mt-5 max-w-[52ch]">
           <p className="text-[0.62rem] uppercase tracking-[0.24em] text-[#a394b4]">

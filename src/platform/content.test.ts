@@ -59,6 +59,7 @@ describe("platform copy", () => {
 
   it("uses 'experience' for the creator collection", () => {
     expect(PLATFORM_COPY.nav.collection).toBe("My Experiences");
+    expect(PLATFORM_COPY.nav.account).toBe("Sign in");
     expect(PLATFORM_COPY.dashboard.title).toBe("My Experiences");
     expect(PLATFORM_COPY.dashboard.emptyCta).toMatch(/experience/i);
   });

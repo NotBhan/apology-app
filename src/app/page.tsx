@@ -5,6 +5,8 @@ import Link from "next/link";
 import { ThemeShowcase } from "@/components/theme-selector/ThemeShowcase";
 import { CategorySections } from "@/components/experiences/CategorySections";
 import { BIRTHDAY_THEMES } from "@/experiences/birthday/themes";
+import { getCreator } from "@/lib/security/creator";
+import { signOutAction } from "@/lib/auth/actions";
 
 export const metadata: Metadata = {
   title: "Make Something Meaningful",
@@ -19,7 +21,9 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const creator = await getCreator();
+
   return (
     <div className="min-h-svh bg-[#faf6ff]">
       <div className="relative overflow-hidden">
@@ -52,6 +56,23 @@ export default function HomePage() {
             <Link href="/my-letters" className="hover:text-[#4b2f6b]">
               {PLATFORM_COPY.nav.collection}
             </Link>
+            {creator ? (
+              <form action={signOutAction}>
+                <button
+                  type="submit"
+                  className="text-[0.78rem] font-semibold text-[#8a7a9c] hover:text-[#4b2f6b] cursor-pointer"
+                >
+                  Sign out
+                </button>
+              </form>
+            ) : (
+              <Link
+                href="/auth/sign-in"
+                className="rounded-full bg-[#6d3fa8]/10 px-3.5 py-1 font-semibold text-[#6d3fa8] hover:bg-[#6d3fa8]/20 transition-colors"
+              >
+                {PLATFORM_COPY.nav.account}
+              </Link>
+            )}
           </nav>
         </header>
 

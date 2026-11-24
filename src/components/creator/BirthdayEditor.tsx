@@ -299,12 +299,21 @@ export function BirthdayEditor({
       {/* Restored from Storage Notice */}
       {restored ? (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-2.5 text-xs text-amber-900">
-          <span>Draft restored from this browser. Sign in to save it to your account.</span>
+          <span>
+            Draft restored from this browser.{" "}
+            <a
+              href="/auth/sign-in?callbackURL=%2Fcreate%2Fbirthday"
+              className="font-semibold underline hover:text-amber-950"
+            >
+              Sign in
+            </a>{" "}
+            to save it to your account.
+          </span>
           <button
             type="button"
             onClick={() => setRestored(false)}
             aria-label="Dismiss notice"
-            className="text-amber-700 hover:text-amber-900 font-bold"
+            className="text-amber-700 hover:text-amber-900 font-bold cursor-pointer"
           >
             ×
           </button>
@@ -870,20 +879,27 @@ export function BirthdayEditor({
         ) : null}
 
         {/* Controls */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-stone-100">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-stone-100">
           {onCancel ? (
             <button
               type="button"
               onClick={onCancel}
-              className="rounded-xl border border-stone-300 px-4 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50"
+              className="rounded-xl border border-stone-300 px-4 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50 cursor-pointer"
             >
               Back
             </button>
+          ) : !isResponse ? (
+            <a
+              href="/auth/sign-in?callbackURL=%2Fcreate%2Fbirthday"
+              className="text-xs font-medium text-[#6d3fa8] hover:underline"
+            >
+              Sign in to your account
+            </a>
           ) : (
             <div />
           )}
 
-          <div className="flex flex-wrap gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
             {!isResponse ? (
               <button
                 type="button"

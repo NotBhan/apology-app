@@ -188,4 +188,11 @@ describe("birthday editor, anonymous path", () => {
     expect(handleUpload).toHaveBeenCalled();
     expect(await screen.findByAltText("Moment 1")).toBeInTheDocument();
   });
+
+  it("renders a sign in option for unauthenticated visitors", () => {
+    render(<BirthdayEditor />);
+    const signInLink = screen.getByRole("link", { name: /sign in to your account/i });
+    expect(signInLink).toBeInTheDocument();
+    expect(signInLink).toHaveAttribute("href", "/auth/sign-in?callbackURL=%2Fcreate%2Fbirthday");
+  });
 });
