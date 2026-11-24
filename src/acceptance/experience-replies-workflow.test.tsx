@@ -286,6 +286,13 @@ describe("Koi Koi — Experience Replies: End-to-End Acceptance Workflows", () =
       expect(bdayInviteBtn).toBeInTheDocument();
 
       // Step 2 & 3: Select Birthday in ExperienceReplyModal
+      const uploadSpy = vi.spyOn(clientApi, "uploadResponsePhoto").mockResolvedValue({
+        asset: {
+          id: "mock-bday-asset-1",
+          url: "/api/responses/assets/mock-bday-asset-1",
+        },
+        responseId: "mock-bday-resp-id",
+      });
       const sendExpSpy = vi.spyOn(clientApi, "sendExperienceReply").mockResolvedValue({
         ok: true,
         publicToken: "pub-bday-token-999",
@@ -314,9 +321,20 @@ describe("Koi Koi — Experience Replies: End-to-End Acceptance Workflows", () =
       await user.clear(messageInput);
       await user.type(messageInput, "Hope your day is filled with great memories.");
 
-      // Verify Birthday media upload boundary: Birthday editor has no file inputs
-      const fileInputs = document.querySelectorAll('input[type="file"]');
-      expect(fileInputs.length).toBe(0);
+      // Verify Birthday photo upload support in experience responses
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      expect(fileInput).toBeInTheDocument();
+      const photoFile = new File(["photo-bits"], "celebration.jpg", { type: "image/jpeg" });
+      await user.upload(fileInput, photoFile);
+
+      await waitFor(() => {
+        expect(uploadSpy).toHaveBeenCalledWith(
+          parentApologyId,
+          expect.any(File),
+          undefined,
+          "experience"
+        );
+      });
 
       // Step 6: Publish Birthday response
       await user.click(screen.getByRole("button", { name: "Publish Response" }));

@@ -132,4 +132,60 @@ describe("birthday editor, anonymous path", () => {
     await user.click(publishBtn);
     expect(handlePublish).toHaveBeenCalled();
   });
+
+  it("supports adding and removing photos via URL", async () => {
+    const user = userEvent.setup();
+    render(
+      <BirthdayEditor
+        initialValues={{
+          recipientName: "Riya",
+          senderName: "Arjun",
+          headline: "Happy birthday",
+          message: "Have a wonderful year!",
+        }}
+      />,
+    );
+
+    // Open image link input
+    await user.click(screen.getByRole("button", { name: /or add image url/i }));
+
+    const urlInput = screen.getByPlaceholderText("https://example.com/photo.jpg");
+    await user.type(urlInput, "https://images.example.com/moment1.jpg");
+    await user.click(screen.getByRole("button", { name: /^add$/i }));
+
+    expect(screen.getByAltText("Moment 1")).toBeInTheDocument();
+    expect(screen.getByText("1 / 5 photos")).toBeInTheDocument();
+
+    // Remove photo
+    await user.click(screen.getByLabelText("Remove photo 1"));
+    expect(screen.queryByAltText("Moment 1")).not.toBeInTheDocument();
+    expect(screen.getByText("0 / 5 photos")).toBeInTheDocument();
+  });
+
+  it("uploads photo when onUploadPhoto is provided and updates gallery preview", async () => {
+    const user = userEvent.setup();
+    const handleUpload = vi.fn().mockResolvedValue({ url: "/api/responses/assets/mock-asset-123" });
+
+    render(
+      <BirthdayEditor
+        initialValues={{
+          recipientName: "Riya",
+          senderName: "Arjun",
+          headline: "Happy birthday",
+          message: "Have a wonderful year!",
+        }}
+        isResponse={true}
+        onUploadPhoto={handleUpload}
+      />,
+    );
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(fileInput).toBeInTheDocument();
+
+    const file = new File(["dummy-img"], "moment.jpg", { type: "image/jpeg" });
+    await user.upload(fileInput, file);
+
+    expect(handleUpload).toHaveBeenCalled();
+    expect(await screen.findByAltText("Moment 1")).toBeInTheDocument();
+  });
 });

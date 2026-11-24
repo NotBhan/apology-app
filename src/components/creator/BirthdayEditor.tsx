@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BirthdayLetter } from "@/components/presentation/BirthdayLetter";
 import { BirthdayCake } from "@/components/presentation/birthday/BirthdayCake";
@@ -12,6 +12,7 @@ import {
 import { BIRTHDAY_THEMES, resolveBirthdayTheme } from "@/experiences/birthday/themes";
 import { ShareQrDialog } from "@/components/share/ShareQrDialog";
 import { Icon } from "@/components/ui/icons";
+import { compressImage } from "@/lib/image";
 
 const STORAGE_KEY = "koi.birthday.draft";
 
@@ -24,6 +25,7 @@ export interface BirthdayEditorValues {
   message: string;
   wish: string;
   candleCount: number;
+  photos: string[];
 }
 
 const EMPTY: BirthdayEditorValues = {
@@ -35,6 +37,7 @@ const EMPTY: BirthdayEditorValues = {
   message: "",
   wish: "",
   candleCount: 3,
+  photos: [],
 };
 
 function loadDraft(): BirthdayEditorValues | null {
@@ -51,6 +54,9 @@ function loadDraft(): BirthdayEditorValues | null {
       message: parsed.message ?? "",
       wish: parsed.wish ?? "",
       candleCount: typeof parsed.candleCount === "number" ? parsed.candleCount : 3,
+      photos: Array.isArray(parsed.photos)
+        ? parsed.photos.filter((p): p is string => typeof p === "string")
+        : [],
     };
   } catch {
     return null;
@@ -68,6 +74,7 @@ function saveDraftLocal(values: BirthdayEditorValues) {
 export interface BirthdayEditorProps {
   initialValues?: Partial<BirthdayEditorValues>;
   onPublishResponse?: (content: BirthdayContent) => Promise<{ path: string; publicToken: string }>;
+  onUploadPhoto?: (file: File) => Promise<{ url: string }>;
   onCancel?: () => void;
   isResponse?: boolean;
 }
@@ -83,6 +90,7 @@ const STAGES = [
 export function BirthdayEditor({
   initialValues,
   onPublishResponse,
+  onUploadPhoto,
   onCancel,
   isResponse = false,
 }: BirthdayEditorProps = {}) {
@@ -100,6 +108,13 @@ export function BirthdayEditor({
   const [activeStage, setActiveStage] = useState<number>(1);
   const [fullPreview, setFullPreview] = useState(false);
 
+  // Photo management state
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [photoUrlInput, setPhotoUrlInput] = useState("");
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const currentTheme = resolveBirthdayTheme(values.themeId);
 
   const previewContent: BirthdayContent = useMemo(() => ({
@@ -113,7 +128,7 @@ export function BirthdayEditor({
       "Wishing you another wonderful year filled with happiness, adventures, and unforgettable moments!",
     wish: values.wish.trim() ? values.wish.trim() : undefined,
     candleCount: values.candleCount,
-    photos: [],
+    photos: values.photos || [],
     audio: "none",
   }), [values, includeAge]);
 
@@ -139,6 +154,71 @@ export function BirthdayEditor({
     setValues((current) => ({ ...current, [key]: value }));
   }
 
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setPhotoError(null);
+
+    const remainingSlots = 5 - (values.photos?.length || 0);
+    if (remainingSlots <= 0) {
+      setPhotoError("Maximum of 5 photos reached.");
+      return;
+    }
+
+    const chosenFiles = Array.from(files).slice(0, remainingSlots);
+
+    if (!onUploadPhoto) {
+      setPhotoError("Sign in to save uploaded photos with your gift, or add image links below.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    setUploadingPhoto(true);
+    try {
+      const newUrls: string[] = [];
+      for (const file of chosenFiles) {
+        let uploadPayload: File = file;
+        try {
+          const compressed = await compressImage(file);
+          uploadPayload = new File([compressed.blob], file.name || "moment.jpg", {
+            type: compressed.type,
+          });
+        } catch {
+          // Fallback to original file if compression fails (e.g. test environment)
+          uploadPayload = file;
+        }
+        const res = await onUploadPhoto(uploadPayload);
+        if (res?.url) newUrls.push(res.url);
+      }
+      set("photos", [...(values.photos || []), ...newUrls].slice(0, 5));
+    } catch (err) {
+      setPhotoError(err instanceof Error ? err.message : "Failed to upload photo.");
+    } finally {
+      setUploadingPhoto(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  function handleAddPhotoUrl() {
+    const trimmed = photoUrlInput.trim();
+    if (!trimmed) return;
+    if (trimmed.length > 2048) {
+      setPhotoError("Photo URL must be under 2048 characters.");
+      return;
+    }
+    if ((values.photos?.length || 0) >= 5) {
+      setPhotoError("Maximum of 5 photos reached.");
+      return;
+    }
+    setPhotoError(null);
+    set("photos", [...(values.photos || []), trimmed]);
+    setPhotoUrlInput("");
+  }
+
+  function handleRemovePhoto(indexToRemove: number) {
+    set("photos", (values.photos || []).filter((_, idx) => idx !== indexToRemove));
+  }
+
   const parsed = birthdayContentSchema.safeParse({
     recipientName: values.recipientName,
     senderName: values.senderName,
@@ -148,7 +228,7 @@ export function BirthdayEditor({
     message: values.message,
     wish: values.wish.trim() ? values.wish.trim() : undefined,
     candleCount: values.candleCount,
-    photos: [],
+    photos: values.photos || [],
     audio: "none",
   });
 
@@ -259,8 +339,8 @@ export function BirthdayEditor({
                     {s.num}
                   </span>
                   <span className="truncate">
-                    <span className="sm:hidden">{s.shortLabel}</span>
-                    <span className="hidden sm:inline">{s.label}</span>
+                    <span className="md:hidden">{s.shortLabel}</span>
+                    <span className="hidden md:inline">{s.label}</span>
                   </span>
                 </button>
               </li>
@@ -530,6 +610,114 @@ export function BirthdayEditor({
             A special closing wish or inside joke that appears at the finale.
           </p>
         </label>
+
+        {/* Photos & Moments (Optional, up to 5) */}
+        <div className="space-y-3 pt-3 border-t border-stone-100">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-600">
+              Celebration Moments (optional)
+            </span>
+            <span className="text-[11px] text-stone-400 font-medium">
+              {values.photos?.length || 0} / 5 photos
+            </span>
+          </div>
+          <p className="text-[11px] text-stone-500">
+            Attach up to 5 memories to feature in the celebration moments gallery and personal letter envelope.
+          </p>
+
+          {/* Photo Thumbnails Grid */}
+          {(values.photos?.length || 0) > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
+              {values.photos.map((photoUrl, idx) => (
+                <div
+                  key={`photo-slot-${idx}`}
+                  className="group relative aspect-video overflow-hidden rounded-xl border border-stone-200 bg-stone-100 shadow-sm"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={photoUrl}
+                    alt={`Moment ${idx + 1}`}
+                    className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-stone-900/35 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePhoto(idx)}
+                      aria-label={`Remove photo ${idx + 1}`}
+                      className="rounded-full bg-red-600 p-1.5 text-white shadow-md hover:bg-red-700 transition cursor-pointer"
+                    >
+                      <Icon name="trash" size={13} />
+                    </button>
+                  </div>
+                  <span className="absolute top-1.5 left-1.5 rounded-full bg-stone-900/70 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                    #{idx + 1}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Photo Actions */}
+          {(values.photos?.length || 0) < 5 && (
+            <div className="space-y-2 pt-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple={(values.photos?.length || 0) < 4}
+                  onChange={handleFileSelect}
+                  className="sr-only"
+                  id="birthday-photo-upload-input"
+                />
+                <label
+                  htmlFor="birthday-photo-upload-input"
+                  className={`inline-flex items-center gap-1.5 rounded-xl border border-dashed border-stone-300 bg-stone-50/70 px-3.5 py-2 text-xs font-semibold text-stone-700 transition hover:bg-stone-100 hover:border-stone-400 cursor-pointer ${
+                    uploadingPhoto ? "opacity-60 pointer-events-none" : ""
+                  }`}
+                >
+                  <Icon name="image" size={14} className="text-stone-500" />
+                  <span>{uploadingPhoto ? "Uploading..." : "Upload photo"}</span>
+                </label>
+
+                <button
+                  type="button"
+                  onClick={() => setShowUrlInput(!showUrlInput)}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-stone-500 hover:text-stone-800 transition cursor-pointer px-2 py-1"
+                >
+                  <span>{showUrlInput ? "Hide link option" : "Or add image URL"}</span>
+                </button>
+              </div>
+
+              {showUrlInput && (
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="url"
+                    value={photoUrlInput}
+                    onChange={(e) => setPhotoUrlInput(e.target.value)}
+                    placeholder="https://example.com/photo.jpg"
+                    maxLength={2048}
+                    className="flex-1 rounded-lg border border-stone-300 px-3 py-1.5 text-xs text-stone-800 placeholder:text-stone-400 focus:border-[#e8590c] focus:outline-none focus:ring-1 focus:ring-[#e8590c]"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddPhotoUrl}
+                    disabled={!photoUrlInput.trim()}
+                    className="rounded-lg bg-stone-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-stone-900 transition disabled:opacity-40 cursor-pointer"
+                  >
+                    Add
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {photoError && (
+            <p className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5">
+              {photoError}
+            </p>
+          )}
+        </div>
       </section>
 
       {/* Stage 4: Cake & Candles */}

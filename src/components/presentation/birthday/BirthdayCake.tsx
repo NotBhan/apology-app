@@ -28,7 +28,9 @@ export function BirthdayCake({
   const isThreeTier = theme.cake.tiers === 3;
   const topY = isThreeTier ? 48 : 70;
   const candleHeight = isThreeTier ? 28 : 36;
-  const candleSpan = isThreeTier ? 46 : 100;
+  const candleSpan = isThreeTier
+    ? (count <= 3 ? 44 : 56)
+    : (count <= 3 ? 74 : count <= 5 ? 96 : 112);
 
   function handleBlowOut() {
     if (blownOut) return;
@@ -398,10 +400,13 @@ export function BirthdayCake({
 
           {/* Candles and Flames */}
           {candlePositions.map((cx, idx) => {
+            const candleWidth = count >= 6 ? 5.5 : 7;
+            const candleRadius = count >= 6 ? 1.5 : 2;
+            const halfW = candleWidth / 2;
             const candleColor = idx % 2 === 0 ? theme.palette.primary : theme.cake.accent;
-            const glowRadius = count <= 2 ? 15 : count <= 4 ? 12 : count <= 5 ? 10 : 8.5;
-            const glowOpacity = count > 4 ? 0.65 : reduce ? 0.6 : 0.85;
-            const flameScale = count >= 6 ? 0.88 : 1;
+            const glowRadius = count <= 2 ? 14 : count <= 4 ? 11 : count <= 5 ? 8.5 : 6.5;
+            const glowOpacity = count > 4 ? 0.55 : reduce ? 0.5 : 0.8;
+            const flameScale = count >= 6 ? 0.8 : count >= 5 ? 0.9 : 1;
             const normX = count > 1 ? Math.abs(cx - 150) / (candleSpan / 2) : 0;
             const curveOffset = Math.round((1 - normX * normX) * (isThreeTier ? 2.5 : 4) * 10) / 10;
             const candleY = topY + curveOffset;
@@ -410,22 +415,22 @@ export function BirthdayCake({
               <g key={`candle-${idx}`} id={`candle-${idx}`}>
                 {/* Candle Stick */}
                 <rect
-                  x={cx - 3.5}
+                  x={cx - halfW}
                   y={candleY}
-                  width="7"
+                  width={candleWidth}
                   height={candleHeight}
-                  rx="2"
+                  rx={candleRadius}
                   fill="#ffffff"
                   stroke={theme.palette.border}
                   strokeWidth="0.8"
                 />
                 {/* Spiral Stripes on Candle */}
                 <path
-                  d={`M ${cx - 3.5} ${candleY + 6} L ${cx + 3.5} ${candleY + 11}
-                      M ${cx - 3.5} ${candleY + 15} L ${cx + 3.5} ${candleY + 20}
-                      ${!isThreeTier ? `M ${cx - 3.5} ${candleY + 24} L ${cx + 3.5} ${candleY + 29}` : ""}`}
+                  d={`M ${cx - halfW} ${candleY + 6} L ${cx + halfW} ${candleY + 11}
+                      M ${cx - halfW} ${candleY + 15} L ${cx + halfW} ${candleY + 20}
+                      ${!isThreeTier ? `M ${cx - halfW} ${candleY + 24} L ${cx + halfW} ${candleY + 29}` : ""}`}
                   stroke={candleColor}
-                  strokeWidth="2.2"
+                  strokeWidth={count >= 6 ? "1.8" : "2.2"}
                   strokeLinecap="round"
                   opacity="0.85"
                 />

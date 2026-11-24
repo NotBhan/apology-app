@@ -221,6 +221,18 @@ export function ExperienceReplyModal({
               }}
               isResponse={true}
               onPublishResponse={handlePublishBirthdayResponse}
+              onUploadPhoto={async (file: File) => {
+                const res = await uploadResponsePhoto(
+                  apologyId,
+                  file,
+                  responseIdRef.current ?? undefined,
+                  "experience"
+                );
+                if (res.responseId && !responseIdRef.current) {
+                  responseIdRef.current = res.responseId;
+                }
+                return { url: res.asset.url };
+              }}
               onCancel={() => setStep("select")}
             />
           </div>
