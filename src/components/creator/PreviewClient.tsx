@@ -9,6 +9,9 @@ import {
   PresentationEngine,
   type PresentationApi,
 } from "@/components/presentation/PresentationEngine";
+import { ShareQrDialog } from "@/components/share/ShareQrDialog";
+import { publishDraftAction } from "@/app/create/actions";
+import { Icon } from "@/components/ui/icons";
 
 interface PreviewClientProps {
   draft: ApologyDraft;
@@ -17,6 +20,26 @@ interface PreviewClientProps {
 
 export function PreviewClient({ draft, theme }: PreviewClientProps) {
   const [api, setApi] = useState<PresentationApi | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [sharePath, setSharePath] = useState<string | null>(null);
+
+  async function handlePublishAndShare() {
+    setPublishError(null);
+    setPublishing(true);
+    try {
+      const result = await publishDraftAction(draft.id, draft.linkDurationDays);
+      if (result.ok && result.data) {
+        setSharePath(result.data.path);
+      } else {
+        setPublishError(result.error ?? "Could not generate link.");
+      }
+    } catch (e) {
+      setPublishError(e instanceof Error ? e.message : "Could not publish.");
+    } finally {
+      setPublishing(false);
+    }
+  }
 
   return (
     <div className="min-h-svh bg-[#efe9f7]">
@@ -106,15 +129,35 @@ export function PreviewClient({ draft, theme }: PreviewClientProps) {
             </p>
           </div>
 
-          <div className="space-y-2 border-t border-[#f0e8f8] pt-4">
+          <div className="space-y-2.5 border-t border-[#f0e8f8] pt-4">
+            <button
+              type="button"
+              onClick={handlePublishAndShare}
+              disabled={publishing}
+              className="flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[#6d3fa8] px-4 text-[0.85rem] font-semibold text-white shadow-sm transition hover:bg-[#5b3290] disabled:opacity-50 cursor-pointer motion-safe:active:scale-95"
+            >
+              <Icon name="share" size={14} />
+              <span>{publishing ? "Preparing link…" : "Publish & Share letter"}</span>
+            </button>
             <Link
-              href={`/create/${draft.id}`}
+              href={`/create/${draft.id}?step=publish`}
               className="flex min-h-10 w-full items-center justify-center rounded-full border border-[#e3d7ef] bg-white text-[0.8rem] font-semibold text-[#4b2f6b] transition hover:border-[#c9b6dd]"
             >
               Back to editing
             </Link>
+            {publishError && (
+              <div className="rounded-xl bg-red-50 p-2.5 text-xs text-red-700 border border-red-200">
+                <p>{publishError}</p>
+                <Link
+                  href={`/create/${draft.id}`}
+                  className="mt-1 inline-block font-semibold underline hover:text-red-900"
+                >
+                  Edit required fields →
+                </Link>
+              </div>
+            )}
             <p className="text-[0.68rem] leading-relaxed text-[#8a7a9c]">
-              Publish from the final step to generate the private link.
+              Publishing generates a private, secure link and QR code to send to your recipient.
             </p>
           </div>
 
@@ -129,6 +172,14 @@ export function PreviewClient({ draft, theme }: PreviewClientProps) {
           ) : null}
         </aside>
       </div>
+
+      {sharePath ? (
+        <ShareQrDialog
+          path={sharePath}
+          experienceType={draft.experienceType ?? "apology"}
+          onClose={() => setSharePath(null)}
+        />
+      ) : null}
     </div>
   );
 }

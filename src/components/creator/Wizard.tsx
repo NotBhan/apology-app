@@ -45,6 +45,7 @@ interface WizardProps {
    */
   onDraftChange?: (draft: ApologyDraft) => void;
   isResponse?: boolean;
+  initialStep?: number;
 }
 
 /**
@@ -66,13 +67,19 @@ const STEP_LABELS = [
   "Publish",
 ] as const;
 
-export function Wizard({ initialDraft, gateway, onDraftChange, isResponse = false }: WizardProps) {
+export function Wizard({
+  initialDraft,
+  gateway,
+  onDraftChange,
+  isResponse = false,
+  initialStep,
+}: WizardProps) {
   const router = useRouter();
   const [draft, setDraft] = useState<ApologyDraft>(() => ({
     ...initialDraft,
     linkDurationDays: normalizeDurationDays(initialDraft.linkDurationDays),
   }));
-  const [step, setStep] = useState(initialDraft.messages.message1 ? 1 : 0);
+  const [step, setStep] = useState(() => initialStep ?? (initialDraft.messages.message1 ? 1 : 0));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -168,7 +175,12 @@ export function Wizard({ initialDraft, gateway, onDraftChange, isResponse = fals
         </span>
       </div>
 
-      <StepRail step={step} total={STEP_LABELS.length} labels={STEP_LABELS} />
+      <StepRail
+        step={step}
+        total={STEP_LABELS.length}
+        labels={STEP_LABELS}
+        onStepClick={setStep}
+      />
 
       <div className="mt-7">
         <AnimatePresence mode="wait" initial={false}>
@@ -275,30 +287,51 @@ function StepRail({
   step,
   total,
   labels,
+  onStepClick,
 }: {
   step: number;
   total: number;
   labels: readonly string[];
+  onStepClick?: (step: number) => void;
 }) {
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-1.5" aria-hidden>
+      <div className="flex items-center gap-1.5" aria-label="Wizard steps">
         {Array.from({ length: total }).map((_, index) => (
-          <motion.span
+          <button
             key={index}
-            className="h-[3px] flex-1 rounded-full"
-            initial={false}
-            animate={{
-              backgroundColor: index <= step ? "#8a5bc4" : "#e9dff5",
-              scaleY: index === step ? 1.8 : 1,
-            }}
-            transition={{ duration: 0.35 }}
-          />
+            type="button"
+            onClick={() => onStepClick?.(index)}
+            className="group relative flex h-[18px] flex-1 items-center py-1 focus:outline-none"
+            title={`Step ${index + 1}: ${labels[index]}`}
+            aria-label={`Jump to step ${index + 1}: ${labels[index]}`}
+          >
+            <motion.span
+              className="h-[3px] w-full rounded-full transition-colors group-hover:bg-[#8a5bc4]/70"
+              initial={false}
+              animate={{
+                backgroundColor: index <= step ? "#8a5bc4" : "#e9dff5",
+                scaleY: index === step ? 1.8 : 1,
+              }}
+              transition={{ duration: 0.35 }}
+            />
+          </button>
         ))}
       </div>
-      <p className="text-[0.66rem] uppercase tracking-[0.18em] text-[#a394b4]">
-        {String(step + 1).padStart(2, "0")} · {labels[step]}
-      </p>
+      <div className="flex items-center justify-between text-[0.66rem] uppercase tracking-[0.18em] text-[#a394b4]">
+        <p>
+          {String(step + 1).padStart(2, "0")} · {labels[step]}
+        </p>
+        {step < total - 1 ? (
+          <button
+            type="button"
+            onClick={() => onStepClick?.(total - 1)}
+            className="font-medium text-[#8a5bc4] hover:underline"
+          >
+            Skip to publish →
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

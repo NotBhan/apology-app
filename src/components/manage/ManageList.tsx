@@ -10,6 +10,7 @@ import { deleteDraftAction, publishDraftAction, revokeDraftAction } from "@/app/
 import { daysRemaining, formatDuration, formatExpiry, isExpired } from "@/lib/expiry";
 import { useMounted } from "@/hooks/useMounted";
 import { Icon } from "@/components/ui/icons";
+import { ShareQrDialog } from "@/components/share/ShareQrDialog";
 import { resolveEmotionBadge } from "@/experiences/emotion";
 import type { ApologyDraft } from "@/types/apology";
 import type { DeletionTombstone } from "@/lib/lifecycle/types";
@@ -78,6 +79,8 @@ function ManageRow({
   const [confirming, setConfirming] = useState<null | "revoke" | "delete">(null);
   const [renewed, setRenewed] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [sharePath, setSharePath] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
   const [showReplies, setShowReplies] = useState(false);
   const theme = getTheme(draft.themeId);
   const pack = getStickerPack(draft.stickerPackId);
@@ -188,6 +191,29 @@ function ManageRow({
         >
           Preview
         </Link>
+        <button
+          type="button"
+          disabled={pending || sharing}
+          onClick={() => {
+            startTransition(async () => {
+              setNotice(null);
+              setSharing(true);
+              const result = await publishDraftAction(draft.id, draft.linkDurationDays);
+              setSharing(false);
+              if (result.ok && result.data) {
+                setStatus("published");
+                setExpiresAt(result.data.expiresAt);
+                setSharePath(result.data.path);
+              } else {
+                setNotice(result.error ?? "Could not generate share link.");
+              }
+            });
+          }}
+          className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-[#6d3fa8] px-3.5 text-[0.74rem] font-semibold text-white shadow-sm transition hover:bg-[#5b3290] disabled:opacity-50 cursor-pointer motion-safe:active:scale-95"
+        >
+          <Icon name="share" size={13} />
+          <span>{sharing ? "Preparing…" : status === "published" && !expired ? "Share / QR" : "Share"}</span>
+        </button>
 
         {renewable ? (
           <button
@@ -336,9 +362,25 @@ function ManageRow({
       ) : null}
 
       {notice ? (
-        <p className="mt-2 rounded-xl bg-[#faf6ff] px-3 py-2 text-[0.72rem] text-[#5b4a6d]">
-          {notice}
-        </p>
+        <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-amber-50/90 px-3 py-2 text-[0.72rem] text-amber-900 border border-amber-200">
+          <span>{notice}</span>
+          {notice.includes("messages") || notice.includes("parts") ? (
+            <Link
+              href={`/create/${draft.id}?step=publish`}
+              className="font-bold underline text-amber-950 hover:text-amber-800"
+            >
+              Complete draft →
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
+
+      {sharePath ? (
+        <ShareQrDialog
+          path={sharePath}
+          experienceType={draft.experienceType ?? "apology"}
+          onClose={() => setSharePath(null)}
+        />
       ) : null}
 
       {confirming ? (

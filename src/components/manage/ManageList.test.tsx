@@ -229,4 +229,33 @@ describe("ManageList response resolution", () => {
     expect(screen.getByText("Experience Reply: Birthday")).toBeInTheDocument();
     expect(screen.getByText("Happy Birthday Friend!")).toBeInTheDocument();
   });
+
+  it("renders Share button and opens ShareQrDialog when clicked", async () => {
+    const user = userEvent.setup();
+    const { publishDraftAction } = await import("@/app/create/actions");
+    vi.mocked(publishDraftAction).mockResolvedValueOnce({
+      ok: true,
+      data: {
+        token: "mock-published-token-123",
+        path: "/letter/mock-published-token-123",
+        expiresAt: "2026-11-28T10:00:00.000Z",
+        durationDays: 3,
+      },
+    });
+
+    render(
+      <ManageList
+        drafts={[apologyDraft]}
+        tombstones={[]}
+        pendingDeletionIds={[]}
+      />,
+    );
+
+    const shareBtn = screen.getByRole("button", { name: /Share/i });
+    expect(shareBtn).toBeInTheDocument();
+
+    await user.click(shareBtn);
+    expect(publishDraftAction).toHaveBeenCalledWith("draft-apology-1", 3);
+    expect(await screen.findByRole("dialog", { name: /Share with QR/i })).toBeInTheDocument();
+  });
 });

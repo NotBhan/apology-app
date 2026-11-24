@@ -40,6 +40,12 @@ const gateway: WizardGateway = {
   },
 };
 
-export function CreatorWizardClient({ draft }: { draft: ApologyDraft }) {
-  return <Wizard initialDraft={draft} gateway={gateway} />;
+export function CreatorWizardClient({
+  draft,
+  initialStep,
+}: {
+  draft: ApologyDraft;
+  initialStep?: number;
+}) {
+  return <Wizard initialDraft={draft} initialStep={initialStep} gateway={gateway} />;
 }

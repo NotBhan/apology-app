@@ -11,8 +11,16 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default async function EditDraftPage({ params }: { params: Promise<{ draftId: string }> }) {
+export default async function EditDraftPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ draftId: string }>;
+  searchParams?: Promise<{ step?: string }>;
+}) {
   const { draftId } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const initialStep = resolvedSearchParams?.step === "publish" ? 6 : undefined;
   const creator = await requirePageCreator(`/create/${draftId}`);
 
   const repo = await getRepository();
@@ -28,7 +36,7 @@ export default async function EditDraftPage({ params }: { params: Promise<{ draf
 
   return (
     <main className="min-h-svh bg-[#faf6ff]">
-      <CreatorWizardClient draft={toCreatorDraft(record)} />
+      <CreatorWizardClient draft={toCreatorDraft(record)} initialStep={initialStep} />
     </main>
   );
 }
