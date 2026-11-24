@@ -6,15 +6,30 @@ import { BirthdayLetter } from "@/components/presentation/BirthdayLetter";
 import { BirthdayCake } from "@/components/presentation/birthday/BirthdayCake";
 import {
   birthdayContentSchema,
+  BIRTHDAY_PHOTO_LAYOUTS,
   type BirthdayContent,
+  type BirthdayPhotoLayout,
   type BirthdayThemeId,
 } from "@/experiences/birthday/schema";
 import { BIRTHDAY_THEMES, resolveBirthdayTheme } from "@/experiences/birthday/themes";
 import { ShareQrDialog } from "@/components/share/ShareQrDialog";
 import { Icon } from "@/components/ui/icons";
 import { compressImage } from "@/lib/image";
+import { uploadFile } from "@/lib/upload";
 
 const STORAGE_KEY = "koi.birthday.draft";
+
+export type BirthdayEditorPhotoItem =
+  | string
+  | { url: string; caption?: string; focalPoint?: string };
+
+export function getBirthdayPhotoUrl(item: BirthdayEditorPhotoItem): string {
+  return typeof item === "string" ? item : item.url;
+}
+
+export function getBirthdayPhotoCaption(item: BirthdayEditorPhotoItem): string {
+  return typeof item === "string" ? "" : item.caption || "";
+}
 
 export interface BirthdayEditorValues {
   recipientName: string;
@@ -25,7 +40,8 @@ export interface BirthdayEditorValues {
   message: string;
   wish: string;
   candleCount: number;
-  photos: string[];
+  photoLayout: BirthdayPhotoLayout;
+  photos: BirthdayEditorPhotoItem[];
 }
 
 const EMPTY: BirthdayEditorValues = {
@@ -37,6 +53,7 @@ const EMPTY: BirthdayEditorValues = {
   message: "",
   wish: "",
   candleCount: 3,
+  photoLayout: "theme-adaptive",
   photos: [],
 };
 
@@ -54,8 +71,16 @@ function loadDraft(): BirthdayEditorValues | null {
       message: parsed.message ?? "",
       wish: parsed.wish ?? "",
       candleCount: typeof parsed.candleCount === "number" ? parsed.candleCount : 3,
+      photoLayout:
+        parsed.photoLayout && BIRTHDAY_PHOTO_LAYOUTS.includes(parsed.photoLayout as BirthdayPhotoLayout)
+          ? (parsed.photoLayout as BirthdayPhotoLayout)
+          : "theme-adaptive",
       photos: Array.isArray(parsed.photos)
-        ? parsed.photos.filter((p): p is string => typeof p === "string")
+        ? (parsed.photos as BirthdayEditorPhotoItem[]).filter((p) => {
+            if (typeof p === "string") return Boolean(p.trim());
+            if (p && typeof p === "object" && typeof p.url === "string") return Boolean(p.url.trim());
+            return false;
+          })
         : [],
     };
   } catch {
@@ -73,6 +98,9 @@ function saveDraftLocal(values: BirthdayEditorValues) {
 
 export interface BirthdayEditorProps {
   initialValues?: Partial<BirthdayEditorValues>;
+  initialDraftId?: string;
+  signedIn?: boolean;
+  isLoadingSession?: boolean;
   onPublishResponse?: (content: BirthdayContent) => Promise<{ path: string; publicToken: string }>;
   onUploadPhoto?: (file: File) => Promise<{ url: string }>;
   onCancel?: () => void;
@@ -89,6 +117,9 @@ const STAGES = [
 
 export function BirthdayEditor({
   initialValues,
+  initialDraftId,
+  signedIn = false,
+  isLoadingSession = false,
   onPublishResponse,
   onUploadPhoto,
   onCancel,
@@ -98,7 +129,12 @@ export function BirthdayEditor({
   const [values, setValues] = useState<BirthdayEditorValues>(() => ({
     ...EMPTY,
     ...initialValues,
+    photoLayout: initialValues?.photoLayout ?? "theme-adaptive",
+    photos: initialValues?.photos ?? [],
   }));
+  const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const [restored, setRestored] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +143,14 @@ export function BirthdayEditor({
   const [includeAge, setIncludeAge] = useState(() => typeof initialValues?.age === "number");
   const [activeStage, setActiveStage] = useState<number>(1);
   const [fullPreview, setFullPreview] = useState(false);
+
+  // Authentication state: "loading" | "authenticated" | "unauthenticated"
+  const authState: "loading" | "authenticated" | "unauthenticated" = useMemo(() => {
+    if (sessionExpired) return "unauthenticated";
+    if (isLoadingSession) return "loading";
+    if (signedIn) return "authenticated";
+    return "unauthenticated";
+  }, [sessionExpired, isLoadingSession, signedIn]);
 
   // Photo management state
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -128,12 +172,13 @@ export function BirthdayEditor({
       "Wishing you another wonderful year filled with happiness, adventures, and unforgettable moments!",
     wish: values.wish.trim() ? values.wish.trim() : undefined,
     candleCount: values.candleCount,
+    photoLayout: values.photoLayout,
     photos: values.photos || [],
     audio: "none",
   }), [values, includeAge]);
 
   useEffect(() => {
-    if (isResponse) return;
+    if (isResponse || initialDraftId) return;
     const stored = loadDraft();
     if (stored) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -143,7 +188,7 @@ export function BirthdayEditor({
       }
       setRestored(true);
     }
-  }, [isResponse]);
+  }, [isResponse, initialDraftId]);
 
   useEffect(() => {
     if (isResponse) return;
@@ -167,15 +212,93 @@ export function BirthdayEditor({
 
     const chosenFiles = Array.from(files).slice(0, remainingSlots);
 
-    if (!onUploadPhoto) {
+    if (onUploadPhoto) {
+      setUploadingPhoto(true);
+      try {
+        const newItems: BirthdayEditorPhotoItem[] = [];
+        for (const file of chosenFiles) {
+          let uploadPayload: File = file;
+          try {
+            const compressed = await compressImage(file);
+            uploadPayload = new File([compressed.blob], file.name || "moment.jpg", {
+              type: compressed.type,
+            });
+          } catch {
+            // Fallback to original file if compression fails (e.g. test environment)
+            uploadPayload = file;
+          }
+          const res = await onUploadPhoto(uploadPayload);
+          if (res?.url) newItems.push({ url: res.url, caption: "" });
+        }
+        set("photos", [...(values.photos || []), ...newItems].slice(0, 5));
+      } catch (err) {
+        setPhotoError(err instanceof Error ? err.message : "Failed to upload photo.");
+      } finally {
+        setUploadingPhoto(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }
+      return;
+    }
+
+    if (authState === "loading") {
+      setPhotoError("Checking account status. Please try again in a moment.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    if (authState !== "authenticated") {
       setPhotoError("Sign in to save uploaded photos with your gift, or add image links below.");
       if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
 
+    // Authenticated user uploading photos with platform storage
     setUploadingPhoto(true);
     try {
-      const newUrls: string[] = [];
+      let activeId = draftId;
+      if (!activeId) {
+        if (!values.recipientName.trim() || !values.senderName.trim()) {
+          setPhotoError("Please provide recipient and sender names before uploading photos to your draft.");
+          setUploadingPhoto(false);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+          return;
+        }
+
+        const res = await fetch("/api/drafts", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            experienceType: "birthday",
+            content: {
+              recipientName: values.recipientName,
+              senderName: values.senderName,
+              headline: values.headline || "Happy Birthday",
+              message: values.message || "Best wishes",
+              themeId: values.themeId,
+              photoLayout: values.photoLayout,
+              photos: values.photos || [],
+              candleCount: values.candleCount,
+              wish: values.wish.trim() ? values.wish.trim() : undefined,
+              age: includeAge && values.age ? values.age : undefined,
+              audio: "none",
+            },
+          }),
+        });
+
+        if (res.status === 401) {
+          setSessionExpired(true);
+          setPhotoError("Your session has expired. Sign in to upload photos.");
+          setUploadingPhoto(false);
+          return;
+        }
+
+        const payload = await res.json();
+        if (!res.ok) throw new Error(payload.error ?? "Could not initialize draft for photo upload.");
+        activeId = payload.draft.id as string;
+        setDraftId(activeId);
+      }
+
+      const newItems: BirthdayEditorPhotoItem[] = [];
       for (const file of chosenFiles) {
         let uploadPayload: File = file;
         try {
@@ -184,13 +307,35 @@ export function BirthdayEditor({
             type: compressed.type,
           });
         } catch {
-          // Fallback to original file if compression fails (e.g. test environment)
           uploadPayload = file;
         }
-        const res = await onUploadPhoto(uploadPayload);
-        if (res?.url) newUrls.push(res.url);
+        const asset = await uploadFile(uploadPayload, "photo", uploadPayload.name || "moment.jpg", activeId);
+        if (asset?.url) newItems.push({ url: asset.url, caption: "" });
       }
-      set("photos", [...(values.photos || []), ...newUrls].slice(0, 5));
+
+      const updatedPhotos = [...(values.photos || []), ...newItems].slice(0, 5);
+      set("photos", updatedPhotos);
+
+      // Persist updated photos to draft in background
+      await fetch(`/api/experiences/birthday/${activeId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          content: {
+            recipientName: values.recipientName,
+            senderName: values.senderName,
+            headline: values.headline || "Happy Birthday",
+            message: values.message || "Best wishes",
+            themeId: values.themeId,
+            photoLayout: values.photoLayout,
+            photos: updatedPhotos,
+            candleCount: values.candleCount,
+            wish: values.wish.trim() ? values.wish.trim() : undefined,
+            age: includeAge && values.age ? values.age : undefined,
+            audio: "none",
+          },
+        }),
+      });
     } catch (err) {
       setPhotoError(err instanceof Error ? err.message : "Failed to upload photo.");
     } finally {
@@ -211,8 +356,27 @@ export function BirthdayEditor({
       return;
     }
     setPhotoError(null);
-    set("photos", [...(values.photos || []), trimmed]);
+    set("photos", [...(values.photos || []), { url: trimmed, caption: "" }]);
     setPhotoUrlInput("");
+  }
+
+  function handleMovePhoto(index: number, direction: "prev" | "next") {
+    const list = [...(values.photos || [])];
+    const targetIndex = direction === "prev" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= list.length) return;
+    const temp = list[index];
+    list[index] = list[targetIndex];
+    list[targetIndex] = temp;
+    set("photos", list);
+  }
+
+  function handleUpdatePhotoCaption(index: number, caption: string) {
+    const list = [...(values.photos || [])];
+    const current = list[index];
+    if (!current) return;
+    const url = typeof current === "string" ? current : current.url;
+    list[index] = { url, caption: caption.slice(0, 120) };
+    set("photos", list);
   }
 
   function handleRemovePhoto(indexToRemove: number) {
@@ -228,6 +392,7 @@ export function BirthdayEditor({
     message: values.message,
     wish: values.wish.trim() ? values.wish.trim() : undefined,
     candleCount: values.candleCount,
+    photoLayout: values.photoLayout,
     photos: values.photos || [],
     audio: "none",
   });
@@ -261,23 +426,52 @@ export function BirthdayEditor({
         return;
       }
 
-      const created = await fetch("/api/drafts", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ experienceType: "birthday", content: parsed.data }),
-      });
+      let activeId = draftId;
+      if (activeId) {
+        const res = await fetch(`/api/experiences/birthday/${activeId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ content: parsed.data }),
+        });
 
-      if (created.status === 401) {
-        router.push(`/auth/sign-in?callbackURL=${encodeURIComponent("/create/birthday")}`);
-        return;
+        if (res.status === 401) {
+          setSessionExpired(true);
+          setError("Your session has expired. Sign in to save your gift.");
+          if (publish) {
+            router.push(`/auth/sign-in?callbackURL=${encodeURIComponent("/create/birthday")}`);
+          }
+          return;
+        }
+
+        const payload = await res.json();
+        if (!res.ok) throw new Error(payload.error ?? "Could not update the draft.");
+      } else {
+        const created = await fetch("/api/drafts", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ experienceType: "birthday", content: parsed.data }),
+        });
+
+        if (created.status === 401) {
+          setSessionExpired(true);
+          setError("Your session has expired. Sign in to save your gift.");
+          if (publish) {
+            router.push(`/auth/sign-in?callbackURL=${encodeURIComponent("/create/birthday")}`);
+          }
+          return;
+        }
+
+        const payload = await created.json();
+        if (!created.ok) throw new Error(payload.error ?? "Could not save the draft.");
+
+        activeId = payload.draft.id as string;
+        setDraftId(activeId);
       }
 
-      const payload = await created.json();
-      if (!created.ok) throw new Error(payload.error ?? "Could not save the draft.");
+      setSessionExpired(false);
 
-      if (publish) {
-        const id = payload.draft.id as string;
-        const res = await fetch(`/api/drafts/${id}/publish`, {
+      if (publish && activeId) {
+        const res = await fetch(`/api/drafts/${activeId}/publish`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ durationDays: 1 }),
@@ -286,6 +480,9 @@ export function BirthdayEditor({
         if (!res.ok) throw new Error(out.error ?? "Could not publish.");
         setPublished(out.path as string);
         window.sessionStorage.removeItem(STORAGE_KEY);
+      } else {
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 3000);
       }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Something went wrong.");
@@ -298,22 +495,41 @@ export function BirthdayEditor({
     <div className="space-y-6">
       {/* Restored from Storage Notice */}
       {restored ? (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-2.5 text-xs text-amber-900">
+        <div
+          role="status"
+          className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-2.5 text-xs ${
+            authState === "authenticated"
+              ? "border-purple-200 bg-purple-50/80 text-purple-900"
+              : "border-amber-200 bg-amber-50/80 text-amber-900"
+          }`}
+        >
           <span>
-            Draft restored from this browser.{" "}
-            <a
-              href="/auth/sign-in?callbackURL=%2Fcreate%2Fbirthday"
-              className="font-semibold underline hover:text-amber-950"
-            >
-              Sign in
-            </a>{" "}
-            to save it to your account.
+            {authState === "authenticated" ? (
+              "Draft restored from this browser. Ready to save to your account."
+            ) : authState === "loading" ? (
+              "Draft restored from this browser."
+            ) : (
+              <>
+                Draft restored from this browser.{" "}
+                <a
+                  href="/auth/sign-in?callbackURL=%2Fcreate%2Fbirthday"
+                  className="font-semibold underline hover:text-amber-950"
+                >
+                  Sign in
+                </a>{" "}
+                to save it to your account.
+              </>
+            )}
           </span>
           <button
             type="button"
             onClick={() => setRestored(false)}
             aria-label="Dismiss notice"
-            className="text-amber-700 hover:text-amber-900 font-bold cursor-pointer"
+            className={`font-bold cursor-pointer ${
+              authState === "authenticated"
+                ? "text-purple-700 hover:text-purple-900"
+                : "text-amber-700 hover:text-amber-900"
+            }`}
           >
             ×
           </button>
@@ -621,7 +837,7 @@ export function BirthdayEditor({
         </label>
 
         {/* Photos & Moments (Optional, up to 5) */}
-        <div className="space-y-3 pt-3 border-t border-stone-100">
+        <div className="space-y-4 pt-3 border-t border-stone-100">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-600">
               Celebration Moments (optional)
@@ -634,35 +850,147 @@ export function BirthdayEditor({
             Attach up to 5 memories to feature in the celebration moments gallery and personal letter envelope.
           </p>
 
-          {/* Photo Thumbnails Grid */}
+          {/* Photo Layout / Presentation Style Selector */}
+          <div className="space-y-2 pt-1">
+            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-600">
+              Presentation Style
+            </span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[
+                {
+                  id: "theme-adaptive",
+                  label: "Theme Signature",
+                  desc: "Signature framing & tape styled for your theme",
+                },
+                {
+                  id: "scrapbook",
+                  label: "Scrapbook",
+                  desc: "Layered prints with kraft tape & playful tilts",
+                },
+                {
+                  id: "polaroid",
+                  label: "Polaroid",
+                  desc: "Instant camera frames with bottom chin captions",
+                },
+                {
+                  id: "slideshow",
+                  label: "Slideshow",
+                  desc: "Interactive carousel with slide navigation",
+                },
+              ].map((styleOption) => {
+                const isSelected = (values.photoLayout || "theme-adaptive") === styleOption.id;
+                return (
+                  <button
+                    key={styleOption.id}
+                    type="button"
+                    onClick={() => set("photoLayout", styleOption.id as BirthdayPhotoLayout)}
+                    aria-pressed={isSelected}
+                    className={`flex flex-col text-left p-2.5 sm:p-3 rounded-xl border transition-all cursor-pointer ${
+                      isSelected
+                        ? "border-[#e8590c] bg-orange-50/60 shadow-xs ring-1 ring-[#e8590c]"
+                        : "border-stone-200 bg-stone-50/80 hover:border-stone-300 hover:bg-stone-100"
+                    }`}
+                  >
+                    <span className={`text-xs font-bold ${isSelected ? "text-[#e8590c]" : "text-stone-800"}`}>
+                      {styleOption.label}
+                    </span>
+                    <span className="text-[10px] text-stone-500 mt-1 leading-snug">
+                      {styleOption.desc}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Photo Items List */}
           {(values.photos?.length || 0) > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
-              {values.photos.map((photoUrl, idx) => (
-                <div
-                  key={`photo-slot-${idx}`}
-                  className="group relative aspect-video overflow-hidden rounded-xl border border-stone-200 bg-stone-100 shadow-sm"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={photoUrl}
-                    alt={`Moment ${idx + 1}`}
-                    className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-stone-900/35 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <button
-                      type="button"
-                      onClick={() => handleRemovePhoto(idx)}
-                      aria-label={`Remove photo ${idx + 1}`}
-                      className="rounded-full bg-red-600 p-1.5 text-white shadow-md hover:bg-red-700 transition cursor-pointer"
+            <div className="space-y-2.5 pt-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-600">
+                Attached Photos & Captions
+              </span>
+              <div className="space-y-2.5">
+                {values.photos.map((item, idx) => {
+                  const url = getBirthdayPhotoUrl(item);
+                  const caption = getBirthdayPhotoCaption(item);
+                  return (
+                    <div
+                      key={`photo-slot-${idx}`}
+                      className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-stone-200 bg-stone-50/70 p-2.5 sm:p-3 shadow-xs"
                     >
-                      <Icon name="trash" size={13} />
-                    </button>
-                  </div>
-                  <span className="absolute top-1.5 left-1.5 rounded-full bg-stone-900/70 px-1.5 py-0.5 text-[9px] font-bold text-white">
-                    #{idx + 1}
-                  </span>
-                </div>
-              ))}
+                      <div className="flex items-center gap-2.5">
+                        <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-stone-200 bg-stone-200 shadow-inner">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={url}
+                            alt={caption || `Moment ${idx + 1}`}
+                            className="h-full w-full object-cover"
+                          />
+                          <span className="absolute top-1 left-1 rounded bg-stone-900/80 px-1 py-0.2 text-[9px] font-bold text-white">
+                            #{idx + 1}
+                          </span>
+                        </div>
+
+                        {/* Reorder Buttons */}
+                        <div className="flex sm:flex-col gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleMovePhoto(idx, "prev")}
+                            disabled={idx === 0}
+                            aria-label={`Move photo ${idx + 1} earlier`}
+                            className="flex h-6 w-6 sm:h-6 sm:w-6 items-center justify-center rounded-md border border-stone-200 bg-white text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                          >
+                            <Icon name="chevron-left" size={12} className="rotate-0 sm:rotate-90" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMovePhoto(idx, "next")}
+                            disabled={idx === (values.photos?.length || 0) - 1}
+                            aria-label={`Move photo ${idx + 1} later`}
+                            className="flex h-6 w-6 sm:h-6 sm:w-6 items-center justify-center rounded-md border border-stone-200 bg-white text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                          >
+                            <Icon name="chevron-right" size={12} className="rotate-0 sm:rotate-90" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Caption Input */}
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <label
+                            htmlFor={`photo-caption-${idx}`}
+                            className="text-[10px] font-semibold uppercase tracking-wider text-stone-500"
+                          >
+                            Caption (optional)
+                          </label>
+                          <span className="text-[10px] text-stone-400">{caption.length} / 120</span>
+                        </div>
+                        <input
+                          id={`photo-caption-${idx}`}
+                          value={caption}
+                          onChange={(e) => handleUpdatePhotoCaption(idx, e.target.value)}
+                          placeholder="Add a sweet memory or note..."
+                          maxLength={120}
+                          className="w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs text-stone-800 placeholder:text-stone-400 transition focus:border-[#e8590c] focus:outline-none focus:ring-1 focus:ring-[#e8590c]"
+                        />
+                      </div>
+
+                      {/* Remove Button */}
+                      <div className="flex sm:flex-col justify-end shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePhoto(idx)}
+                          aria-label={`Remove photo ${idx + 1}`}
+                          className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50/80 px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition cursor-pointer"
+                        >
+                          <Icon name="trash" size={13} />
+                          <span className="sm:hidden">Remove</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -889,12 +1217,34 @@ export function BirthdayEditor({
               Back
             </button>
           ) : !isResponse ? (
-            <a
-              href="/auth/sign-in?callbackURL=%2Fcreate%2Fbirthday"
-              className="text-xs font-medium text-[#6d3fa8] hover:underline"
-            >
-              Sign in to your account
-            </a>
+            authState === "authenticated" ? (
+              <div
+                className="flex items-center gap-2 text-xs text-[#6d3fa8]"
+                data-testid="auth-status-signed-in"
+              >
+                <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+                <span className="font-medium">Signed in to account</span>
+                {saveSuccess && (
+                  <span className="ml-1 inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-[0.7rem] font-semibold text-emerald-700">
+                    <Icon name="check" size={11} />
+                    <span>Saved to account</span>
+                  </span>
+                )}
+              </div>
+            ) : authState === "loading" ? (
+              <div
+                className="h-4 w-28 animate-pulse rounded bg-stone-200"
+                data-testid="auth-status-loading"
+              />
+            ) : (
+              <a
+                href="/auth/sign-in?callbackURL=%2Fcreate%2Fbirthday"
+                className="text-xs font-medium text-[#6d3fa8] hover:underline"
+                data-testid="auth-status-sign-in"
+              >
+                Sign in to your account
+              </a>
+            )
           ) : (
             <div />
           )}

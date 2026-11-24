@@ -2,13 +2,14 @@
 
 import { motion } from "framer-motion";
 import type { BirthdayTheme } from "@/experiences/birthday/themes";
+import { normalizeBirthdayPhotos, type BirthdayPhotoItem } from "@/experiences/birthday/schema";
 import { Icon } from "@/components/ui/icons";
 
 interface BirthdayMessageCardProps {
   senderName: string;
   recipientName: string;
   message: string;
-  photos?: string[];
+  photos?: BirthdayPhotoItem[];
   theme: BirthdayTheme;
   className?: string;
 }
@@ -21,6 +22,7 @@ export function BirthdayMessageCard({
   theme,
   className = "",
 }: BirthdayMessageCardProps) {
+  const normalizedPhotos = normalizeBirthdayPhotos(photos);
   return (
     <motion.div
       initial={{ opacity: 0, y: 24, scale: 0.96 }}
@@ -63,15 +65,15 @@ export function BirthdayMessageCard({
       </div>
 
       {/* Attached Celebration Photos (if present) */}
-      {photos.length > 0 && (
+      {normalizedPhotos.length > 0 && (
         <div className="mt-8 pt-6 border-t" style={{ borderColor: theme.palette.border }}>
           <p className="text-[11px] uppercase tracking-[0.16em] font-semibold mb-3 text-left" style={{ color: theme.palette.mutedText }}>
             Celebration Moments
           </p>
           <div className="grid grid-cols-2 gap-3">
-            {photos.map((photo, i) => (
+            {normalizedPhotos.map((photo, i) => (
               <div
-                key={`photo-${i}`}
+                key={photo.id || `photo-${i}`}
                 className="overflow-hidden rounded-2xl p-1.5 shadow-sm transition-transform hover:scale-102"
                 style={{
                   background: theme.palette.background,
@@ -80,10 +82,18 @@ export function BirthdayMessageCard({
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={photo}
-                  alt={`Birthday memory ${i + 1}`}
+                  src={photo.url}
+                  alt={photo.caption || `Birthday memory ${i + 1}`}
                   className="h-32 sm:h-36 w-full rounded-xl object-cover"
                 />
+                {photo.caption ? (
+                  <p
+                    className="mt-1 truncate text-center text-[10px] opacity-75"
+                    style={{ color: theme.palette.mutedText }}
+                  >
+                    {photo.caption}
+                  </p>
+                ) : null}
               </div>
             ))}
           </div>

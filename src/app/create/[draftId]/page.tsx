@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requirePageCreator } from "@/lib/security/creator";
 import { getRepository } from "@/lib/storage";
 import { toCreatorDraft } from "@/lib/storage/types";
@@ -32,6 +32,10 @@ export default async function EditDraftPage({
   // claiming it rewrites the hash to the account scope key.
   if (record.ownerKeyHash !== creator.key && record.ownerKeyHash !== creator.legacyKey) {
     notFound();
+  }
+
+  if (record.experienceType === "birthday") {
+    redirect(`/create/birthday?draftId=${draftId}`);
   }
 
   return (

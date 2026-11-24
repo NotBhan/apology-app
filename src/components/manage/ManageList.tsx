@@ -180,7 +180,7 @@ function ManageRow({
 
       <div className="mt-3 flex flex-wrap gap-2">
         <Link
-          href={`/create/${draft.id}`}
+          href={draft.experienceType === "birthday" ? `/create/birthday?draftId=${draft.id}` : `/create/${draft.id}`}
           className="inline-flex min-h-9 items-center rounded-full bg-[#f2ecfa] px-3 text-[0.74rem] font-semibold text-[#5b3f7d]"
         >
           Edit

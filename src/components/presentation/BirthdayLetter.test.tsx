@@ -193,4 +193,41 @@ describe("birthday presentation", () => {
     expect(screen.getByText(/make a wish/i)).toBeInTheDocument();
     expect(screen.getByText("Another beautiful year ahead.")).toBeInTheDocument();
   });
+
+  it("advances to gallery scene and renders attached photos with captions and lightbox", async () => {
+    const user = userEvent.setup();
+    const contentWithPhotos = birthdayContentSchema.parse({
+      ...content,
+      photoLayout: "polaroid",
+      photos: [
+        { url: "https://example.com/moment1.jpg", caption: "Sweet memory 1" },
+        { url: "https://example.com/moment2.jpg", caption: "Sweet memory 2" },
+      ],
+    });
+
+    render(<BirthdayLetter content={contentWithPhotos} />);
+
+    // Scene 1: Opening
+    await user.click(screen.getByRole("button", { name: "Open it" }));
+    // Scene 2: Wish
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    // Scene 3: Message
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+
+    // Scene 4: Gallery
+    expect(screen.getByRole("heading", { name: "Some moments" })).toBeInTheDocument();
+    expect(screen.getByText("Sweet memory 1")).toBeInTheDocument();
+    expect(screen.getByText("Sweet memory 2")).toBeInTheDocument();
+
+    // Open lightbox
+    const photoBtn = screen.getByRole("button", { name: /View photo 1/i });
+    await user.click(photoBtn);
+
+    expect(screen.getByRole("dialog", { name: /Photo gallery preview/i })).toBeInTheDocument();
+    expect(screen.getByText("Photo 1 of 2")).toBeInTheDocument();
+
+    // Close lightbox
+    await user.click(screen.getByRole("button", { name: /Close photo preview/i }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
 });

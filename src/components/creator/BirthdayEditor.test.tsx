@@ -189,10 +189,257 @@ describe("birthday editor, anonymous path", () => {
     expect(await screen.findByAltText("Moment 1")).toBeInTheDocument();
   });
 
+  it("supports photo presentation style selection and persistence", async () => {
+    const user = userEvent.setup();
+    render(
+      <BirthdayEditor
+        initialValues={{
+          recipientName: "Riya",
+          senderName: "Arjun",
+          headline: "Happy birthday",
+          message: "Have a wonderful year!",
+        }}
+      />,
+    );
+
+    // Initial style is Theme Signature
+    const scrapbookOption = screen.getByRole("button", { name: /^Scrapbook/i });
+    expect(scrapbookOption).toBeInTheDocument();
+
+    await user.click(scrapbookOption);
+    expect(scrapbookOption).toHaveAttribute("aria-pressed", "true");
+
+    const stored = window.sessionStorage.getItem("koi.birthday.draft");
+    expect(stored).toContain('"photoLayout":"scrapbook"');
+
+    // Select Polaroid style
+    const polaroidOption = screen.getByRole("button", { name: /Polaroid/i });
+    await user.click(polaroidOption);
+    expect(polaroidOption).toHaveAttribute("aria-pressed", "true");
+
+    const storedPolaroid = window.sessionStorage.getItem("koi.birthday.draft");
+    expect(storedPolaroid).toContain('"photoLayout":"polaroid"');
+  });
+
+  it("supports editing captions and reordering attached photos", async () => {
+    const user = userEvent.setup();
+    render(
+      <BirthdayEditor
+        initialValues={{
+          recipientName: "Riya",
+          senderName: "Arjun",
+          headline: "Happy birthday",
+          message: "Have a wonderful year!",
+          photos: [
+            { url: "https://example.com/p1.jpg", caption: "Paris 2023" },
+            { url: "https://example.com/p2.jpg", caption: "Tokyo 2024" },
+          ],
+        }}
+      />,
+    );
+
+    // Verify initial photos and captions
+    expect(screen.getByDisplayValue("Paris 2023")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Tokyo 2024")).toBeInTheDocument();
+
+    // Edit caption of first photo
+    const captionInput1 = screen.getByDisplayValue("Paris 2023");
+    await user.clear(captionInput1);
+    await user.type(captionInput1, "Summer in Paris");
+
+    let stored = window.sessionStorage.getItem("koi.birthday.draft");
+    expect(stored).toContain("Summer in Paris");
+
+    // Reorder: Move photo 1 later (down)
+    const moveLaterBtn = screen.getByLabelText("Move photo 1 later");
+    await user.click(moveLaterBtn);
+
+    stored = window.sessionStorage.getItem("koi.birthday.draft");
+    const parsed = JSON.parse(stored || "{}");
+    // After moving photo 1 later, photo at index 0 should now be Tokyo 2024
+    expect(parsed.photos[0].caption).toBe("Tokyo 2024");
+    expect(parsed.photos[1].caption).toBe("Summer in Paris");
+  });
+
   it("renders a sign in option for unauthenticated visitors", () => {
     render(<BirthdayEditor />);
     const signInLink = screen.getByRole("link", { name: /sign in to your account/i });
     expect(signInLink).toBeInTheDocument();
     expect(signInLink).toHaveAttribute("href", "/auth/sign-in?callbackURL=%2Fcreate%2Fbirthday");
+  });
+});
+
+describe("birthday editor, authentication flows and regression coverage", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("1. Authenticated user opens Birthday experience → authenticated creator state is displayed", () => {
+    window.sessionStorage.setItem(
+      "koi.birthday.draft",
+      JSON.stringify({
+        recipientName: "Aria",
+        senderName: "Leo",
+        headline: "Restored headline",
+        message: "Still here.",
+        themeId: "confetti",
+      }),
+    );
+
+    render(<BirthdayEditor signedIn={true} />);
+
+    // Authenticated status is shown
+    expect(screen.getByTestId("auth-status-signed-in")).toBeInTheDocument();
+    expect(screen.getByText("Signed in to account")).toBeInTheDocument();
+
+    // No unauthenticated sign-in link is shown
+    expect(screen.queryByRole("link", { name: /sign in to your account/i })).not.toBeInTheDocument();
+
+    // Restored banner does not tell the user to sign in
+    expect(screen.getByText(/Draft restored from this browser. Ready to save to your account./i)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^sign in$/i })).not.toBeInTheDocument();
+  });
+
+  it("2. Authenticated user saves a Birthday experience → save succeeds with visual confirmation and sets draftId", async () => {
+    const user = userEvent.setup();
+    const mockFetch = vi.fn();
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 201,
+      json: async () => ({ draft: { id: "draft-bday-456", experienceType: "birthday" } }),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    render(
+      <BirthdayEditor
+        signedIn={true}
+        initialValues={{
+          recipientName: "Riya",
+          senderName: "Arjun",
+          headline: "Happy Birthday Riya",
+          message: "Hope you have an amazing day!",
+        }}
+      />,
+    );
+
+    const saveButton = screen.getByRole("button", { name: "Save to my account" });
+    await user.click(saveButton);
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/api/drafts",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining('"experienceType":"birthday"'),
+      }),
+    );
+
+    // Shows save confirmation
+    expect(await screen.findByText("Saved to account")).toBeInTheDocument();
+
+    // Subsequent save calls PATCH on the saved draft ID
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ draft: { id: "draft-bday-456", experienceType: "birthday" } }),
+    });
+
+    await user.click(saveButton);
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/api/experiences/birthday/draft-bday-456",
+      expect.objectContaining({
+        method: "PATCH",
+      }),
+    );
+  });
+
+  it("3. Unauthenticated user opens Birthday experience → sign-in prompt is displayed", async () => {
+    const user = userEvent.setup();
+    window.sessionStorage.setItem(
+      "koi.birthday.draft",
+      JSON.stringify({
+        recipientName: "Aria",
+        senderName: "Leo",
+        headline: "Restored headline",
+        message: "Still here.",
+        themeId: "confetti",
+      }),
+    );
+
+    render(<BirthdayEditor signedIn={false} />);
+
+    // Bottom bar has sign in link
+    const signInLink = screen.getByRole("link", { name: /sign in to your account/i });
+    expect(signInLink).toBeInTheDocument();
+    expect(signInLink).toHaveAttribute("href", "/auth/sign-in?callbackURL=%2Fcreate%2Fbirthday");
+
+    // Restored banner has sign in link
+    expect(screen.getByText(/Draft restored from this browser./i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^sign in$/i })).toHaveAttribute(
+      "href",
+      "/auth/sign-in?callbackURL=%2Fcreate%2Fbirthday",
+    );
+
+    // Photo upload attempts prompt sign-in
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(["dummy"], "photo.jpg", { type: "image/jpeg" });
+    await user.upload(fileInput, file);
+    expect(screen.getByText(/Sign in to save uploaded photos with your gift/i)).toBeInTheDocument();
+  });
+
+  it("4. Session is still loading → unauthenticated prompt is not prematurely displayed", () => {
+    render(<BirthdayEditor isLoadingSession={true} />);
+
+    // Loading indicator is present
+    expect(screen.getByTestId("auth-status-loading")).toBeInTheDocument();
+
+    // No sign-in link is prematurely shown
+    expect(screen.queryByRole("link", { name: /sign in to your account/i })).not.toBeInTheDocument();
+  });
+
+  it("5. Session expires → protected save operations are rejected appropriately", async () => {
+    const user = userEvent.setup();
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: "Sign in to continue." }),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    render(
+      <BirthdayEditor
+        signedIn={true}
+        initialValues={{
+          recipientName: "Riya",
+          senderName: "Arjun",
+          headline: "Happy Birthday Riya",
+          message: "Hope you have an amazing day!",
+        }}
+      />,
+    );
+
+    const saveButton = screen.getByRole("button", { name: "Save to my account" });
+    await user.click(saveButton);
+
+    // Error message displayed
+    expect(await screen.findByText("Your session has expired. Sign in to save your gift.")).toBeInTheDocument();
+
+    // UI transitions to unauthenticated state
+    expect(screen.getByTestId("auth-status-sign-in")).toBeInTheDocument();
+  });
+
+  it("7. Refreshing the Birthday editor preserves the authenticated state when session remains valid", () => {
+    // Initial mount as authenticated
+    const { rerender } = render(<BirthdayEditor signedIn={true} />);
+    expect(screen.getByTestId("auth-status-signed-in")).toBeInTheDocument();
+
+    // Simulated refresh (re-mounting with valid session)
+    rerender(<BirthdayEditor signedIn={true} />);
+    expect(screen.getByTestId("auth-status-signed-in")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /sign in to your account/i })).not.toBeInTheDocument();
   });
 });

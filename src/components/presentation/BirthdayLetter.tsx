@@ -13,6 +13,7 @@ import { BirthdayGiftBox } from "./birthday/BirthdayGiftBox";
 import { BirthdayEnvelope } from "./birthday/BirthdayEnvelope";
 import { BirthdayCake } from "./birthday/BirthdayCake";
 import { BirthdayCard } from "./birthday/BirthdayCard";
+import { BirthdayPhotoGallery } from "./birthday/BirthdayPhotoGallery";
 
 export const BIRTHDAY_SCENES = ["opening", "wish", "message", "gallery", "finale"] as const;
 export type BirthdayScene = (typeof BIRTHDAY_SCENES)[number];
@@ -288,29 +289,11 @@ export function BirthdayLetter({
                 Some moments
               </h2>
 
-              {content.photos.length > 0 ? (
-                <div className="grid grid-cols-2 gap-3.5 w-full max-w-[460px]">
-                  {content.photos.map((photo, i) => (
-                    <div
-                      key={`gallery-photo-${i}`}
-                      className="overflow-hidden rounded-2xl p-2 shadow-sm"
-                      style={{
-                        background: theme.palette.surface,
-                        border: `1.5px solid ${theme.palette.border}`,
-                      }}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={photo}
-                        alt={`Moment ${i + 1}`}
-                        className="h-36 sm:h-40 w-full rounded-xl object-cover"
-                      />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm opacity-70">No photos this time — the words are the gift.</p>
-              )}
+              <BirthdayPhotoGallery
+                photos={content.photos}
+                layout={content.photoLayout}
+                theme={theme}
+              />
 
               <button
                 type="button"
