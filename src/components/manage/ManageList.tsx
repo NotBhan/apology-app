@@ -10,8 +10,13 @@ import { deleteDraftAction, publishDraftAction, revokeDraftAction } from "@/app/
 import { daysRemaining, formatDuration, formatExpiry, isExpired } from "@/lib/expiry";
 import { useMounted } from "@/hooks/useMounted";
 import { Icon } from "@/components/ui/icons";
+import { OptimizedPhoto } from "@/components/ui/OptimizedPhoto";
 import { ShareQrDialog } from "@/components/share/ShareQrDialog";
 import { resolveEmotionBadge } from "@/experiences/emotion";
+import { birthdayContentSchema } from "@/experiences/birthday/schema";
+import { resolveBirthdayTheme } from "@/experiences/birthday/themes";
+import { missYouContentSchema } from "@/experiences/miss-you/schema";
+import { resolveMissYouTheme } from "@/experiences/miss-you/themes";
 import type { ApologyDraft } from "@/types/apology";
 import type { DeletionTombstone } from "@/lib/lifecycle/types";
 import type { PublishedResponse, QuickReplyPayload, ExperienceReplyPayload } from "@/types/response";
@@ -82,8 +87,40 @@ function ManageRow({
   const [sharePath, setSharePath] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   const [showReplies, setShowReplies] = useState(false);
+  const experienceType = draft.experienceType ?? "apology";
+  const editHref =
+    experienceType === "birthday"
+      ? `/create/birthday?draftId=${draft.id}`
+      : experienceType === "miss-you"
+        ? `/create/miss-you?draftId=${draft.id}`
+        : `/create/${draft.id}`;
+
   const theme = getTheme(draft.themeId);
   const pack = getStickerPack(draft.stickerPackId);
+
+  let rowSubtitle = `${theme.name} · ${pack.name} · ${resolveSituationLabel(
+    draft.situation,
+    draft.situationCustom,
+  )}`;
+  let swatchColors: [string, string, string] = [
+    theme.palette.primary,
+    theme.palette.secondary,
+    theme.palette.accent,
+  ];
+
+  if (experienceType === "miss-you") {
+    const parsed = missYouContentSchema.safeParse(draft.content);
+    const missTheme = resolveMissYouTheme(parsed.success ? parsed.data.themeId : undefined);
+    swatchColors = [missTheme.palette.primary, missTheme.palette.secondary, missTheme.palette.accent];
+    rowSubtitle = parsed.success && parsed.data.distanceNote
+      ? `${missTheme.name} · I Miss You · ${parsed.data.distanceNote}`
+      : `${missTheme.name} · I Miss You`;
+  } else if (experienceType === "birthday") {
+    const parsed = birthdayContentSchema.safeParse(draft.content);
+    const bdayTheme = resolveBirthdayTheme(parsed.success ? parsed.data.themeId : undefined);
+    swatchColors = [bdayTheme.palette.primary, bdayTheme.palette.secondary, bdayTheme.palette.accent];
+    rowSubtitle = `${bdayTheme.name} · Happy Birthday`;
+  }
 
   const expired = status === "published" && isExpired(expiresAt);
   const remaining = daysRemaining(expiresAt);
@@ -134,10 +171,7 @@ function ManageRow({
             </h2>
             <StatusPill status={status} expired={expired} cleanupPending={cleanupPending} />
           </div>
-          <p className="mt-0.5 text-[0.74rem] text-[#8a7a9c]">
-            {theme.name} · {pack.name} ·{" "}
-            {resolveSituationLabel(draft.situation, draft.situationCustom)}
-          </p>
+          <p className="mt-0.5 text-[0.74rem] text-[#8a7a9c]">{rowSubtitle}</p>
 
           {status === "published" ? (
             <p
@@ -173,14 +207,14 @@ function ManageRow({
           aria-hidden
           className="mt-1 h-8 w-8 shrink-0 rounded-full"
           style={{
-            background: `conic-gradient(from 210deg, ${theme.palette.primary}, ${theme.palette.secondary}, ${theme.palette.accent})`,
+            background: `conic-gradient(from 210deg, ${swatchColors[0]}, ${swatchColors[1]}, ${swatchColors[2]})`,
           }}
         />
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
         <Link
-          href={draft.experienceType === "birthday" ? `/create/birthday?draftId=${draft.id}` : `/create/${draft.id}`}
+          href={editHref}
           className="inline-flex min-h-9 items-center rounded-full bg-[#f2ecfa] px-3 text-[0.74rem] font-semibold text-[#5b3f7d]"
         >
           Edit
@@ -274,15 +308,22 @@ function ManageRow({
               const headline = typeof expData.headline === "string" ? expData.headline : null;
               const message = typeof expData.message === "string"
                 ? expData.message
-                : (expData.messages as Record<string, unknown> | undefined)?.message1
-                  ? String((expData.messages as Record<string, unknown>).message1)
-                  : "Created a complete experience";
+                : typeof expData.letter === "string"
+                  ? expData.letter
+                  : (expData.messages as Record<string, unknown> | undefined)?.message1
+                    ? String((expData.messages as Record<string, unknown>).message1)
+                    : "Created a complete experience";
 
               return (
                 <div key={resp.id} className="rounded-2xl border border-[#ede3f5] bg-[#faf6ff] p-3 text-xs">
                   <div className="mb-1.5 flex items-center justify-between">
                     <span className="rounded-full bg-[#f3eafc] px-2.5 py-0.5 text-[0.68rem] font-bold text-[#6d3fa8] border border-[#e4d3f5]">
-                      Experience Reply: {expType === "birthday" ? "Birthday" : "Apology"}
+                      Experience Reply:{" "}
+                      {expType === "birthday"
+                        ? "Birthday"
+                        : expType === "miss-you"
+                          ? "I Miss You"
+                          : "Apology"}
                     </span>
                     <span className="text-[0.65rem] text-[#a495b5]">
                       {mounted && resp.publishedAt
@@ -338,12 +379,11 @@ function ManageRow({
                   <div className="mt-2.5 flex gap-2 overflow-x-auto pb-1">
                     {replyContent.photos.map((pId, idx) => (
                       <div key={pId} className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-[#e5d9f0]">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
+                        <OptimizedPhoto
                           src={`/api/responses/assets/${pId}`}
                           alt={`Attachment ${idx + 1}`}
-                          className="h-full w-full object-cover"
-                          loading="lazy"
+                          compactFallback
+                          className="object-cover"
                         />
                       </div>
                     ))}
@@ -366,7 +406,7 @@ function ManageRow({
           <span>{notice}</span>
           {notice.includes("messages") || notice.includes("parts") ? (
             <Link
-              href={`/create/${draft.id}?step=publish`}
+              href={experienceType === "apology" ? `${editHref}?step=publish` : editHref}
               className="font-bold underline text-amber-950 hover:text-amber-800"
             >
               Complete draft →

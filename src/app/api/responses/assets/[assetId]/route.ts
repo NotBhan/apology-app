@@ -2,6 +2,7 @@ import { getCreator } from "@/lib/security/creator";
 import { getObjectStore, getResponseRepository } from "@/lib/storage";
 import { hashResponseToken } from "@/lib/id";
 import { isResponseLive } from "@/lib/expiry";
+import { isValidUuid } from "@/lib/storage/mime";
 import { jsonError, repositoryErrorResponse } from "@/lib/api/responses";
 import { enforceRateLimit, rateLimitHeaders } from "@/lib/security/postgres-rate-limit";
 
@@ -30,7 +31,7 @@ export async function GET(request: Request, context: AssetRouteContext) {
     return jsonError(429, "Too many requests. Try again shortly.", undefined, rateLimitHeaders(limit));
   }
 
-  if (!/^[0-9a-f-]{36}$/i.test(assetId)) {
+  if (!isValidUuid(assetId)) {
     return jsonError(404, "That file could not be found.");
   }
 
@@ -61,7 +62,11 @@ export async function GET(request: Request, context: AssetRouteContext) {
     // Fall back to checking parent creator session
     if (!authorized) {
       const creator = await getCreator();
-      if (creator && creator.key === asset.parentOwnerKeyHash) {
+      if (
+        creator &&
+        (creator.key === asset.parentOwnerKeyHash ||
+          (creator.legacyKey && creator.legacyKey === asset.parentOwnerKeyHash))
+      ) {
         authorized = true;
       }
     }

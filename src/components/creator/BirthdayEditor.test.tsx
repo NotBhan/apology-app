@@ -164,6 +164,31 @@ describe("birthday editor, anonymous path", () => {
 
   it("uploads photo when onUploadPhoto is provided and updates gallery preview", async () => {
     const user = userEvent.setup();
+    const imageMod = await import("@/lib/image");
+    const webpBlob = new Blob([new Uint8Array([0x52, 0x49, 0x46, 0x46])], { type: "image/webp" });
+    vi.spyOn(imageMod, "compressImage").mockResolvedValueOnce({
+      blob: webpBlob,
+      width: 1600,
+      height: 1200,
+      type: "image/webp",
+      metrics: {
+        originalBytes: 2_000_000,
+        compressedBytes: 220_000,
+        originalWidth: 4000,
+        originalHeight: 3000,
+        outputWidth: 1600,
+        outputHeight: 1200,
+        originalFormat: "image/jpeg",
+        outputFormat: "image/webp",
+        durationMs: 25,
+        reductionBytes: 1_780_000,
+        reductionPercent: 89,
+        qualityUsed: 0.78,
+        attempts: 1,
+        wasRecompressed: true,
+        preservedTransparency: false,
+      },
+    });
     const handleUpload = vi.fn().mockResolvedValue({ url: "/api/responses/assets/mock-asset-123" });
 
     render(
@@ -185,8 +210,36 @@ describe("birthday editor, anonymous path", () => {
     const file = new File(["dummy-img"], "moment.jpg", { type: "image/jpeg" });
     await user.upload(fileInput, file);
 
-    expect(handleUpload).toHaveBeenCalled();
+    expect(handleUpload).toHaveBeenCalledTimes(1);
+    const uploadedFileArg = handleUpload.mock.calls[0]?.[0] as File;
+    expect(uploadedFileArg.type).toBe("image/webp");
+    expect(uploadedFileArg.name).toBe("moment.webp");
     expect(await screen.findByAltText("Moment 1")).toBeInTheDocument();
+  });
+
+  it("rejects unsupported files during optimization without uploading broken originals", async () => {
+    const user = userEvent.setup({ applyAccept: false });
+    const handleUpload = vi.fn().mockResolvedValue({ url: "/api/responses/assets/mock" });
+
+    render(
+      <BirthdayEditor
+        initialValues={{
+          recipientName: "Riya",
+          senderName: "Arjun",
+          headline: "Happy birthday",
+          message: "Have a wonderful year!",
+        }}
+        isResponse={true}
+        onUploadPhoto={handleUpload}
+      />,
+    );
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const fakePdf = new File(["%PDF-1.7"], "bad.pdf", { type: "application/pdf" });
+    await user.upload(fileInput, fakePdf);
+
+    expect(handleUpload).not.toHaveBeenCalled();
+    expect(await screen.findByText(/not a supported image/i)).toBeInTheDocument();
   });
 
   it("supports photo presentation style selection and persistence", async () => {

@@ -6,6 +6,9 @@ import Link from "next/link";
 import { cn } from "@/lib/cn";
 import { Icon } from "@/components/ui/icons";
 import { sendQuickReply, uploadResponsePhoto, type QuickReplyResult } from "@/lib/api/client";
+import { compressImage } from "@/lib/image";
+import { toOptimizedUploadFile } from "@/lib/upload";
+import { OptimizedPhoto } from "@/components/ui/OptimizedPhoto";
 import { getExperience } from "@/experiences/registry";
 import type { ExperienceId } from "@/experiences/types";
 
@@ -34,6 +37,7 @@ export function QuickReplyModal({
   const [photos, setPhotos] = useState<AttachedPhoto[]>([]);
   const [responseId, setResponseId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadStage, setUploadStage] = useState<"optimizing" | "uploading" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<QuickReplyResult | null>(null);
   const [copiedPublic, setCopiedPublic] = useState(false);
@@ -46,8 +50,21 @@ export function QuickReplyModal({
   const isContained = portalNode?.id === "presentation-modal-root";
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadAbortRef = useRef<AbortController | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousActiveElement = useRef<HTMLElement | null>(null);
+
+  const objectUrlsRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    const trackedUrls = objectUrlsRef.current;
+    return () => {
+      uploadAbortRef.current?.abort();
+      for (const url of trackedUrls) {
+        URL.revokeObjectURL(url);
+      }
+    };
+  }, []);
 
   // Resolution semantics:
   // - Omitted experienceId -> default to "apology" for backward compatibility.
@@ -121,32 +138,55 @@ export function QuickReplyModal({
       return;
     }
 
-    if (file.size > 4 * 1024 * 1024) {
-      setError("Photos must be 4 MB or smaller.");
-      return;
-    }
+    uploadAbortRef.current?.abort();
+    const controller = new AbortController();
+    uploadAbortRef.current = controller;
 
     setError(null);
     setUploading(true);
+    setUploadStage("optimizing");
 
     try {
-      const res = await uploadResponsePhoto(apologyId, file, responseId ?? undefined);
+      const compressed = await compressImage(file, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+
+      const optimizedFile = toOptimizedUploadFile(compressed.blob, file.name || "moment", compressed.type);
+      if (optimizedFile.size > 4 * 1024 * 1024) {
+        setError("Photos must be 4 MB or smaller.");
+        return;
+      }
+
+      setUploadStage("uploading");
+      const res = await uploadResponsePhoto(
+        apologyId,
+        optimizedFile,
+        responseId ?? undefined,
+        "quick",
+        controller.signal,
+      );
       if (res.responseId && !responseId) {
         setResponseId(res.responseId);
       }
 
-      const previewUrl = URL.createObjectURL(file);
+      const previewUrl = URL.createObjectURL(compressed.blob);
+      objectUrlsRef.current.push(previewUrl);
       setPhotos((prev) => [...prev, { id: res.asset.id, previewUrl }]);
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Failed to upload photo.");
     } finally {
       setUploading(false);
+      setUploadStage(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
 
   function removePhoto(idToRemove: string) {
-    setPhotos((prev) => prev.filter((p) => p.id !== idToRemove));
+    setPhotos((prev) => {
+      const removed = prev.find((p) => p.id === idToRemove);
+      if (removed) URL.revokeObjectURL(removed.previewUrl);
+      return prev.filter((p) => p.id !== idToRemove);
+    });
   }
 
   function handleSubmit(event: React.FormEvent) {
@@ -459,7 +499,7 @@ export function QuickReplyModal({
                   </span>
                   {uploading ? (
                     <span role="status" aria-live="polite" className="text-[0.68rem] font-medium" style={{ color: config.accent }}>
-                      Uploading photo…
+                      {uploadStage === "optimizing" ? "Optimizing photo…" : "Uploading photo…"}
                     </span>
                   ) : null}
                 </div>
@@ -470,8 +510,12 @@ export function QuickReplyModal({
                       key={photo.id}
                       className="group relative h-14 w-14 overflow-hidden rounded-xl border border-[#e0d4ec]"
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={photo.previewUrl} alt={`Attached moment ${pIdx + 1}`} className="h-full w-full object-cover" />
+                      <OptimizedPhoto
+                        src={photo.previewUrl}
+                        alt={`Attached moment ${pIdx + 1}`}
+                        priority
+                        className="object-cover"
+                      />
                       <button
                         type="button"
                         onClick={() => removePhoto(photo.id)}

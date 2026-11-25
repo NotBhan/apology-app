@@ -62,16 +62,13 @@ export function AudioController({
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !armed || !src) return;
-    audio
-      .play()
-      .then(() => {
-        setPlaying(true);
-        setBlocked(false);
-      })
-      .catch(() => {
-        // Browser denied autoplay: expose the control, never loop a retry.
-        setBlocked(true);
-      });
+    safePlayAudio(audio, () => {
+      setPlaying(true);
+      setBlocked(false);
+    }, () => {
+      // Browser denied autoplay: expose the control, never loop a retry.
+      setBlocked(true);
+    });
   }, [armed, src]);
 
   useEffect(() => {
@@ -79,7 +76,9 @@ export function AudioController({
       const audio = audioRef.current;
       if (!audio) return;
       if (document.hidden) audio.pause();
-      else if (playing && armed) void audio.play().catch(() => setBlocked(true));
+      else if (playing && armed) {
+        safePlayAudio(audio, () => setBlocked(false), () => setBlocked(true));
+      }
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
@@ -89,7 +88,7 @@ export function AudioController({
     const audio = audioRef.current;
     if (!audio) return;
     if (audio.paused) {
-      void audio.play().then(() => setBlocked(false)).catch(() => setBlocked(true));
+      safePlayAudio(audio, () => setBlocked(false), () => setBlocked(true));
     } else {
       audio.pause();
     }
@@ -144,4 +143,17 @@ export function AudioController({
       ) : null}
     </div>
   );
+}
+
+function safePlayAudio(audio: HTMLAudioElement, onPlayed: () => void, onBlocked: () => void) {
+  try {
+    const result = audio.play() as Promise<void> | undefined;
+    if (result && typeof result.then === "function") {
+      result.then(onPlayed).catch(onBlocked);
+    } else {
+      onPlayed();
+    }
+  } catch {
+    onBlocked();
+  }
 }

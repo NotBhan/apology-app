@@ -250,15 +250,28 @@ export function createFakeBackend(): FakeBackend {
       }
     },
 
+    async removeAsset(assetId, ownerKeyHash) {
+      for (const [apologyId, list] of assets) {
+        const record = apologies.get(apologyId);
+        if (!record || record.ownerKeyHash !== ownerKeyHash || record.status === "deleted") continue;
+        const asset = list.find((candidate) => candidate.id === assetId && candidate.state === "uploaded");
+        if (asset) {
+          asset.state = "failed";
+          return true;
+        }
+      }
+      return false;
+    },
+
     async listAssets(apologyId) {
       return listFor(apologyId).filter((asset) => asset.state === "uploaded");
     },
 
     async getAssetForServing(assetId): Promise<ServingAsset | undefined> {
       for (const [apologyId, list] of assets) {
-        const asset = list.find((candidate) => candidate.id === assetId);
+        const asset = list.find((candidate) => candidate.id === assetId && candidate.state === "uploaded");
         const record = apologies.get(apologyId);
-        if (asset && record) {
+        if (asset && record && record.status !== "deleted" && !jobs.has(apologyId)) {
           return {
             ...asset,
             ownerKeyHash: record.ownerKeyHash,

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ThemeShowcase } from "@/components/theme-selector/ThemeShowcase";
 import { CategorySections } from "@/components/experiences/CategorySections";
 import { BIRTHDAY_THEMES } from "@/experiences/birthday/themes";
+import { MISS_YOU_THEMES } from "@/experiences/miss-you/themes";
 import { getCreator } from "@/lib/security/creator";
 import { signOutAction } from "@/lib/auth/actions";
 
@@ -186,6 +187,39 @@ export default async function HomePage() {
                     style={{ color: theme.palette.accent }}
                   >
                     birthday
+                  </p>
+                  <h4 className="mt-2 text-[1rem] font-semibold">{theme.name}</h4>
+                  <p className="mt-1 text-[0.82rem] leading-relaxed opacity-80">{theme.tagline}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+              <h3 className="text-[1rem] font-semibold text-[#33203f]">
+                {PLATFORM_COPY.worlds.missYouGroup}
+              </h3>
+              <p className="text-[0.72rem] uppercase tracking-[0.16em] text-[#a394b4]">
+                for the i miss you experience
+              </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {MISS_YOU_THEMES.map((theme) => (
+                <article
+                  key={theme.id}
+                  className="rounded-2xl border p-5"
+                  style={{
+                    background: theme.palette.background,
+                    borderColor: theme.palette.border,
+                    color: theme.palette.text,
+                  }}
+                >
+                  <p
+                    className="text-[0.6rem] uppercase tracking-[0.18em]"
+                    style={{ color: theme.palette.primary }}
+                  >
+                    i miss you
                   </p>
                   <h4 className="mt-2 text-[1rem] font-semibold">{theme.name}</h4>
                   <p className="mt-1 text-[0.82rem] leading-relaxed opacity-80">{theme.tagline}</p>

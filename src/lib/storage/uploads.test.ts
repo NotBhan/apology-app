@@ -240,3 +240,52 @@ describe("upload ceilings fit the hosting platform", () => {
     expect(limit + MULTIPART_OVERHEAD).toBeLessThan(PLATFORM_BODY_LIMIT);
   });
 });
+
+
+describe("storeUpload size and declared MIME guards", () => {
+  const noopDeps = {
+    repository: {
+      reserveAsset: async () => undefined,
+      completeAsset: async () => null,
+      failAsset: async () => undefined,
+    },
+    objects: {
+      put: async () => undefined,
+      deleteMany: async () => ({ deleted: [], failed: [] }),
+      presignGet: async () => "https://signed.example/obj",
+    },
+  } as unknown as Parameters<typeof storeUpload>[0];
+
+  it("rejects files over 4 MB with exact ceiling error message", async () => {
+    const oversized = new Uint8Array(4 * 1024 * 1024 + 1);
+    oversized.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
+
+    await expect(
+      storeUpload(noopDeps, {
+        data: oversized,
+        declaredMime: "image/png",
+        apologyId: "11111111-2222-3333-4444-555555555555",
+        ownerKeyHash: "owner-hash",
+      }),
+    ).rejects.toMatchObject({
+      status: 413,
+      message: "Files must be 4 MB or smaller.",
+    });
+  });
+
+  it("rejects files whose declared MIME does not match sniffed bytes", async () => {
+    const jpegBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+
+    await expect(
+      storeUpload(noopDeps, {
+        data: jpegBytes,
+        declaredMime: "image/png",
+        apologyId: "11111111-2222-3333-4444-555555555555",
+        ownerKeyHash: "owner-hash",
+      }),
+    ).rejects.toMatchObject({
+      status: 415,
+      message: "The file contents do not match the type it claims to be.",
+    });
+  });
+});

@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import type { BirthdayTheme } from "@/experiences/birthday/themes";
 import { normalizeBirthdayPhotos, type BirthdayPhotoItem } from "@/experiences/birthday/schema";
 import { Icon } from "@/components/ui/icons";
+import { OptimizedPhoto } from "@/components/ui/OptimizedPhoto";
 
 interface BirthdayMessageCardProps {
   senderName: string;
@@ -80,12 +81,14 @@ export function BirthdayMessageCard({
                   border: `1px solid ${theme.palette.border}`,
                 }}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={photo.url}
-                  alt={photo.caption || `Birthday memory ${i + 1}`}
-                  className="h-32 sm:h-36 w-full rounded-xl object-cover"
-                />
+                <div className="h-32 sm:h-36 w-full overflow-hidden rounded-xl bg-stone-100">
+                  <OptimizedPhoto
+                    src={photo.url}
+                    alt={photo.caption || `Birthday memory ${i + 1}`}
+                    focalPoint={photo.focalPoint || "50% 50%"}
+                    className="object-cover"
+                  />
+                </div>
                 {photo.caption ? (
                   <p
                     className="mt-1 truncate text-center text-[10px] opacity-75"

@@ -17,10 +17,10 @@ export interface AssetAccessInput {
 export function canServeAsset(input: AssetAccessInput): boolean {
   const { asset } = input;
 
-  // Only a completed upload is ever servable.
-  if (asset.state !== "uploaded") return false;
+  // Only a completed upload on a non-deleted experience is ever servable.
+  if (asset.state !== "uploaded" || asset.apologyStatus === "deleted") return false;
 
-  // The owner can always see their own media, including before publishing.
+  // The owner can always see their own non-deleted media, including before publishing.
   if (input.ownerKeyHash && asset.ownerKeyHash === input.ownerKeyHash) {
     return true;
   }

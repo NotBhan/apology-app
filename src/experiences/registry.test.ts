@@ -3,9 +3,9 @@ import { getExperience, listExperiences, requireExperience } from "./registry";
 import type { ExperienceModule } from "./types";
 
 describe("experience registry", () => {
-  it("exposes apology and birthday as distinct modules", () => {
+  it("exposes apology, birthday, and miss-you as distinct modules", () => {
     const ids = listExperiences().map((experience) => experience.id);
-    expect(ids).toEqual(["apology", "birthday"]);
+    expect(ids).toEqual(["apology", "birthday", "miss-you"]);
 
     const birthday = getExperience("birthday");
     expect(birthday?.category).toBe("celebration");
@@ -13,6 +13,13 @@ describe("experience registry", () => {
     // Birthday must not inherit the apology scene vocabulary.
     expect(birthday?.sceneIds).not.toContain("sorry");
     expect(birthday?.sceneIds).toContain("wish");
+
+    const missYou = getExperience("miss-you");
+    expect(missYou?.category).toBe("love");
+    expect(missYou?.name).toBe("I Miss You");
+    expect(missYou?.sceneIds).toEqual(["arrival", "distance", "letter", "memories", "reunion"]);
+    expect(missYou?.replyConfig?.enabled).toBe(true);
+    expect(missYou?.replyConfig?.emotionBadgePrefix).toBe("Mood");
   });
 
   it("gives every module a coherent theme set", () => {

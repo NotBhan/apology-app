@@ -1,5 +1,6 @@
 import { getObjectStore, getResponseRepository } from "@/lib/storage";
 import { MAX_PHOTO_BYTES, PHOTO_MIME_TYPES, sniffUploadMime } from "@/lib/storage/uploads";
+import { isValidUuid } from "@/lib/storage/mime";
 import { extensionForMime } from "@/lib/storage/upload-lifecycle";
 import { randomId } from "@/lib/id";
 import { jsonError, jsonOk } from "@/lib/api/responses";
@@ -52,14 +53,18 @@ export async function POST(request: Request) {
   }
 
   const apologyId = form.get("apologyId");
-  if (typeof apologyId !== "string" || !/^[0-9a-f-]{36}$/i.test(apologyId)) {
+  if (typeof apologyId !== "string" || !isValidUuid(apologyId)) {
     return jsonError(400, "A valid parent apology ID is required.");
   }
 
   const existingResponseId = form.get("responseId");
-  let responseId = typeof existingResponseId === "string" && /^[0-9a-f-]{36}$/i.test(existingResponseId)
-    ? existingResponseId
-    : undefined;
+  let responseId: string | undefined;
+  if (typeof existingResponseId === "string" && existingResponseId.length > 0) {
+    if (!isValidUuid(existingResponseId)) {
+      return jsonError(400, "A valid response ID is required.");
+    }
+    responseId = existingResponseId;
+  }
 
   const data = new Uint8Array(await file.arrayBuffer());
   const mime = sniffUploadMime(data);

@@ -1,7 +1,8 @@
 import { constantTimeEqual } from "@/lib/id";
 import { requireApiCreator } from "@/lib/security/creator";
 import { getRepository } from "@/lib/storage";
-import { draftPayloadSchema, formatZodError, linkDurationDaysSchema } from "@/lib/validation/apology";
+import { linkDurationDaysSchema } from "@/lib/validation/apology";
+import { validateDraftForPublish } from "@/lib/validation/publish";
 import { DEFAULT_LINK_DAYS, normalizeDurationDays } from "@/lib/expiry";
 import { jsonError, jsonOk, readJsonBody, repositoryErrorResponse } from "@/lib/api/responses";
 import { enforceRateLimit, rateLimitHeaders } from "@/lib/security/postgres-rate-limit";
@@ -62,27 +63,9 @@ export async function POST(request: Request, context: PublishRouteContext) {
       return jsonError(410, "This letter was revoked. Start a new draft to share it again.");
     }
 
-    // Apology completeness is a rule of the apology module, not of the platform.
-    const isExperience = (record.experienceType ?? "apology") !== "apology";
-
-    const required = draftPayloadSchema.safeParse({
-      recipientName: record.recipientName,
-      senderName: record.senderName,
-      situation: record.situation,
-      situationCustom: record.situationCustom,
-      language: record.language,
-      messages: record.messages,
-      themeId: record.themeId,
-      stickerPackId: record.stickerPackId,
-      customization: record.customization,
-    });
-
-    if (!required.success && !isExperience) {
-      return jsonError(
-        400,
-        "Finish the required parts of the letter before publishing.",
-        formatZodError(required.error),
-      );
+    const validation = validateDraftForPublish(record);
+    if (!validation.ok) {
+      return jsonError(400, validation.error, validation.fields);
     }
 
     const published = await repository.publish(draftId, owner.hash, duration.data);

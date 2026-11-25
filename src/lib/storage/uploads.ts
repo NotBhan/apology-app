@@ -1,6 +1,7 @@
 import type { ObjectStore } from "./object-store";
 import type { ApologyRepository, AssetRecord, ServingAsset } from "./types";
 import { MAX_ASSETS_PER_APOLOGY, buildObjectKey, extensionForMime } from "./upload-lifecycle";
+import { asciiAtOffset, isValidUuid, startsWithBytes } from "./mime";
 import { sanitiseStorageError } from "./filebase-errors";
 
 /**
@@ -13,8 +14,6 @@ import { sanitiseStorageError } from "./filebase-errors";
  *
  * No database transaction is held across the Filebase call.
  */
-
-const ASSET_ID_PATTERN = /^[0-9a-f-]{36}$/i;
 
 /**
  * Upload ceilings.
@@ -62,50 +61,30 @@ export class UploadError extends Error {
 /* Magic-byte detection                                                       */
 /* -------------------------------------------------------------------------- */
 
-const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47];
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const JPEG_SIGNATURE = [0xff, 0xd8, 0xff];
 const EBML_SIGNATURE = [0x1a, 0x45, 0xdf, 0xa3];
 
-function startsWith(bytes: Uint8Array, signature: readonly number[], offset = 0): boolean {
-  if (bytes.length < offset + signature.length) return false;
-  for (let i = 0; i < signature.length; i += 1) {
-    if (bytes[offset + i] !== signature[i]) return false;
-  }
-  return true;
-}
-
-function asciiAt(bytes: Uint8Array, offset: number, text: string): boolean {
-  if (bytes.length < offset + text.length) return false;
-  for (let i = 0; i < text.length; i += 1) {
-    if (bytes[offset + i] !== text.charCodeAt(i)) return false;
-  }
-  return true;
-}
-
 /** Sniffs the real file type from its leading bytes; never trusts the client. */
 export function sniffUploadMime(bytes: Uint8Array): UploadMime | undefined {
-  if (startsWith(bytes, PNG_SIGNATURE)) return "image/png";
-  if (startsWith(bytes, JPEG_SIGNATURE)) return "image/jpeg";
+  if (startsWithBytes(bytes, PNG_SIGNATURE)) return "image/png";
+  if (startsWithBytes(bytes, JPEG_SIGNATURE)) return "image/jpeg";
 
-  if (asciiAt(bytes, 0, "RIFF")) {
-    if (asciiAt(bytes, 8, "WEBP")) return "image/webp";
-    if (asciiAt(bytes, 8, "WAVE")) return "audio/wav";
+  if (asciiAtOffset(bytes, 0, "RIFF")) {
+    if (asciiAtOffset(bytes, 8, "WEBP")) return "image/webp";
+    if (asciiAtOffset(bytes, 8, "WAVE")) return "audio/wav";
   }
 
-  if (asciiAt(bytes, 0, "OggS")) return "audio/ogg";
+  if (asciiAtOffset(bytes, 0, "OggS")) return "audio/ogg";
 
-  if (asciiAt(bytes, 0, "ID3")) return "audio/mpeg";
+  if (asciiAtOffset(bytes, 0, "ID3")) return "audio/mpeg";
   if (bytes.length >= 2 && bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0) {
     return "audio/mpeg";
   }
 
-  if (startsWith(bytes, EBML_SIGNATURE)) return "audio/webm";
+  if (startsWithBytes(bytes, EBML_SIGNATURE)) return "audio/webm";
 
   return undefined;
-}
-
-function isAllowedMime(value: string): value is UploadMime {
-  return (UPLOAD_MIME_TYPES as readonly string[]).includes(value);
 }
 
 function normalizeMime(value: string | undefined): string {
@@ -118,7 +97,7 @@ export function kindForMime(mime: UploadMime): UploadKind {
 }
 
 export function isValidAssetId(id: string): boolean {
-  return ASSET_ID_PATTERN.test(id);
+  return isValidUuid(id);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -133,7 +112,7 @@ export async function storeUpload(
 
   if (data.byteLength === 0) throw new UploadError(400, "That file is empty.");
   if (data.byteLength > MAX_AUDIO_BYTES) {
-    throw new UploadError(413, "Files must be 8 MB or smaller.");
+    throw new UploadError(413, "Files must be 4 MB or smaller.");
   }
 
   const mime = sniffUploadMime(data);
@@ -149,12 +128,12 @@ export async function storeUpload(
   if (data.byteLength > limit) {
     throw new UploadError(
       413,
-      kind === "photo" ? "Photos must be 5 MB or smaller." : "Audio must be 8 MB or smaller.",
+      kind === "photo" ? "Photos must be 4 MB or smaller." : "Audio must be 4 MB or smaller.",
     );
   }
 
   const declared = normalizeMime(input.declaredMime);
-  if (declared && isAllowedMime(declared) && declared !== mime) {
+  if (declared && declared !== "application/octet-stream" && declared !== mime) {
     throw new UploadError(415, "The file contents do not match the type it claims to be.");
   }
 

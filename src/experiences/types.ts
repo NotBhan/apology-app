@@ -8,7 +8,7 @@ import type { z } from "zod";
  * an experience must not require editing the apology module or the shared
  * repository.
  */
-export type ExperienceId = "apology" | "birthday";
+export type ExperienceId = "apology" | "birthday" | "miss-you";
 
 export type ExperienceCategory =
   | "apology"

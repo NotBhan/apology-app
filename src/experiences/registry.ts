@@ -1,5 +1,6 @@
 import { apologyExperience } from "./apology/module";
 import { birthdayExperience } from "./birthday/module";
+import { missYouExperience } from "./miss-you/module";
 import type { ExperienceId, ExperienceModule } from "./types";
 
 /**
@@ -11,6 +12,7 @@ import type { ExperienceId, ExperienceModule } from "./types";
 export const EXPERIENCES: readonly ExperienceModule[] = [
   apologyExperience,
   birthdayExperience,
+  missYouExperience,
 ];
 
 export function listExperiences(): readonly ExperienceModule[] {

@@ -1,4 +1,4 @@
-import { requireApiCreator } from "@/lib/security/creator";
+import { getCreator, requireApiCreator } from "@/lib/security/creator";
 import { getObjectStore, getRepository } from "@/lib/storage";
 import { canServeAsset } from "@/lib/storage/asset-access";
 import { isValidAssetId, presignAssetUrl } from "@/lib/storage/uploads";
@@ -34,12 +34,15 @@ export async function GET(request: Request, context: AssetRouteContext) {
   if (!isValidAssetId(assetId)) return jsonError(404, "That file could not be found.");
 
   try {
-    const authz = await requireApiCreator();
-    if (!authz.ok) return authz.response;
-    const owner = { hash: authz.creator.key };
+    const creator = await getCreator();
     const asset = await getRepository().getAssetForServing(assetId);
 
-    if (!asset || !canServeAsset({ asset, ownerKeyHash: owner?.hash })) {
+    const ownerHash =
+      creator && asset?.ownerKeyHash === creator.legacyKey
+        ? creator.legacyKey
+        : creator?.key;
+
+    if (!asset || !canServeAsset({ asset, ownerKeyHash: ownerHash })) {
       return jsonError(404, "That file could not be found.");
     }
 
@@ -74,8 +77,11 @@ export async function DELETE(_request: Request, context: AssetRouteContext) {
       return jsonError(403, "You do not have access to that file.");
     }
 
-    await getObjectStore().deleteMany([asset.objectKey]);
-    await getRepository().failAsset(assetId);
+    const deleted = await getObjectStore().deleteMany([asset.objectKey]);
+    if (deleted.failed.length > 0) {
+      return jsonError(502, "Could not delete that file. Try again.");
+    }
+    await getRepository().removeAsset(assetId, owner.hash);
     return jsonOk({ ok: true });
   } catch (error) {
     return repositoryErrorResponse(error);

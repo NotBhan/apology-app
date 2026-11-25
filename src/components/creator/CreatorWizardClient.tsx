@@ -2,7 +2,7 @@
 
 import type { ApologyDraft, PhotoAsset } from "@/types/apology";
 import { publishDraftAction, saveDraftAction } from "@/app/create/actions";
-import { uploadFile } from "@/lib/upload";
+import { toOptimizedUploadFile, uploadFile } from "@/lib/upload";
 import { Wizard, type WizardGateway } from "./Wizard";
 
 const gateway: WizardGateway = {
@@ -28,8 +28,8 @@ const gateway: WizardGateway = {
   },
 
   async uploadPhoto(draftId, blob, meta): Promise<PhotoAsset> {
-    const extension = meta.type === "image/png" ? "png" : "jpg";
-    const asset = await uploadFile(blob, "photo", `photo-${Date.now()}.${extension}`, draftId);
+    const file = toOptimizedUploadFile(blob, `photo-${Date.now()}`, meta.type);
+    const asset = await uploadFile(file, "photo", file.name, draftId);
     return {
       id: asset.id,
       url: asset.url,

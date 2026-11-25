@@ -52,3 +52,20 @@ describe("canServeAsset", () => {
     ).toBe(false);
   });
 });
+
+
+describe("canServeAsset deleted parent exclusion", () => {
+  it("blocks even the owner when the owning apology status is deleted", () => {
+    expect(
+      canServeAsset({
+        asset: {
+          ownerKeyHash: "owner-1",
+          apologyStatus: "deleted",
+          expiresAt: null,
+          state: "uploaded",
+        },
+        ownerKeyHash: "owner-1",
+      }),
+    ).toBe(false);
+  });
+});

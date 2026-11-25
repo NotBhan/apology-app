@@ -15,7 +15,8 @@ import { BIRTHDAY_THEMES, resolveBirthdayTheme } from "@/experiences/birthday/th
 import { ShareQrDialog } from "@/components/share/ShareQrDialog";
 import { Icon } from "@/components/ui/icons";
 import { compressImage } from "@/lib/image";
-import { uploadFile } from "@/lib/upload";
+import { toOptimizedUploadFile, uploadFile } from "@/lib/upload";
+import { OptimizedPhoto } from "@/components/ui/OptimizedPhoto";
 
 const STORAGE_KEY = "koi.birthday.draft";
 
@@ -154,10 +155,18 @@ export function BirthdayEditor({
 
   // Photo management state
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoStageLabel, setPhotoStageLabel] = useState<string | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [photoUrlInput, setPhotoUrlInput] = useState("");
   const [showUrlInput, setShowUrlInput] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const photoAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      photoAbortRef.current?.abort();
+    };
+  }, []);
 
   const currentTheme = resolveBirthdayTheme(values.themeId);
 
@@ -211,30 +220,38 @@ export function BirthdayEditor({
     }
 
     const chosenFiles = Array.from(files).slice(0, remainingSlots);
+    photoAbortRef.current?.abort();
+    const controller = new AbortController();
+    photoAbortRef.current = controller;
 
     if (onUploadPhoto) {
       setUploadingPhoto(true);
       try {
         const newItems: BirthdayEditorPhotoItem[] = [];
-        for (const file of chosenFiles) {
-          let uploadPayload: File = file;
-          try {
-            const compressed = await compressImage(file);
-            uploadPayload = new File([compressed.blob], file.name || "moment.jpg", {
-              type: compressed.type,
-            });
-          } catch {
-            // Fallback to original file if compression fails (e.g. test environment)
-            uploadPayload = file;
-          }
+        for (let i = 0; i < chosenFiles.length; i += 1) {
+          const file = chosenFiles[i]!;
+          if (controller.signal.aborted) break;
+          setPhotoStageLabel(`Optimizing ${i + 1}/${chosenFiles.length}…`);
+          const compressed = await compressImage(file, { signal: controller.signal });
+          if (controller.signal.aborted) break;
+          const uploadPayload = toOptimizedUploadFile(
+            compressed.blob,
+            file.name || "moment",
+            compressed.type,
+          );
+          setPhotoStageLabel(`Uploading ${i + 1}/${chosenFiles.length}…`);
           const res = await onUploadPhoto(uploadPayload);
           if (res?.url) newItems.push({ url: res.url, caption: "" });
         }
-        set("photos", [...(values.photos || []), ...newItems].slice(0, 5));
+        if (!controller.signal.aborted && newItems.length > 0) {
+          set("photos", [...(values.photos || []), ...newItems].slice(0, 5));
+        }
       } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
         setPhotoError(err instanceof Error ? err.message : "Failed to upload photo.");
       } finally {
         setUploadingPhoto(false);
+        setPhotoStageLabel(null);
         if (fileInputRef.current) fileInputRef.current.value = "";
       }
       return;
@@ -283,6 +300,7 @@ export function BirthdayEditor({
               audio: "none",
             },
           }),
+          signal: controller.signal,
         });
 
         if (res.status === 401) {
@@ -299,25 +317,34 @@ export function BirthdayEditor({
       }
 
       const newItems: BirthdayEditorPhotoItem[] = [];
-      for (const file of chosenFiles) {
-        let uploadPayload: File = file;
-        try {
-          const compressed = await compressImage(file);
-          uploadPayload = new File([compressed.blob], file.name || "moment.jpg", {
-            type: compressed.type,
-          });
-        } catch {
-          uploadPayload = file;
-        }
-        const asset = await uploadFile(uploadPayload, "photo", uploadPayload.name || "moment.jpg", activeId);
+      for (let i = 0; i < chosenFiles.length; i += 1) {
+        const file = chosenFiles[i]!;
+        if (controller.signal.aborted) break;
+        setPhotoStageLabel(`Optimizing ${i + 1}/${chosenFiles.length}…`);
+        const compressed = await compressImage(file, { signal: controller.signal });
+        if (controller.signal.aborted) break;
+        const uploadPayload = toOptimizedUploadFile(
+          compressed.blob,
+          file.name || "moment",
+          compressed.type,
+        );
+        setPhotoStageLabel(`Uploading ${i + 1}/${chosenFiles.length}…`);
+        const asset = await uploadFile(
+          uploadPayload,
+          "photo",
+          uploadPayload.name,
+          activeId,
+          controller.signal,
+        );
         if (asset?.url) newItems.push({ url: asset.url, caption: "" });
       }
 
+      if (controller.signal.aborted) return;
       const updatedPhotos = [...(values.photos || []), ...newItems].slice(0, 5);
       set("photos", updatedPhotos);
 
       // Persist updated photos to draft in background
-      await fetch(`/api/experiences/birthday/${activeId}`, {
+      const patchRes = await fetch(`/api/experiences/birthday/${activeId}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -335,11 +362,21 @@ export function BirthdayEditor({
             audio: "none",
           },
         }),
+        signal: controller.signal,
       });
+      if (patchRes.status === 401) {
+        setSessionExpired(true);
+        setPhotoError("Your session has expired. Sign in again to save uploaded photos.");
+      } else if (!patchRes.ok) {
+        const patchErr = await patchRes.json().catch(() => null);
+        setPhotoError(patchErr?.error ?? "Photo uploaded, but draft sync failed. Save again to keep changes.");
+      }
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       setPhotoError(err instanceof Error ? err.message : "Failed to upload photo.");
     } finally {
       setUploadingPhoto(false);
+      setPhotoStageLabel(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
@@ -920,11 +957,11 @@ export function BirthdayEditor({
                     >
                       <div className="flex items-center gap-2.5">
                         <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-stone-200 bg-stone-200 shadow-inner">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
+                          <OptimizedPhoto
                             src={url}
                             alt={caption || `Moment ${idx + 1}`}
-                            className="h-full w-full object-cover"
+                            priority
+                            className="object-cover"
                           />
                           <span className="absolute top-1 left-1 rounded bg-stone-900/80 px-1 py-0.2 text-[9px] font-bold text-white">
                             #{idx + 1}
@@ -1014,7 +1051,7 @@ export function BirthdayEditor({
                   }`}
                 >
                   <Icon name="image" size={14} className="text-stone-500" />
-                  <span>{uploadingPhoto ? "Uploading..." : "Upload photo"}</span>
+                  <span>{uploadingPhoto ? (photoStageLabel ?? "Uploading...") : "Upload photo"}</span>
                 </label>
 
                 <button

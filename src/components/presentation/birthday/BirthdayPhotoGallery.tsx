@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import type { BirthdayTheme } from "@/experiences/birthday/themes";
 import {
   normalizeBirthdayPhotos,
@@ -10,6 +10,7 @@ import {
   type NormalizedBirthdayPhoto,
 } from "@/experiences/birthday/schema";
 import { Icon } from "@/components/ui/icons";
+import { OptimizedPhoto } from "@/components/ui/OptimizedPhoto";
 import { cn } from "@/lib/cn";
 
 export interface BirthdayPhotoGalleryProps {
@@ -256,13 +257,12 @@ function ThemeAdaptiveLayout({
           >
             <div className={style.innerFrame}>
               <div className="relative aspect-[4/5] w-full overflow-hidden rounded-xl bg-stone-100">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <OptimizedPhoto
                   src={photo.url}
                   alt={photo.caption || "Celebration memory"}
-                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-103"
-                  style={{ objectPosition: photo.focalPoint || "50% 50%" }}
-                  loading="lazy"
+                  focalPoint={photo.focalPoint || "50% 50%"}
+                  priority
+                  className="object-cover transition-transform duration-300 group-hover:scale-103"
                 />
                 <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                   <span className="rounded-full bg-black/60 p-2 text-white shadow-md">
@@ -306,13 +306,12 @@ function ThemeAdaptiveLayout({
               >
                 <div className={style.innerFrame}>
                   <div className="relative aspect-[4/5] w-full overflow-hidden rounded-xl bg-stone-100">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <OptimizedPhoto
                       src={photo.url}
                       alt={photo.caption || `Celebration memory ${idx + 1}`}
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-103"
-                      style={{ objectPosition: photo.focalPoint || "50% 50%" }}
-                      loading="lazy"
+                      focalPoint={photo.focalPoint || "50% 50%"}
+                      priority={idx === 0}
+                      className="object-cover transition-transform duration-300 group-hover:scale-103"
                     />
                     <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                       <span className="rounded-full bg-black/60 p-1.5 text-white shadow-md">
@@ -360,13 +359,12 @@ function ThemeAdaptiveLayout({
                 >
                   <div className={style.innerFrame}>
                     <div className="relative aspect-[4/5] w-full overflow-hidden rounded-xl bg-stone-100">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
+                      <OptimizedPhoto
                         src={photo.url}
                         alt={photo.caption || "Celebration memory 1"}
-                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-103"
-                        style={{ objectPosition: photo.focalPoint || "50% 50%" }}
-                        loading="lazy"
+                        focalPoint={photo.focalPoint || "50% 50%"}
+                        priority
+                        className="object-cover transition-transform duration-300 group-hover:scale-103"
                       />
                       <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                         <span className="rounded-full bg-black/60 p-1.5 text-white shadow-md">
@@ -410,13 +408,12 @@ function ThemeAdaptiveLayout({
               >
                 <div className={style.innerFrame}>
                   <div className="relative aspect-[4/5] w-full overflow-hidden rounded-xl bg-stone-100">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <OptimizedPhoto
                       src={photo.url}
                       alt={photo.caption || `Celebration memory ${actualIdx + 1}`}
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-103"
-                      style={{ objectPosition: photo.focalPoint || "50% 50%" }}
-                      loading="lazy"
+                      focalPoint={photo.focalPoint || "50% 50%"}
+                      priority={actualIdx === 0}
+                      className="object-cover transition-transform duration-300 group-hover:scale-103"
                     />
                     <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                       <span className="rounded-full bg-black/60 p-1.5 text-white shadow-md">
@@ -490,13 +487,12 @@ function ScrapbookLayout({
               className="w-full text-left focus:outline-none focus:ring-2 focus:ring-[#e8590c] rounded-lg"
             >
               <div className="relative aspect-square overflow-hidden rounded-lg bg-stone-100">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <OptimizedPhoto
                   src={photo.url}
                   alt={photo.caption || `Scrapbook photo ${index + 1}`}
-                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-103"
-                  style={{ objectPosition: photo.focalPoint || "50% 50%" }}
-                  loading="lazy"
+                  focalPoint={photo.focalPoint || "50% 50%"}
+                  priority={index === 0}
+                  className="object-cover transition-transform duration-300 group-hover:scale-103"
                 />
                 <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                   <span className="rounded-full bg-black/60 p-1.5 text-white shadow-md">
@@ -559,13 +555,12 @@ function PolaroidLayout({
             className="w-full text-left focus:outline-none focus:ring-2 focus:ring-[#e8590c] rounded"
           >
             <div className="relative aspect-[4/5] overflow-hidden bg-stone-100 shadow-inner">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <OptimizedPhoto
                 src={photo.url}
                 alt={photo.caption || `Polaroid memory ${index + 1}`}
-                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-103"
-                style={{ objectPosition: photo.focalPoint || "50% 50%" }}
-                loading="lazy"
+                focalPoint={photo.focalPoint || "50% 50%"}
+                priority={index === 0}
+                className="object-cover transition-transform duration-300 group-hover:scale-103"
               />
               <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                 <span className="rounded-full bg-black/60 p-1.5 text-white shadow-md">
@@ -604,18 +599,32 @@ function SlideshowLayout({
 }) {
   const reduce = useReducedMotion();
   const [index, setIndex] = useState(0);
-  const [direction, setDirection] = useState(1);
+  const [visitedIndices, setVisitedIndices] = useState<Set<number>>(() => new Set([0]));
   const still = reduce || !animate;
+
+  const markVisited = useCallback((target: number) => {
+    setVisitedIndices((prev) => {
+      if (prev.has(target)) return prev;
+      const next = new Set(prev);
+      next.add(target);
+      return next;
+    });
+  }, []);
 
   const go = useCallback(
     (delta: number) => {
-      setDirection(delta);
-      setIndex((current) => (current + delta + photos.length) % photos.length);
+      setIndex((current) => {
+        const nextIdx = (current + delta + photos.length) % photos.length;
+        markVisited(nextIdx);
+        return nextIdx;
+      });
     },
-    [photos.length],
+    [markVisited, photos.length],
   );
 
-  const currentPhoto = photos[index];
+  const safeIndex = Math.min(index, Math.max(0, photos.length - 1));
+  const currentPhoto = photos[safeIndex];
+  if (!currentPhoto) return null;
 
   return (
     <div className="flex w-full flex-col items-center gap-3.5 px-2">
@@ -628,31 +637,40 @@ function SlideshowLayout({
       >
         <button
           type="button"
-          onClick={(e) => onPhotoClick(index, e)}
-          aria-label={`View photo ${index + 1}: ${currentPhoto.caption || "Slideshow photo"} in full screen`}
+          onClick={(e) => onPhotoClick(safeIndex, e)}
+          aria-label={`View photo ${safeIndex + 1}: ${currentPhoto.caption || "Slideshow photo"} in full screen`}
           className="w-full text-left focus:outline-none focus:ring-2 focus:ring-[#e8590c] rounded-xl"
         >
           <div className="relative aspect-[4/5] w-full overflow-hidden rounded-xl bg-stone-100">
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.div
-                key={currentPhoto.id}
-                className="absolute inset-0"
-                initial={still ? false : { opacity: 0, x: direction * 40 }}
-                animate={still ? undefined : { opacity: 1, x: 0 }}
-                exit={still ? undefined : { opacity: 0, x: direction * -40 }}
-                transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={currentPhoto.url}
-                  alt={currentPhoto.caption || `Slideshow memory ${index + 1}`}
-                  className="h-full w-full object-cover"
-                  style={{ objectPosition: currentPhoto.focalPoint || "50% 50%" }}
-                  loading="eager"
-                />
-              </motion.div>
-            </AnimatePresence>
-            <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+            {photos.map((slidePhoto, slideIdx) => {
+              if (!visitedIndices.has(slideIdx) && slideIdx !== safeIndex) return null;
+              const isActive = slideIdx === safeIndex;
+              return (
+                <motion.div
+                  key={slidePhoto.id}
+                  aria-hidden={!isActive}
+                  className={cn(
+                    "absolute inset-0",
+                    isActive ? "z-10" : "z-0 pointer-events-none",
+                  )}
+                  initial={false}
+                  animate={{
+                    opacity: isActive ? 1 : 0,
+                    scale: still ? 1 : isActive ? 1 : 0.98,
+                  }}
+                  transition={{ duration: still ? 0 : 0.35, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  <OptimizedPhoto
+                    src={slidePhoto.url}
+                    alt={slidePhoto.caption || `Slideshow memory ${slideIdx + 1}`}
+                    focalPoint={slidePhoto.focalPoint || "50% 50%"}
+                    priority={slideIdx === 0 || isActive}
+                    className="object-cover"
+                  />
+                </motion.div>
+              );
+            })}
+            <div className="absolute inset-0 z-20 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
               <span className="rounded-full bg-black/60 p-2 text-white shadow-md">
                 <Icon name="eye" size={16} />
               </span>
@@ -696,7 +714,7 @@ function SlideshowLayout({
               key={item.id}
               type="button"
               onClick={() => {
-                setDirection(dot > index ? 1 : -1);
+                markVisited(dot);
                 setIndex(dot);
               }}
               aria-label={`Jump to photo ${dot + 1}`}
@@ -744,7 +762,8 @@ function LightboxModal({
   onClose: () => void;
   onNavigate: (index: number) => void;
 }) {
-  const currentPhoto = photos[currentIndex];
+  const safeCurrent = Math.min(currentIndex, Math.max(0, photos.length - 1));
+  const currentPhoto = photos[safeCurrent];
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
@@ -756,16 +775,18 @@ function LightboxModal({
         onClose();
       } else if (e.key === "ArrowLeft" && photos.length > 1) {
         e.preventDefault();
-        onNavigate((currentIndex - 1 + photos.length) % photos.length);
+        onNavigate((safeCurrent - 1 + photos.length) % photos.length);
       } else if (e.key === "ArrowRight" && photos.length > 1) {
         e.preventDefault();
-        onNavigate((currentIndex + 1) % photos.length);
+        onNavigate((safeCurrent + 1) % photos.length);
       }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentIndex, onClose, onNavigate, photos.length]);
+  }, [safeCurrent, onClose, onNavigate, photos.length]);
+
+  if (!currentPhoto) return null;
 
   return (
     <div
@@ -781,7 +802,7 @@ function LightboxModal({
         {/* Top Bar: Counter & Close */}
         <div className="flex w-full items-center justify-between pb-3 text-white/90">
           <span className="text-xs font-medium tracking-wider uppercase opacity-80">
-            Photo {currentIndex + 1} of {photos.length}
+            Photo {safeCurrent + 1} of {photos.length}
           </span>
           <button
             ref={closeButtonRef}
@@ -799,7 +820,7 @@ function LightboxModal({
           {photos.length > 1 && (
             <button
               type="button"
-              onClick={() => onNavigate((currentIndex - 1 + photos.length) % photos.length)}
+              onClick={() => onNavigate((safeCurrent - 1 + photos.length) % photos.length)}
               aria-label="Previous photo"
               className="absolute left-2 z-10 grid h-10 w-10 place-items-center rounded-full bg-black/60 text-white shadow-lg backdrop-blur-sm hover:bg-black/80 transition cursor-pointer"
             >
@@ -807,17 +828,20 @@ function LightboxModal({
             </button>
           )}
 
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={currentPhoto.url}
-            alt={currentPhoto.caption || `Celebration photo ${currentIndex + 1}`}
-            className="max-h-[72vh] max-w-[88vw] rounded-xl object-contain shadow-2xl"
-          />
+          <div className="h-[72vh] w-[min(88vw,780px)] overflow-hidden rounded-xl shadow-2xl">
+            <OptimizedPhoto
+              src={currentPhoto.url}
+              alt={currentPhoto.caption || `Celebration photo ${safeCurrent + 1}`}
+              priority
+              className="object-contain"
+              placeholderClassName="bg-stone-800"
+            />
+          </div>
 
           {photos.length > 1 && (
             <button
               type="button"
-              onClick={() => onNavigate((currentIndex + 1) % photos.length)}
+              onClick={() => onNavigate((safeCurrent + 1) % photos.length)}
               aria-label="Next photo"
               className="absolute right-2 z-10 grid h-10 w-10 place-items-center rounded-full bg-black/60 text-white shadow-lg backdrop-blur-sm hover:bg-black/80 transition cursor-pointer"
             >

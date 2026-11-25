@@ -132,6 +132,30 @@ export const FUNCTIONAL_SYMBOLS: SymbolDefinition[] = [
     meaning: "A time limit, an expiry or a remaining window.",
     contexts: ["creator/publish", "manage/status", "creator/situations"],
   },
+  {
+    id: "compass",
+    kind: "functional",
+    meaning: "Distance or geographic separation between two people.",
+    contexts: ["presentation/miss-you"],
+  },
+  {
+    id: "map-pin",
+    kind: "functional",
+    meaning: "Origin or destination point on a distance bridge.",
+    contexts: ["presentation/miss-you"],
+  },
+  {
+    id: "sparkles",
+    kind: "functional",
+    meaning: "Looking forward to a future moment or reunion.",
+    contexts: ["presentation/miss-you"],
+  },
+  {
+    id: "plus",
+    kind: "functional",
+    meaning: "Add a new reminder, photo, or keepsake item.",
+    contexts: ["creator/miss-you"],
+  },
 ];
 
 export const FUNCTIONAL_SYMBOL_IDS = FUNCTIONAL_SYMBOLS.map((symbol) => symbol.id);

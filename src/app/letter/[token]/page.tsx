@@ -4,7 +4,9 @@ import { getRepository } from "@/lib/storage";
 import { getTheme } from "@/themes/registry";
 import { PresentationEngine } from "@/components/presentation/PresentationEngine";
 import { BirthdayLetter } from "@/components/presentation/BirthdayLetter";
+import { MissYouLetter } from "@/components/presentation/MissYouLetter";
 import { birthdayContentSchema } from "@/experiences/birthday/schema";
+import { missYouContentSchema } from "@/experiences/miss-you/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +32,16 @@ export default async function LetterPage({ params }: { params: Promise<{ token: 
     return (
       <main className="min-h-svh">
         <BirthdayLetter content={parsed.data} apologyId={letter.id} />
+      </main>
+    );
+  }
+
+  if (letter.experienceType === "miss-you") {
+    const parsed = missYouContentSchema.safeParse(letter.content);
+    if (!parsed.success) notFound();
+    return (
+      <main className="min-h-svh">
+        <MissYouLetter content={parsed.data} apologyId={letter.id} />
       </main>
     );
   }

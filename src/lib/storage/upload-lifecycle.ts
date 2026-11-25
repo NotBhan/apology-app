@@ -23,16 +23,4 @@ export function buildObjectKey(apologyId: string, extension: string): string {
   return `apologies/${apologyId}/${randomId(16)}.${safe}`;
 }
 
-export const EXTENSION_BY_MIME: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-  "audio/mpeg": "mp3",
-  "audio/wav": "wav",
-  "audio/ogg": "ogg",
-  "audio/webm": "weba",
-};
-
-export function extensionForMime(mime: string): string {
-  return EXTENSION_BY_MIME[mime] ?? "bin";
-}
+export { EXTENSION_BY_MIME, extensionForMime } from "@/lib/storage/mime";

@@ -48,11 +48,13 @@ export const EXPERIENCE_CATEGORIES: readonly ExperienceCategory[] = [
   },
   {
     id: "affection",
-    label: "Just Because",
+    label: "I Miss You",
     description:
-      "Tell someone what they mean to you, whether it's a declaration of love or a little reminder that they're missed.",
-    status: "upcoming",
-    accent: "#c2185b",
+      "Bridge the miles between you with shared memories, quiet reminders, and a promise to be together again.",
+    status: "implemented",
+    experienceId: "miss-you",
+    href: "/create/miss-you",
+    accent: "#9f3e67",
   },
   {
     id: "proposal",

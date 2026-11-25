@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, Reorder } from "framer-motion";
 import type { PhotoAsset } from "@/types/apology";
 import { compressImage } from "@/lib/image";
+import { OptimizedPhoto } from "@/components/ui/OptimizedPhoto";
 import { cn } from "@/lib/cn";
 
 interface PhotosPanelProps {
@@ -24,19 +25,36 @@ export function PhotosPanel({
   onUpload,
 }: PhotosPanelProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const [statusLabel, setStatusLabel] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
   async function handleFiles(files: FileList | null) {
     if (!files?.length) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setError(null);
     setBusy(true);
     try {
       const slots = MAX_PHOTOS - photos.length;
       const chosen = Array.from(files).slice(0, Math.max(0, slots));
       const uploaded: PhotoAsset[] = [];
-      for (const file of chosen) {
-        const compressed = await compressImage(file);
+      for (let i = 0; i < chosen.length; i += 1) {
+        const file = chosen[i]!;
+        if (controller.signal.aborted) break;
+        setStatusLabel(`Optimizing ${i + 1}/${chosen.length}…`);
+        const compressed = await compressImage(file, { signal: controller.signal });
+        if (controller.signal.aborted) break;
+        setStatusLabel(`Uploading ${i + 1}/${chosen.length}…`);
         const asset = await onUpload(compressed.blob, {
           width: compressed.width,
           height: compressed.height,
@@ -44,11 +62,15 @@ export function PhotosPanel({
         });
         uploaded.push(asset);
       }
-      onChange([...photos, ...uploaded]);
+      if (!controller.signal.aborted && uploaded.length > 0) {
+        onChange([...photos, ...uploaded]);
+      }
     } catch (cause) {
+      if (cause instanceof DOMException && cause.name === "AbortError") return;
       setError(cause instanceof Error ? cause.message : "Upload failed.");
     } finally {
       setBusy(false);
+      setStatusLabel(null);
       if (inputRef.current) inputRef.current.value = "";
     }
   }
@@ -76,7 +98,7 @@ export function PhotosPanel({
           disabled={photos.length >= MAX_PHOTOS || busy}
           className="rounded-full bg-[#f2ecfa] px-4 py-2 text-[0.78rem] font-semibold text-[#5b3f7d] transition active:scale-95 disabled:opacity-40"
         >
-          {busy ? "Uploading…" : "Add photos"}
+          {busy ? statusLabel ?? "Working…" : "Add photos"}
         </button>
       </div>
 
@@ -89,7 +111,7 @@ export function PhotosPanel({
         onChange={(event) => void handleFiles(event.target.files)}
       />
 
-      {error ? <p className="text-[0.75rem] text-[#b91c1c]">{error}</p> : null}
+      {error ? <p role="alert" className="text-[0.75rem] text-[#b91c1c]">{error}</p> : null}
 
       {photos.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-[#ddd0ec] px-4 py-8 text-center">
@@ -115,12 +137,12 @@ export function PhotosPanel({
             >
               <div className="flex gap-3">
                 <div className="relative h-20 w-16 shrink-0 overflow-hidden rounded-xl bg-[#f4eefb]">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+                  <OptimizedPhoto
                     src={photo.url}
                     alt={photo.caption || `Photo ${index + 1}`}
-                    className="h-full w-full object-cover"
-                    style={{ objectPosition: photo.focalPoint ?? "50% 50%" }}
+                    focalPoint={photo.focalPoint ?? "50% 50%"}
+                    priority
+                    className="object-cover"
                     draggable={false}
                   />
                   <span className="absolute left-1 top-1 rounded bg-black/55 px-1 text-[0.6rem] text-white">

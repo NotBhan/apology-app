@@ -1,6 +1,6 @@
 import { requireApiCreator } from "@/lib/security/creator";
 import { getObjectStore, getRepository } from "@/lib/storage";
-import { storeUpload, UploadError } from "@/lib/storage/uploads";
+import { isValidAssetId, storeUpload, UploadError } from "@/lib/storage/uploads";
 import { jsonError, jsonOk } from "@/lib/api/responses";
 import { enforceRateLimit, rateLimitHeaders } from "@/lib/security/postgres-rate-limit";
 
@@ -51,8 +51,8 @@ export async function POST(request: Request) {
   }
 
   const draftId = form.get("draftId");
-  if (typeof draftId !== "string" || draftId.length === 0) {
-    return jsonError(400, 'Send the owning draft in a field named "draftId".');
+  if (typeof draftId !== "string" || !isValidAssetId(draftId)) {
+    return jsonError(400, 'Send a valid owning draft in a field named "draftId".');
   }
 
   try {

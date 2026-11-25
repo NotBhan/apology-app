@@ -1,8 +1,32 @@
 "use client";
 
+import { extensionForMime } from "@/lib/storage/mime";
+
 export interface UploadedAsset {
   id: string;
   url: string;
+}
+
+/**
+ * Derives the filename and File wrapper strictly from the generated Blob MIME
+ * type rather than trusting the original filename extension.
+ */
+export function optimizedPhotoFilename(originalName: string, mime: string): string {
+  const ext = extensionForMime(mime);
+  const stem = originalName.replace(/\.[^/.]+$/, "").trim() || "moment";
+  return ext === "bin" ? `${stem}.jpg` : `${stem}.${ext}`;
+}
+
+export function toOptimizedUploadFile(
+  blob: Blob,
+  originalName: string,
+  fallbackMime?: string,
+): File {
+  const resolvedMime =
+    blob.type && blob.type.startsWith("image/") ? blob.type : fallbackMime || "image/jpeg";
+  return new File([blob], optimizedPhotoFilename(originalName, resolvedMime), {
+    type: resolvedMime,
+  });
 }
 
 async function readError(response: Response): Promise<string> {
@@ -23,6 +47,7 @@ export async function uploadFile(
   kind: "photo" | "audio",
   filename: string,
   draftId: string,
+  signal?: AbortSignal,
 ): Promise<UploadedAsset> {
   const form = new FormData();
   form.append("file", blob, filename);
@@ -33,6 +58,7 @@ export async function uploadFile(
     method: "POST",
     body: form,
     cache: "no-store",
+    signal,
   });
 
   if (!response.ok) throw new Error(await readError(response));

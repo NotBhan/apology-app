@@ -201,6 +201,31 @@ describe("QuickReplyModal", () => {
   it("does not dismiss dialog on Escape during active upload", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
+    const imageMod = await import("@/lib/image");
+    const webpBlob = new Blob([new Uint8Array([0x52, 0x49, 0x46, 0x46])], { type: "image/webp" });
+    vi.spyOn(imageMod, "compressImage").mockResolvedValueOnce({
+      blob: webpBlob,
+      width: 1200,
+      height: 900,
+      type: "image/webp",
+      metrics: {
+        originalBytes: 1_200_000,
+        compressedBytes: 180_000,
+        originalWidth: 2400,
+        originalHeight: 1800,
+        outputWidth: 1200,
+        outputHeight: 900,
+        originalFormat: "image/jpeg",
+        outputFormat: "image/webp",
+        durationMs: 12,
+        reductionBytes: 1_020_000,
+        reductionPercent: 85,
+        qualityUsed: 0.78,
+        attempts: 1,
+        wasRecompressed: true,
+        preservedTransparency: false,
+      },
+    });
 
     let finishUpload: (value: clientApi.ResponseUploadResult | PromiseLike<clientApi.ResponseUploadResult>) => void = () => {};
     vi.spyOn(clientApi, "uploadResponsePhoto").mockImplementationOnce(
@@ -213,8 +238,15 @@ describe("QuickReplyModal", () => {
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, file);
 
-    // Expect uploading indicator to be present
-    expect(screen.getByText("Uploading photo…")).toBeInTheDocument();
+    // Expect uploading indicator to be present and WebP file uploaded
+    expect(await screen.findByText("Uploading photo…")).toBeInTheDocument();
+    expect(clientApi.uploadResponsePhoto).toHaveBeenCalledWith(
+      defaultProps.apologyId,
+      expect.objectContaining({ type: "image/webp", name: "photo.webp" }),
+      undefined,
+      "quick",
+      expect.any(AbortSignal),
+    );
 
     // Press Escape during upload
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
@@ -235,6 +267,20 @@ describe("QuickReplyModal", () => {
       fireEvent.keyDown(window, { key: "Escape" });
       expect(onClose).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("rejects invalid photo files during client optimization without uploading", async () => {
+    const user = userEvent.setup({ applyAccept: false });
+    const uploadSpy = vi.spyOn(clientApi, "uploadResponsePhoto");
+
+    render(<QuickReplyModal {...defaultProps} isOpen={true} />);
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const fakePdf = new File(["%PDF-1.7"], "fake.jpg", { type: "image/jpeg" });
+    await user.upload(fileInput, fakePdf);
+
+    expect(uploadSpy).not.toHaveBeenCalled();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/not a valid|unsupported/i);
   });
 
   it("populates message textarea when a preset is clicked", async () => {

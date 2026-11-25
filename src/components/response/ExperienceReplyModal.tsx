@@ -5,12 +5,15 @@ import { createPortal } from "react-dom";
 import { Icon } from "@/components/ui/icons";
 import type { ApologyDraft } from "@/types/apology";
 import type { BirthdayContent } from "@/experiences/birthday/schema";
+import type { MissYouContent } from "@/experiences/miss-you/schema";
 import type { ExperienceId } from "@/experiences/types";
 import { Wizard, type WizardGateway } from "@/components/creator/Wizard";
 import { BirthdayEditor } from "@/components/creator/BirthdayEditor";
+import { MissYouEditor } from "@/components/creator/MissYouEditor";
 import { ExperienceSelectionModal } from "./ExperienceSelectionModal";
 import { ExperienceReplyCompleteDialog } from "./ExperienceReplyCompleteDialog";
 import { sendExperienceReply, uploadResponsePhoto } from "@/lib/api/client";
+import { optimizedPhotoFilename } from "@/lib/upload";
 
 export interface ExperienceReplyModalProps {
   isOpen: boolean;
@@ -89,6 +92,7 @@ export function ExperienceReplyModal({
         });
 
         storeReplyCapability(result.publicToken, result.manageToken);
+        responseIdRef.current = null;
         setPublicUrl(result.publicUrl);
         setStep("complete");
 
@@ -103,8 +107,9 @@ export function ExperienceReplyModal({
         throw new Error("Audio uploads are not available in response mode.");
       },
       async uploadPhoto(_draftId, blob, meta) {
-        const file = new File([blob], `photo_${Date.now()}.jpg`, {
-          type: meta.type || "image/jpeg",
+        const resolvedMime = blob.type || meta.type || "image/jpeg";
+        const file = new File([blob], optimizedPhotoFilename(`photo_${Date.now()}`, resolvedMime), {
+          type: resolvedMime,
         });
         const res = await uploadResponsePhoto(
           apologyId,
@@ -128,25 +133,51 @@ export function ExperienceReplyModal({
     [apologyId, initialApologyDraft]
   );
 
-  async function handlePublishBirthdayResponse(content: BirthdayContent) {
+  async function handlePublishCustomResponse(
+    experienceType: "birthday" | "miss-you",
+    content: BirthdayContent | MissYouContent,
+  ) {
     const result = await sendExperienceReply(apologyId, {
-      experienceType: "birthday",
+      experienceType,
       content: content as unknown as Record<string, unknown>,
+      responseId: responseIdRef.current ?? undefined,
     });
 
     storeReplyCapability(result.publicToken, result.manageToken);
+    responseIdRef.current = null;
     setPublicUrl(result.publicUrl);
     setStep("complete");
 
     return { path: result.publicUrl, publicToken: result.publicToken };
   }
 
+  async function handleCustomPhotoUpload(file: File): Promise<{ url: string }> {
+    const res = await uploadResponsePhoto(
+      apologyId,
+      file,
+      responseIdRef.current ?? undefined,
+      "experience",
+    );
+    if (res.responseId && !responseIdRef.current) {
+      responseIdRef.current = res.responseId;
+    }
+    return { url: res.asset.url };
+  }
+
   function handleResetAndClose() {
+    responseIdRef.current = null;
     setStep("select");
     setSelectedExperience(null);
     setPublicUrl(null);
     onClose();
   }
+
+  const experienceLabel =
+    selectedExperience === "birthday"
+      ? "Birthday"
+      : selectedExperience === "miss-you"
+        ? "I Miss You"
+        : "Apology";
 
   if (!isOpen) return null;
 
@@ -157,7 +188,7 @@ export function ExperienceReplyModal({
         onClose={handleResetAndClose}
         publicUrl={publicUrl}
         senderName={parentSenderName}
-        experienceType={selectedExperience === "birthday" ? "Birthday" : "Apology"}
+        experienceType={experienceLabel}
       />
     );
   }
@@ -198,7 +229,7 @@ export function ExperienceReplyModal({
 
         <div className="text-center min-w-0 px-2">
           <h1 id="experience-editor-title" className="text-xs font-bold uppercase tracking-wider text-[#33203f] truncate">
-            {selectedExperience === "birthday" ? "Birthday Response" : "Apology Response"}
+            {experienceLabel} Response
           </h1>
           <p className="text-[0.68rem] text-[#7d6892] truncate">
             Replying to <span className="font-semibold text-[#6d3fa8]">{parentSenderName}</span>
@@ -225,19 +256,21 @@ export function ExperienceReplyModal({
                 senderName: parentRecipientName,
               }}
               isResponse={true}
-              onPublishResponse={handlePublishBirthdayResponse}
-              onUploadPhoto={async (file: File) => {
-                const res = await uploadResponsePhoto(
-                  apologyId,
-                  file,
-                  responseIdRef.current ?? undefined,
-                  "experience"
-                );
-                if (res.responseId && !responseIdRef.current) {
-                  responseIdRef.current = res.responseId;
-                }
-                return { url: res.asset.url };
+              onPublishResponse={(content) => handlePublishCustomResponse("birthday", content)}
+              onUploadPhoto={handleCustomPhotoUpload}
+              onCancel={() => setStep("select")}
+            />
+          </div>
+        ) : selectedExperience === "miss-you" ? (
+          <div className="mx-auto max-w-[1120px] px-4">
+            <MissYouEditor
+              initialValues={{
+                recipientName: parentSenderName,
+                senderName: parentRecipientName,
               }}
+              isResponse={true}
+              onPublishResponse={(content) => handlePublishCustomResponse("miss-you", content)}
+              onUploadPhoto={handleCustomPhotoUpload}
               onCancel={() => setStep("select")}
             />
           </div>

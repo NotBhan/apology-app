@@ -20,6 +20,7 @@ import type {
 import type { PublishedApology } from "@/types/apology";
 import { rowToRecord } from "./postgres-repository";
 import { toPublished, type AssetRecord } from "./types";
+import { isValidUuid } from "./mime";
 
 function iso(value: Date | string | null | undefined): string | undefined {
   if (!value) return undefined;
@@ -429,7 +430,8 @@ export class ResponseRepository {
   }
 
   /**
-   * Promote asset state from pending to uploaded upon successful S3 write.
+   * Promote asset state from pending to uploaded upon successful S3 write,
+   * conditional on the response and parent experience still being active.
    */
   async promoteResponseAsset(assetId: string, objectKey: string, sizeBytes: number): Promise<boolean> {
     const [row] = await this.db
@@ -439,7 +441,28 @@ export class ResponseRepository {
         sizeBytes,
         updatedAt: new Date(),
       })
-      .where(and(eq(responseAssets.id, assetId), eq(responseAssets.objectKey, objectKey), eq(responseAssets.state, "pending")))
+      .where(
+        and(
+          eq(responseAssets.id, assetId),
+          eq(responseAssets.objectKey, objectKey),
+          eq(responseAssets.state, "pending"),
+          sql`exists (
+            select 1 from ${responses} r
+            inner join ${apologies} a on a.id = r.apology_id
+            where r.id = ${responseAssets.responseId}
+              and r.status in ('draft', 'published')
+              and a.status = 'published'
+              and not exists (
+                select 1 from ${deletionJobs} ja
+                where ja.resource_type = 'apology' and ja.resource_id = a.id
+              )
+              and not exists (
+                select 1 from ${deletionJobs} jr
+                where jr.resource_type = 'response' and jr.resource_id = r.id
+              )
+          )`,
+        ),
+      )
       .returning({ id: responseAssets.id });
 
     return Boolean(row);
@@ -453,7 +476,7 @@ export class ResponseRepository {
   }
 
   async getAssetForServing(assetId: string): Promise<ServingResponseAsset | null> {
-    if (!/^[0-9a-f-]{36}$/i.test(assetId)) return null;
+    if (!isValidUuid(assetId)) return null;
 
     const [row] = await this.db
       .select({

@@ -11,6 +11,7 @@
  * `cache: "no-store"` is the supported equivalent of `next: { cache: "no-store" }`.
  */
 import type { ApologyDraft, CreateDraftInput, PublishedApology } from "@/types/apology";
+import type { ExperienceId } from "@/experiences/types";
 import type { PublishedResponse, QuickReplyPayload } from "@/types/response";
 import type { ApiError } from "@/lib/api/responses";
 import type { AssetRecord } from "@/lib/storage/types";
@@ -327,7 +328,7 @@ export async function sendQuickReply(
 export async function sendExperienceReply(
   apologyId: string,
   input: {
-    experienceType: "apology" | "birthday";
+    experienceType: ExperienceId;
     content: Record<string, unknown>;
     responseId?: string;
   },
@@ -346,6 +347,7 @@ export async function uploadResponsePhoto(
   file: File,
   responseId?: string,
   responseType?: "quick" | "experience",
+  signal?: AbortSignal,
 ): Promise<ResponseUploadResult> {
   const form = new FormData();
   form.append("file", file, file.name || "upload");
@@ -356,6 +358,7 @@ export async function uploadResponsePhoto(
   return apiRequest<ResponseUploadResult>("/api/responses/upload", {
     method: "POST",
     form,
+    signal,
   });
 }
 

@@ -1,4 +1,5 @@
-import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
+import { isValidUuid } from "./mime";
 import type { ApologyDraft, ApologyRecord, PublishedApology } from "@/types/apology";
 import type { DraftPayload } from "@/lib/validation/apology";
 import { createLinkToken, hashLinkToken } from "@/lib/id";
@@ -479,6 +480,27 @@ export class PostgresRepository implements ApologyRepository {
       .where(and(eq(apologyAssets.id, assetId), eq(apologyAssets.state, "pending")));
   }
 
+  async removeAsset(assetId: string, ownerKeyHash: string): Promise<boolean> {
+    if (!isValidUuid(assetId)) return false;
+    const rows = await this.db
+      .update(apologyAssets)
+      .set({ state: "failed", updatedAt: new Date() })
+      .where(
+        and(
+          eq(apologyAssets.id, assetId),
+          eq(apologyAssets.state, "uploaded"),
+          sql`exists (
+            select 1 from ${apologies} a
+            where a.id = ${apologyAssets.apologyId}
+              and a.owner_key_hash = ${ownerKeyHash}
+              and a.status <> 'deleted'
+          )`,
+        ),
+      )
+      .returning({ id: apologyAssets.id });
+    return rows.length > 0;
+  }
+
   async listAssets(apologyId: string): Promise<AssetRecord[]> {
     const rows = await this.db
       .select()
@@ -488,7 +510,7 @@ export class PostgresRepository implements ApologyRepository {
   }
 
   async getAssetForServing(assetId: string): Promise<ServingAsset | undefined> {
-    if (!/^[0-9a-f-]{36}$/i.test(assetId)) return undefined;
+    if (!isValidUuid(assetId)) return undefined;
     const [row] = await this.db
       .select({
         asset: apologyAssets,
@@ -498,7 +520,17 @@ export class PostgresRepository implements ApologyRepository {
       })
       .from(apologyAssets)
       .innerJoin(apologies, eq(apologies.id, apologyAssets.apologyId))
-      .where(and(eq(apologyAssets.id, assetId), eq(apologyAssets.state, "uploaded")))
+      .where(
+        and(
+          eq(apologyAssets.id, assetId),
+          eq(apologyAssets.state, "uploaded"),
+          ne(apologies.status, "deleted"),
+          sql`not exists (
+            select 1 from ${deletionJobs} j
+            where j.resource_type = 'apology' and j.resource_id = ${apologies.id}
+          )`,
+        ),
+      )
       .limit(1);
 
     if (!row) return undefined;

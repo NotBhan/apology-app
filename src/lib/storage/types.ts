@@ -112,6 +112,9 @@ export interface ApologyRepository {
 
   failAsset(assetId: string): Promise<void>;
 
+  /** Marks an uploaded asset as `failed` upon explicit owner deletion. */
+  removeAsset(assetId: string, ownerKeyHash: string): Promise<boolean>;
+
   listAssets(apologyId: string): Promise<AssetRecord[]>;
 
   getAssetForServing(assetId: string): Promise<ServingAsset | undefined>;

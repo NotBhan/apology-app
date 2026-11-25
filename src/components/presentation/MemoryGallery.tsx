@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import type { PhotoAsset } from "@/types/apology";
 import { cn } from "@/lib/cn";
 import { Icon } from "@/components/ui/icons";
+import { OptimizedPhoto } from "@/components/ui/OptimizedPhoto";
 
 interface MemoryGalleryProps {
   photos: PhotoAsset[];
@@ -43,15 +44,14 @@ function Photo({
   priority?: boolean;
 }) {
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
+    <OptimizedPhoto
       src={photo.url}
       alt={photo.caption?.trim() || "A memory"}
+      width={photo.width}
+      height={photo.height}
+      focalPoint={photo.focalPoint ?? "50% 50%"}
+      priority={priority}
       className={cn("h-full w-full object-cover", className)}
-      style={{ objectPosition: photo.focalPoint ?? "50% 50%" }}
-      loading={priority ? "eager" : "lazy"}
-      decoding="async"
-      draggable={false}
     />
   );
 }
@@ -92,7 +92,7 @@ function Polaroids({
           style={{ rotate: `${index % 2 ? 1.4 : -1.4}deg` }}
         >
           <div className="relative aspect-[4/5] overflow-hidden bg-[#eee]">
-            <Photo photo={photo} />
+            <Photo photo={photo} priority={index === 0} />
           </div>
           {photo.caption?.trim() ? (
             <figcaption
@@ -150,7 +150,7 @@ function Scrapbook({
             }}
           />
           <div className="relative aspect-square overflow-hidden bg-[#eee]">
-            <Photo photo={photo} />
+            <Photo photo={photo} priority={index === 0} />
           </div>
           {photo.caption?.trim() ? (
             <figcaption
@@ -177,35 +177,55 @@ function Slideshow({
 }) {
   const reduce = useReducedMotion();
   const [index, setIndex] = useState(0);
-  const [direction, setDirection] = useState(1);
+  const [visitedIndices, setVisitedIndices] = useState<Set<number>>(() => new Set([0]));
   const still = reduce || !animate;
 
   const go = useCallback(
     (delta: number) => {
-      setDirection(delta);
-      setIndex((current) => (current + delta + photos.length) % photos.length);
+      setIndex((current) => {
+        const nextIdx = (current + delta + photos.length) % photos.length;
+        setVisitedIndices((prev) => {
+          if (prev.has(nextIdx)) return prev;
+          const next = new Set(prev);
+          next.add(nextIdx);
+          return next;
+        });
+        return nextIdx;
+      });
     },
     [photos.length],
   );
 
-  const photo = photos[index];
+  const safeIndex = Math.min(index, Math.max(0, photos.length - 1));
+  const photo = photos[safeIndex];
+  if (!photo) return null;
 
   return (
     <div className={cn("flex w-full flex-col items-center gap-4", className)}>
       <div className="relative w-full max-w-[320px] overflow-hidden rounded-2xl bg-black/5 shadow-[0_18px_40px_-22px_rgba(0,0,0,0.6)]">
         <div className="relative aspect-[4/5]">
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={photo.id}
-              className="absolute inset-0"
-              initial={still ? false : { opacity: 0, x: direction * 40 }}
-              animate={still ? undefined : { opacity: 1, x: 0 }}
-              exit={still ? undefined : { opacity: 0, x: direction * -40 }}
-              transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <Photo photo={photo} priority />
-            </motion.div>
-          </AnimatePresence>
+          {photos.map((slidePhoto, slideIdx) => {
+            if (!visitedIndices.has(slideIdx) && slideIdx !== safeIndex) return null;
+            const isActive = slideIdx === safeIndex;
+            return (
+              <motion.div
+                key={slidePhoto.id}
+                aria-hidden={!isActive}
+                className={cn(
+                  "absolute inset-0",
+                  isActive ? "z-10" : "z-0 pointer-events-none",
+                )}
+                initial={false}
+                animate={{
+                  opacity: isActive ? 1 : 0,
+                  scale: still ? 1 : isActive ? 1 : 0.98,
+                }}
+                transition={{ duration: still ? 0 : 0.35, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <Photo photo={slidePhoto} priority={slideIdx === 0 || isActive} />
+              </motion.div>
+            );
+          })}
         </div>
       </div>
 
@@ -235,7 +255,7 @@ function Slideshow({
               className="h-1.5 w-1.5 rounded-full transition-opacity"
               style={{
                 background: "var(--t-primary)",
-                opacity: dot === index ? 1 : 0.25,
+                opacity: dot === safeIndex ? 1 : 0.25,
               }}
             />
           ))}

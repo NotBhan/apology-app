@@ -230,6 +230,46 @@ describe("ManageList response resolution", () => {
     expect(screen.getByText("Happy Birthday Friend!")).toBeInTheDocument();
   });
 
+  it("displays I Miss You experience reply letter snippet", async () => {
+    const user = userEvent.setup();
+    const missYouResponse: PublishedResponse = {
+      id: "resp-miss-exp-1",
+      apologyId: apologyDraft.id,
+      responseType: "experience",
+      status: "published",
+      content: {
+        experienceType: "miss-you",
+        content: {
+          recipientName: apologyDraft.senderName,
+          senderName: apologyDraft.recipientName,
+          headline: "Thinking of our late calls",
+          letter: "Counting the days until Friday evening.",
+          themeId: "dusk-postage",
+          photoLayout: "postcards",
+          photos: [],
+          reminders: [],
+          audio: "none",
+        },
+      },
+      publishedAt: "2026-11-19T10:00:00.000Z",
+      createdAt: "2026-11-19T10:00:00.000Z",
+      updatedAt: "2026-11-19T10:00:00.000Z",
+    };
+
+    render(
+      <ManageList
+        drafts={[apologyDraft]}
+        tombstones={[]}
+        pendingDeletionIds={[]}
+        responsesByApology={{ [apologyDraft.id]: [missYouResponse] }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Replies \(1\)/i }));
+    expect(screen.getByText("Experience Reply: I Miss You")).toBeInTheDocument();
+    expect(screen.getByText("Counting the days until Friday evening.")).toBeInTheDocument();
+  });
+
   it("renders Share button and opens ShareQrDialog when clicked", async () => {
     const user = userEvent.setup();
     const { publishDraftAction } = await import("@/app/create/actions");

@@ -563,7 +563,13 @@ describe("Koi Koi — Experience Replies: End-to-End Acceptance Workflows", () =
       await user.upload(fileInput, file);
 
       await waitFor(() => {
-        expect(uploadSpy).toHaveBeenCalledWith(parentApologyId, expect.any(File), undefined);
+        expect(uploadSpy).toHaveBeenCalledWith(
+          parentApologyId,
+          expect.any(File),
+          undefined,
+          "quick",
+          expect.any(AbortSignal),
+        );
       });
 
       // Submit quick reply

@@ -240,4 +240,41 @@ describe("ResponseViewClient", () => {
     expect(screen.getByText("In response to")).toBeInTheDocument();
     expect(screen.getByText("Aarav")).toBeInTheDocument();
   });
+
+  it("appends response token query param to Miss You experience reply photo URLs", async () => {
+    const user = (await import("@testing-library/user-event")).default.setup();
+    const missYouExpResponse: PublishedResponse = {
+      ...baseResponse,
+      responseType: "experience",
+      content: {
+        experienceType: "miss-you",
+        content: {
+          recipientName: "Aarav",
+          senderName: "Riya",
+          headline: "Across the city",
+          letter: "Saving a coffee seat for us.",
+          themeId: "dusk-postage",
+          photoLayout: "postcards",
+          photos: [{ url: "/api/responses/assets/11111111-2222-3333-4444-555555555555", caption: "Evening light" }],
+          reminders: [],
+          audio: "none",
+        },
+      },
+    };
+
+    const { container } = render(
+      <ResponseViewClient
+        response={missYouExpResponse}
+        parent={baseParent}
+        token="token-miss-exp-99"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Go to scene 4" }));
+    const img = container.querySelector("img");
+    expect(img).not.toBeNull();
+    expect(img?.getAttribute("src")).toBe(
+      "/api/responses/assets/11111111-2222-3333-4444-555555555555?token=token-miss-exp-99",
+    );
+  });
 });

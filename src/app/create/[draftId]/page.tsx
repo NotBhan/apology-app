@@ -38,6 +38,10 @@ export default async function EditDraftPage({
     redirect(`/create/birthday?draftId=${draftId}`);
   }
 
+  if (record.experienceType === "miss-you") {
+    redirect(`/create/miss-you?draftId=${draftId}`);
+  }
+
   return (
     <main className="min-h-svh bg-[#faf6ff]">
       <CreatorWizardClient draft={toCreatorDraft(record)} initialStep={initialStep} />

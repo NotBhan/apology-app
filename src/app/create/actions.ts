@@ -6,12 +6,14 @@ import { revalidatePath } from "next/cache";
 import { getOwner } from "@/lib/security/owner";
 import { getCreator } from "@/lib/security/creator";
 import { getObjectStore, getRepository } from "@/lib/storage";
+import { constantTimeEqual } from "@/lib/id";
 import { sanitiseStorageError } from "@/lib/storage/filebase-errors";
 import {
   draftPayloadSchema,
   formatZodError,
   linkDurationDaysSchema,
 } from "@/lib/validation/apology";
+import { validateDraftForPublish } from "@/lib/validation/publish";
 import { toCreatorDraft } from "@/lib/storage/types";
 import { DEFAULT_LINK_DAYS, normalizeDurationDays } from "@/lib/expiry";
 import {
@@ -101,13 +103,16 @@ export async function publishDraftAction(
   const repository = getRepository();
   const existing = await repository.getDraft(id);
   if (!existing) return { ok: false, error: "That draft no longer exists." };
+  if (!constantTimeEqual(existing.ownerKeyHash, owner.hash)) {
+    return { ok: false, error: "This draft belongs to another browser." };
+  }
 
-  const parsed = draftPayloadSchema.safeParse(existing);
-  if (!parsed.success) {
+  const validation = validateDraftForPublish(existing);
+  if (!validation.ok) {
     return {
       ok: false,
-      error: "Add the three messages before publishing.",
-      fields: formatZodError(parsed.error),
+      error: validation.error,
+      fields: validation.fields,
     };
   }
 

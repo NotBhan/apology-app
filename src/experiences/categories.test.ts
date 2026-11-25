@@ -10,9 +10,9 @@ describe("experience categories", () => {
     expect(new Set(categories.map((c) => c.label)).size).toBe(5);
   });
 
-  it("marks exactly the two implemented experiences as available", () => {
+  it("marks exactly the three implemented experiences as available", () => {
     const implemented = implementedCategories();
-    expect(implemented.map((c) => c.experienceId).sort()).toEqual(["apology", "birthday"]);
+    expect(implemented.map((c) => c.experienceId).sort()).toEqual(["apology", "birthday", "miss-you"]);
   });
 
   it("points every implemented category at a registered experience and an internal route", () => {

@@ -1,4 +1,4 @@
-import { ArrowRight, CalendarX, Check, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, Eye, HeartCrack, Image, Link2Off, Lock, MessageCircleOff, MessageSquare, Pause, PenLine, Play, RefreshCw, Send, Share2, Trash2, Volume2, VolumeX, type LucideIcon, X } from "lucide-react";
+import { ArrowRight, CalendarX, Check, ChevronLeft, ChevronRight, Clock, Compass, Copy, ExternalLink, Eye, HeartCrack, Image, Link2Off, Lock, MapPin, MessageCircleOff, MessageSquare, Pause, PenLine, Play, Plus, RefreshCw, Send, Share2, Sparkles, Trash2, Volume2, VolumeX, type LucideIcon, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 /**
@@ -34,6 +34,10 @@ export const ICONS = {
   send: Send,
   share: Share2,
   eye: Eye,
+  compass: Compass,
+  "map-pin": MapPin,
+  sparkles: Sparkles,
+  plus: Plus,
   x: X,
 } as const satisfies Record<string, LucideIcon>;
 

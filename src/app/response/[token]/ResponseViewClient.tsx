@@ -4,11 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useMounted } from "@/hooks/useMounted";
 import { Icon } from "@/components/ui/icons";
+import { OptimizedPhoto } from "@/components/ui/OptimizedPhoto";
 import { resolveEmotionBadge } from "@/experiences/emotion";
 import type { PublishedResponse, QuickReplyPayload, ExperienceReplyPayload } from "@/types/response";
 import type { PublishedApology } from "@/types/apology";
 import { birthdayContentSchema } from "@/experiences/birthday/schema";
 import { BirthdayLetter } from "@/components/presentation/BirthdayLetter";
+import { missYouContentSchema } from "@/experiences/miss-you/schema";
+import { MissYouLetter } from "@/components/presentation/MissYouLetter";
 import { draftPayloadSchema } from "@/lib/validation/apology";
 import { PresentationEngine } from "@/components/presentation/PresentationEngine";
 import { getTheme, THEMES } from "@/themes/registry";
@@ -53,39 +56,31 @@ export function ResponseViewClient({ response, parent, token }: ResponseViewClie
     };
   }, [selectedPhoto]);
 
-  // Handle Experience Replies (Apology / Birthday)
+  // Handle Experience Replies (Apology / Birthday / I Miss You)
   if (response.responseType === "experience") {
     const expPayload = response.content as ExperienceReplyPayload;
 
     if (expPayload?.experienceType === "birthday") {
       const parsed = birthdayContentSchema.safeParse(expPayload.content);
       if (parsed.success) {
+        const tokenizedPhotos = appendTokenToPhotoItems(parsed.data.photos, token);
         return (
-          <div className="relative min-h-svh w-full bg-[#faf6ff]">
-            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-full border border-[#eeddf5] bg-white/95 px-4 py-1.5 shadow-md backdrop-blur-sm">
-              <Link
-                href="/"
-                className="text-[0.68rem] font-bold uppercase tracking-wider text-[#7c4ddb] hover:opacity-80"
-              >
-                Koi Koi
-              </Link>
-              <span className="text-[#d8c3e8]">·</span>
-              <span className="text-xs font-medium text-[#6b5580]">
-                In response to <span className="font-semibold text-[#33203f]">{parent?.senderName ?? "them"}</span>
-              </span>
-              {parent?.token ? (
-                <>
-                  <span className="text-[#d8c3e8]">·</span>
-                  <Link
-                    href={`/letter/${parent.token}`}
-                    className="text-xs font-semibold text-[#7c4ddb] hover:underline"
-                  >
-                    View original letter
-                  </Link>
-                </>
-              ) : null}
-            </div>
-            <BirthdayLetter content={parsed.data} />
+          <div className="relative min-h-svh w-full bg-[#faf6ff] pt-14">
+            <ResponseContextBanner parent={parent} />
+            <BirthdayLetter content={{ ...parsed.data, photos: tokenizedPhotos }} />
+          </div>
+        );
+      }
+    }
+
+    if (expPayload?.experienceType === "miss-you") {
+      const parsed = missYouContentSchema.safeParse(expPayload.content);
+      if (parsed.success) {
+        const tokenizedPhotos = appendTokenToPhotoItems(parsed.data.photos, token);
+        return (
+          <div className="relative min-h-svh w-full bg-[#faf6ff] pt-14">
+            <ResponseContextBanner parent={parent} />
+            <MissYouLetter content={{ ...parsed.data, photos: tokenizedPhotos }} />
           </div>
         );
       }
@@ -95,33 +90,22 @@ export function ResponseViewClient({ response, parent, token }: ResponseViewClie
       const parsed = draftPayloadSchema.safeParse(expPayload.content);
       if (parsed.success) {
         const theme = getTheme(parsed.data.themeId) ?? THEMES.romantic;
+        const tokenizedApologyPhotos = parsed.data.customization.photos.map((photo) => ({
+          ...photo,
+          url: appendTokenToAssetUrl(photo.url, token),
+        }));
+        const contentWithTokens: ApologyContent = {
+          ...(parsed.data as ApologyContent),
+          customization: {
+            ...parsed.data.customization,
+            photos: tokenizedApologyPhotos,
+          },
+        };
         return (
-          <div className="relative min-h-svh w-full bg-[#faf6ff]">
-            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-full border border-[#eeddf5] bg-white/95 px-4 py-1.5 shadow-md backdrop-blur-sm">
-              <Link
-                href="/"
-                className="text-[0.68rem] font-bold uppercase tracking-wider text-[#7c4ddb] hover:opacity-80"
-              >
-                Koi Koi
-              </Link>
-              <span className="text-[#d8c3e8]">·</span>
-              <span className="text-xs font-medium text-[#6b5580]">
-                In response to <span className="font-semibold text-[#33203f]">{parent?.senderName ?? "them"}</span>
-              </span>
-              {parent?.token ? (
-                <>
-                  <span className="text-[#d8c3e8]">·</span>
-                  <Link
-                    href={`/letter/${parent.token}`}
-                    className="text-xs font-semibold text-[#7c4ddb] hover:underline"
-                  >
-                    View original letter
-                  </Link>
-                </>
-              ) : null}
-            </div>
+          <div className="relative min-h-svh w-full bg-[#faf6ff] pt-14">
+            <ResponseContextBanner parent={parent} />
             <PresentationEngine
-              content={parsed.data as ApologyContent}
+              content={contentWithTokens}
               theme={theme}
               mode="live"
               className="h-svh w-full"
@@ -192,12 +176,11 @@ export function ResponseViewClient({ response, parent, token }: ResponseViewClie
                       className="group relative aspect-square overflow-hidden rounded-2xl border border-[#e4d7f0] bg-[#fbf9fe] p-1.5 shadow-sm transition motion-safe:active:scale-95"
                     >
                       <div className="relative h-full w-full overflow-hidden rounded-xl">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
+                        <OptimizedPhoto
                           src={assetUrl}
                           alt={`Memory moment ${idx + 1}`}
-                          className="h-full w-full object-cover transition-transform duration-300 motion-safe:group-hover:scale-105"
-                          loading="lazy"
+                          priority={idx === 0}
+                          className="object-cover transition-transform duration-300 motion-safe:group-hover:scale-105"
                         />
                       </div>
                     </button>
@@ -251,14 +234,66 @@ export function ResponseViewClient({ response, parent, token }: ResponseViewClie
             >
               <Icon name="x" size={20} />
             </button>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={selectedPhoto}
-              alt="Enlarged photo"
-              className="max-h-[85vh] max-w-[90vw] rounded-2xl object-contain shadow-2xl"
-            />
+            <div className="h-[70vh] w-[min(90vw,760px)] overflow-hidden rounded-2xl shadow-2xl">
+              <OptimizedPhoto
+                src={selectedPhoto}
+                alt="Enlarged photo"
+                priority
+                className="object-contain"
+                placeholderClassName="bg-stone-800"
+              />
+            </div>
           </div>
         </div>
+      ) : null}
+    </div>
+  );
+}
+
+function appendTokenToAssetUrl(url: string, token: string): string {
+  if (!url.startsWith("/api/responses/assets/") || url.includes("token=")) return url;
+  const joiner = url.includes("?") ? "&" : "?";
+  return `${url}${joiner}token=${encodeURIComponent(token)}`;
+}
+
+function appendTokenToPhotoItems<
+  T extends string | { url: string; caption?: string; focalPoint?: string; width?: number; height?: number },
+>(photos: T[], token: string): T[] {
+  return photos.map((item) => {
+    if (typeof item === "string") {
+      return appendTokenToAssetUrl(item, token) as T;
+    }
+    const photoObj = item as Exclude<T, string>;
+    return {
+      ...photoObj,
+      url: appendTokenToAssetUrl(photoObj.url, token),
+    } as T;
+  });
+}
+
+function ResponseContextBanner({ parent }: { parent: ResponseViewClientProps["parent"] }) {
+  return (
+    <div className="fixed top-3 left-1/2 -translate-x-1/2 z-40 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center justify-center gap-x-2 gap-y-0.5 rounded-full border border-[#eeddf5] bg-white/95 px-3.5 py-1.5 shadow-md backdrop-blur-sm">
+      <Link
+        href="/"
+        className="text-[0.68rem] font-bold uppercase tracking-wider text-[#7c4ddb] hover:opacity-80"
+      >
+        Koi Koi
+      </Link>
+      <span className="text-[#d8c3e8]">·</span>
+      <span className="text-xs font-medium text-[#6b5580]">
+        In response to <span className="font-semibold text-[#33203f]">{parent?.senderName ?? "them"}</span>
+      </span>
+      {parent?.token ? (
+        <>
+          <span className="text-[#d8c3e8]">·</span>
+          <Link
+            href={`/letter/${parent.token}`}
+            className="text-xs font-semibold text-[#7c4ddb] hover:underline"
+          >
+            View original letter
+          </Link>
+        </>
       ) : null}
     </div>
   );

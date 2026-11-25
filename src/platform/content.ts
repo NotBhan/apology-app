@@ -40,6 +40,7 @@ export const PLATFORM_COPY = {
       "Choose an atmosphere that feels right. From playful and colourful to intimate, cinematic, and understated, every experience can have its own visual personality.",
     apologyGroup: "Apology worlds",
     birthdayGroup: "Birthday worlds",
+    missYouGroup: "I Miss You worlds",
   },
 
   howItWorks: {
