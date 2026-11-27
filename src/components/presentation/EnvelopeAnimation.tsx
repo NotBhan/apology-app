@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import type { ThemeAssets } from "@/types/theme";
 import { LetterCard } from "./LetterCard";
@@ -15,6 +15,9 @@ interface EnvelopeAnimationProps {
   body: string;
   variant?: ThemeAssets["envelope"];
   letterVariant?: ThemeAssets["letter"];
+  sealStyle?: "wax-seal" | "ribbon";
+  signOff?: string;
+  animate?: boolean;
   ctaLabel?: string;
   onOpened?: () => void;
   className?: string;
@@ -38,19 +41,36 @@ export function EnvelopeAnimation({
   body,
   variant = "classic",
   letterVariant = "plain",
+  sealStyle = "wax-seal",
+  signOff,
+  animate = true,
   ctaLabel = "Tap the seal",
   onOpened,
   className,
 }: EnvelopeAnimationProps) {
   const reduce = useReducedMotion();
+  const still = Boolean(reduce || !animate);
   const [stage, setStage] = useState<Stage>("sealed");
   const pages = useMemo(() => paginateLetter(body), [body]);
-  const [page, setPage] = useState(0);
-  const [prevBody, setPrevBody] = useState(body);
-  if (body !== prevBody) {
-    setPrevBody(body);
-    setPage(0);
-  }
+  const [pageState, setPageState] = useState<{ bodyKey: string; index: number }>({
+    bodyKey: body,
+    index: 0,
+  });
+  const page = pageState.bodyKey === body ? Math.min(pageState.index, Math.max(0, pages.length - 1)) : 0;
+  const setPage = useCallback(
+    (nextIndex: number) => setPageState({ bodyKey: body, index: nextIndex }),
+    [body],
+  );
+  const timersRef = useRef<number[]>([]);
+
+  useEffect(() => {
+    return () => {
+      for (const timer of timersRef.current) {
+        window.clearTimeout(timer);
+      }
+      timersRef.current = [];
+    };
+  }, []);
 
   /**
    * The letter card clips long copy, so the note is paginated. `onOpened` — the
@@ -62,19 +82,21 @@ export function EnvelopeAnimation({
 
   const open = useCallback(() => {
     if (stage !== "sealed") return;
-    if (reduce) {
+    if (still) {
       setStage("unfolded");
       if (pages.length <= 1) onOpened?.();
       return;
     }
     setStage("cracking");
-    window.setTimeout(() => setStage("opening"), 380);
-    window.setTimeout(() => setStage("rising"), 1080);
-    window.setTimeout(() => {
-      setStage("unfolded");
-      if (pages.length <= 1) onOpened?.();
-    }, 1750);
-  }, [stage, reduce, onOpened, pages.length]);
+    timersRef.current.push(
+      window.setTimeout(() => setStage("opening"), 380),
+      window.setTimeout(() => setStage("rising"), 1080),
+      window.setTimeout(() => {
+        setStage("unfolded");
+        if (pages.length <= 1) onOpened?.();
+      }, 1750),
+    );
+  }, [stage, still, onOpened, pages.length]);
 
   const revealed = stage === "unfolded";
   const flapOpen = stage === "opening" || stage === "rising" || revealed;
@@ -90,8 +112,12 @@ export function EnvelopeAnimation({
           width: "min(86vw, 340px)",
           height: "calc(min(86vw, 340px) / 1.5)",
         }}
-        animate={{ opacity: revealed ? 0.4 : 1, scale: revealed ? 0.96 : 1 }}
-        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+        animate={{
+          opacity: revealed ? 0.35 : 1,
+          scale: revealed ? 0.9 : 1,
+          marginBottom: revealed ? -88 : 0,
+        }}
+        transition={{ duration: still ? 0 : 0.6, ease: [0.22, 1, 0.36, 1] }}
       >
         {/* Back panel */}
         <div
@@ -187,41 +213,87 @@ export function EnvelopeAnimation({
           />
         </motion.div>
 
-        {/* Wax seal */}
+        {/* Seal or ribbon closure */}
         {!revealed ? (
-          <motion.button
-            type="button"
-            onClick={open}
-            disabled={stage !== "sealed"}
-            aria-label={ctaLabel}
-            className="absolute left-1/2 z-40 grid h-14 w-14 -translate-x-1/2 place-items-center rounded-full text-[11px] font-semibold uppercase tracking-[0.1em]"
-            style={{
-              top: "46%",
-              background: `radial-gradient(circle at 35% 30%, ${paint.seal}, ${paint.seal}dd 60%, ${paint.seal}bb)`,
-              color: paint.sealInk,
-              boxShadow: "0 6px 16px rgba(0,0,0,0.28), inset 0 -2px 6px rgba(0,0,0,0.25)",
-              cursor: stage === "sealed" ? "pointer" : "default",
-            }}
-            initial={false}
-            animate={
-              stage === "cracking"
-                ? { scale: [1, 1.16, 0.9, 0], rotate: [0, -8, 8, 0], opacity: [1, 1, 1, 0] }
-                : { scale: 1, rotate: 0, opacity: 1 }
-            }
-            transition={{ duration: 0.42, ease: "easeInOut" }}
-            whileHover={stage === "sealed" ? { scale: 1.06 } : undefined}
-            whileTap={stage === "sealed" ? { scale: 0.94 } : undefined}
-          >
-            <span aria-hidden>{stage === "sealed" ? "open" : ""}</span>
-          </motion.button>
+          sealStyle === "ribbon" ? (
+            <>
+              <motion.div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 z-30 h-3"
+                style={{
+                  top: "52%",
+                  background: `linear-gradient(180deg, ${paint.seal}dd, ${paint.seal})`,
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
+                }}
+                initial={false}
+                animate={
+                  stage === "cracking"
+                    ? { scaleX: 1.12, opacity: 0 }
+                    : { scaleX: 1, opacity: 0.92 }
+                }
+                transition={{ duration: 0.42, ease: "easeInOut" }}
+              />
+              <motion.button
+                type="button"
+                onClick={open}
+                disabled={stage !== "sealed"}
+                aria-label={ctaLabel}
+                className="absolute left-1/2 z-40 flex min-h-11 -translate-x-1/2 items-center gap-1.5 rounded-full px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em]"
+                style={{
+                  top: "45%",
+                  background: paint.seal,
+                  color: paint.sealInk,
+                  boxShadow: "0 6px 16px rgba(0,0,0,0.28), inset 0 -2px 6px rgba(0,0,0,0.2)",
+                  cursor: stage === "sealed" ? "pointer" : "default",
+                }}
+                initial={false}
+                animate={
+                  stage === "cracking"
+                    ? { scale: [1, 1.08, 0.88, 0], opacity: [1, 1, 0.9, 0] }
+                    : { scale: 1, opacity: 1 }
+                }
+                transition={{ duration: 0.42, ease: "easeInOut" }}
+                whileHover={stage === "sealed" && !still ? { scale: 1.05 } : undefined}
+                whileTap={stage === "sealed" ? { scale: 0.94 } : undefined}
+              >
+                <span aria-hidden>{stage === "sealed" ? "untie" : ""}</span>
+              </motion.button>
+            </>
+          ) : (
+            <motion.button
+              type="button"
+              onClick={open}
+              disabled={stage !== "sealed"}
+              aria-label={ctaLabel}
+              className="absolute left-1/2 z-40 grid h-14 w-14 -translate-x-1/2 place-items-center rounded-full text-[11px] font-semibold uppercase tracking-[0.1em]"
+              style={{
+                top: "46%",
+                background: `radial-gradient(circle at 35% 30%, ${paint.seal}, ${paint.seal}dd 60%, ${paint.seal}bb)`,
+                color: paint.sealInk,
+                boxShadow: "0 6px 16px rgba(0,0,0,0.28), inset 0 -2px 6px rgba(0,0,0,0.25)",
+                cursor: stage === "sealed" ? "pointer" : "default",
+              }}
+              initial={false}
+              animate={
+                stage === "cracking"
+                  ? { scale: [1, 1.16, 0.9, 0], rotate: [0, -8, 8, 0], opacity: [1, 1, 1, 0] }
+                  : { scale: 1, rotate: 0, opacity: 1 }
+              }
+              transition={{ duration: 0.42, ease: "easeInOut" }}
+              whileHover={stage === "sealed" && !still ? { scale: 1.06 } : undefined}
+              whileTap={stage === "sealed" ? { scale: 0.94 } : undefined}
+            >
+              <span aria-hidden>{stage === "sealed" ? "open" : ""}</span>
+            </motion.button>
+          )
         ) : null}
       </motion.div>
 
-      <div className="mt-5 w-[min(92vw,380px)]">
+      <div className="mt-5 w-full max-w-[380px]">
         {revealed ? (
           <motion.div
-            initial={reduce ? false : { opacity: 0, y: 22 }}
-            animate={reduce ? undefined : { opacity: 1, y: 0 }}
+            initial={still ? false : { opacity: 0, y: 22 }}
+            animate={still ? undefined : { opacity: 1, y: 0 }}
             transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
             style={{ perspective: 1200 }}
           >
@@ -230,11 +302,24 @@ export function EnvelopeAnimation({
               senderName={senderName}
               body={pages[page] ?? ""}
               variant={letterVariant}
+              signOff={signOff}
+              animate={!still}
               className="origin-top"
             />
 
             {pages.length > 1 ? (
-              <div className="mt-3 flex items-center justify-between gap-3 px-1">
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 px-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (page > 0) setPage(page - 1);
+                  }}
+                  disabled={page === 0}
+                  className="min-h-9 rounded-full border px-3.5 py-1.5 text-[0.74rem] font-semibold disabled:opacity-40"
+                  style={{ borderColor: "var(--t-border)", color: "var(--t-text)" }}
+                >
+                  Previous page
+                </button>
                 <span
                   className="text-[0.64rem] uppercase tracking-[0.14em]"
                   style={{ color: "var(--t-muted)" }}
@@ -251,7 +336,7 @@ export function EnvelopeAnimation({
                     if (next === pages.length - 1) onOpened?.();
                   }}
                   disabled={page >= pages.length - 1}
-                  className="rounded-full px-4 py-1.5 text-[0.74rem] font-semibold text-white disabled:opacity-50"
+                  className="min-h-9 rounded-full px-4 py-1.5 text-[0.74rem] font-semibold text-white disabled:opacity-50"
                   style={{ background: "var(--t-accent, #6d3fa8)" }}
                 >
                   {page >= pages.length - 1 ? "End of letter" : "Next page"}

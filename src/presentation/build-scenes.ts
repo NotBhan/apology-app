@@ -111,8 +111,13 @@ const TONE_COPY: Record<Tone, ToneCopy> = {
  */
 export function buildScenes(content: ApologyContent, theme: ApologyTheme): PresentationScene[] {
   const tone = TONE_COPY[toneFor(theme.id)];
+  const custom = content.customization.content;
+  const envelopeStyle = content.customization.interaction?.envelopeStyle ?? "wax-seal";
+  const openLetter = envelopeStyle === "open-letter";
   const hasPhotos = content.customization.photos.length > 0;
+  const showMemory = custom?.showMemoryScene !== false && hasPhotos;
   const note = content.messages.personalNote.trim();
+  const headings = custom?.sceneHeadings;
   const scenes: PresentationScene[] = [];
 
   for (const sceneId of theme.sceneIds) {
@@ -122,8 +127,9 @@ export function buildScenes(content: ApologyContent, theme: ApologyTheme): Prese
           id: "opening",
           type: "opening",
           eyebrow: tone.openingEyebrow,
-          title: tone.openingTitle,
-          ctaLabel: "Hear me out",
+          title: custom?.openingTitle?.trim() || tone.openingTitle,
+          body: custom?.openingSubtitle?.trim() || undefined,
+          ctaLabel: custom?.openingCta?.trim() || "Hear me out",
           characterState: "apologizing",
           animationPreset: theme.motion.preset,
         });
@@ -134,7 +140,7 @@ export function buildScenes(content: ApologyContent, theme: ApologyTheme): Prese
           id: "hurt",
           type: "message",
           eyebrow: tone.hurt.eyebrow,
-          title: tone.hurt.title,
+          title: headings?.hurt?.trim() || tone.hurt.title,
           body: content.messages.message1,
           content: { messageKey: "message1" },
           characterState: theme.characterStates.hurt ?? "sad",
@@ -147,7 +153,7 @@ export function buildScenes(content: ApologyContent, theme: ApologyTheme): Prese
           id: "meaning",
           type: "message",
           eyebrow: tone.meaning.eyebrow,
-          title: tone.meaning.title,
+          title: headings?.meaning?.trim() || tone.meaning.title,
           body: content.messages.message2,
           content: { messageKey: "message2" },
           characterState: theme.characterStates.meaning ?? "heart",
@@ -160,7 +166,7 @@ export function buildScenes(content: ApologyContent, theme: ApologyTheme): Prese
           id: "sorry",
           type: "message",
           eyebrow: tone.sorry.eyebrow,
-          title: tone.sorry.title,
+          title: headings?.sorry?.trim() || tone.sorry.title,
           body: content.messages.message3,
           content: { messageKey: "message3" },
           characterState: theme.characterStates.sorry ?? "apologizing",
@@ -171,42 +177,59 @@ export function buildScenes(content: ApologyContent, theme: ApologyTheme): Prese
       case "letter":
         // The envelope scene reveals this same note. Rendering both showed the
         // letter twice, so the envelope is the letter moment whenever a theme
-        // has one; themes without an envelope keep this scene.
-        if (theme.sceneIds.includes("envelope")) break;
+        // uses a sealed envelope; choosing `open-letter` reveals the stationery directly.
+        if (!openLetter && theme.sceneIds.includes("envelope")) break;
         scenes.push({
           id: "letter",
           type: "letter",
           eyebrow: tone.letter.eyebrow,
-          title: tone.letter.title,
+          title: custom?.envelopeHeader?.trim() || tone.letter.title,
           body: note,
           content: { personalNote: true, signature: true },
           characterState: "idle",
-          ctaLabel: tone.letter.cta,
+          ctaLabel: openLetter ? "Continue" : tone.letter.cta,
           optional: !note,
         });
         break;
 
       case "envelope":
+        if (openLetter) {
+          if (!theme.sceneIds.includes("letter")) {
+            scenes.push({
+              id: "letter",
+              type: "letter",
+              eyebrow: tone.letter.eyebrow,
+              title: custom?.envelopeHeader?.trim() || tone.letter.title,
+              body: note,
+              content: { personalNote: true, signature: true },
+              characterState: "idle",
+              ctaLabel: "Continue",
+              optional: !note,
+            });
+          }
+          break;
+        }
         scenes.push({
           id: "envelope",
           type: "envelope",
           eyebrow: tone.envelope.eyebrow,
-          title: tone.envelope.title,
-          ctaLabel: tone.envelope.cta,
+          title: custom?.envelopeHeader?.trim() || tone.envelope.title,
+          ctaLabel:
+            envelopeStyle === "ribbon"
+              ? "Untie the ribbon"
+              : tone.envelope.cta,
           characterState: "hugging",
           animationPreset: "envelope",
         });
         break;
 
       case "memory":
-        // Only render when the sender supplied photos, unless the theme wants
-        // a non-photo memory scene.
-        if (!hasPhotos) break;
+        if (!showMemory) break;
         scenes.push({
           id: "memory",
           type: "memory",
           eyebrow: tone.memory.eyebrow,
-          title: tone.memory.title,
+          title: headings?.memory?.trim() || tone.memory.title,
           content: { memoryStyle: content.customization.memoryStyle },
           ctaLabel: tone.memory.cta,
         });
@@ -217,9 +240,9 @@ export function buildScenes(content: ApologyContent, theme: ApologyTheme): Prese
           id: "closing",
           type: "closing",
           eyebrow: tone.closing.eyebrow,
-          title: tone.closing.title,
+          title: custom?.closingHeadline?.trim() || tone.closing.title,
           // Not the personal note: that was delivered by the envelope.
-          body: content.messages.message3,
+          body: custom?.closingBody?.trim() || content.messages.message3,
           content: { signature: true },
           characterState: "flowers",
           ctaLabel: tone.closing.cta,
@@ -231,7 +254,7 @@ export function buildScenes(content: ApologyContent, theme: ApologyTheme): Prese
           id: "response",
           type: "response",
           eyebrow: tone.response.eyebrow,
-          title: tone.response.title,
+          title: headings?.response?.trim() || tone.response.title,
           body: tone.response.body,
           characterState: "hopeful",
         });

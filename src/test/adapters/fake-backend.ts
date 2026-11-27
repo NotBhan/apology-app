@@ -136,18 +136,20 @@ export function createFakeBackend(): FakeBackend {
       return record;
     },
 
-    async publish(id, ownerKeyHash, durationDays) {
+    async publish(id, ownerKeyHash) {
       const record = apologies.get(id);
       if (!record) throw new Error("NOT_FOUND");
       if (record.ownerKeyHash !== ownerKeyHash) throw new Error("FORBIDDEN");
       if (record.status === "deleted") throw new Error("DELETED");
       if (jobs.has(id)) throw new Error("DELETED");
 
+      // Mirrors the real statement: re-publishing a live record keeps the token
+      // it already handed out; only the first publish (or a revoked one) mints.
+      const minted = record.status !== "published" || !record.accessToken;
       record.status = "published";
-      record.accessToken = `token-${nextId()}`;
-      record.publishedAt = new Date().toISOString();
-      record.expiresAt = new Date(Date.now() + durationDays * 86_400_000).toISOString();
-      record.linkDurationDays = durationDays;
+      if (minted) record.accessToken = `token-${nextId()}`;
+      record.publishedAt = record.publishedAt ?? new Date().toISOString();
+      record.expiresAt = undefined;
       return record;
     },
 
@@ -205,7 +207,7 @@ export function createFakeBackend(): FakeBackend {
 
     async getPublishedByToken(token): Promise<PublishedApology | undefined> {
       const record = await repository.getByToken(token);
-      if (!record || !isLinkLive(record.status, record.expiresAt)) return undefined;
+      if (!record || !isLinkLive(record.status)) return undefined;
       return toPublished(record);
     },
 
@@ -299,30 +301,17 @@ export function createFakeBackend(): FakeBackend {
   };
 
   const lifecycle: LifecycleStore = {
-    async listCandidates(now, limit): Promise<Candidate[]> {
+    /**
+     * Only durable jobs are candidates. This mirrors the production store,
+     * which never selects on `expires_at`: published links do not expire.
+     */
+    async listCandidates(_now, limit): Promise<Candidate[]> {
       const out: Candidate[] = [];
-      for (const record of apologies.values()) {
-        if (record.status !== "published") continue;
-        if (!record.expiresAt) continue;
-        if (Date.parse(record.expiresAt) > now.getTime()) continue;
-        if (jobs.has(record.id)) continue;
-        out.push({ apologyId: record.id, source: "expired" });
-      }
       for (const job of jobs.values()) {
         if (job.state === "completed") continue;
-        if (out.some((candidate) => candidate.apologyId === job.apologyId)) continue;
         out.push({ apologyId: job.apologyId, source: "job" });
       }
       return out.slice(0, limit);
-    },
-
-    async requestDeletionForExpiry(apologyId, now) {
-      const record = apologies.get(apologyId);
-      if (!record) return false;
-      if (record.status !== "published") return false;
-      if (!record.expiresAt || Date.parse(record.expiresAt) > now.getTime()) return false;
-      return intent(record, "expired");
-      void now;
     },
 
     async claim(apologyId, now, leaseMs) {

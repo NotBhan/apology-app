@@ -11,11 +11,9 @@ import { sanitiseStorageError } from "@/lib/storage/filebase-errors";
 import {
   draftPayloadSchema,
   formatZodError,
-  linkDurationDaysSchema,
 } from "@/lib/validation/apology";
 import { validateDraftForPublish } from "@/lib/validation/publish";
 import { toCreatorDraft } from "@/lib/storage/types";
-import { DEFAULT_LINK_DAYS, normalizeDurationDays } from "@/lib/expiry";
 import {
   RATE_LIMITS,
   clientIpFromHeaders,
@@ -32,10 +30,17 @@ export interface ActionResult<T> {
 }
 
 export interface PublishResult {
+  /**
+   * The plaintext link token, present only when this call minted it.
+   *
+   * A repeat publish of an already-published record keeps the token the
+   * recipient already holds, and the plaintext is unrecoverable by design. In
+   * that case `token` and `path` are empty and `alreadyPublished` is true: the
+   * link that was already sent continues to work.
+   */
   token: string;
   path: string;
-  expiresAt: string;
-  durationDays: number;
+  alreadyPublished: boolean;
 }
 
 export async function startDraftAction(): Promise<void> {
@@ -86,17 +91,7 @@ export async function saveDraftAction(
 
 export async function publishDraftAction(
   id: string,
-  durationDays: unknown = DEFAULT_LINK_DAYS,
 ): Promise<ActionResult<PublishResult>> {
-  const duration = linkDurationDaysSchema.safeParse(durationDays);
-  if (!duration.success) {
-    return {
-      ok: false,
-      error: "Choose a link lifetime between 1 and 7 days.",
-      fields: { durationDays: "Pick between 1 and 7 days." },
-    };
-  }
-
   const owner = await getOwner();
   if (!owner) return { ok: false, error: "This draft belongs to another browser." };
 
@@ -142,15 +137,17 @@ export async function publishDraftAction(
   }
 
   try {
-    const record = await repository.publish(id, owner.hash, duration.data);
+    const record = await repository.publish(id, owner.hash);
     revalidatePath("/manage");
+    const token = record.accessToken;
     return {
       ok: true,
       data: {
-        token: record.accessToken,
-        path: `/letter/${record.accessToken}`,
-        expiresAt: record.expiresAt ?? "",
-        durationDays: normalizeDurationDays(record.linkDurationDays),
+        token,
+        path: token ? `/letter/${token}` : "",
+        // No plaintext token means the existing link was preserved. The caller
+        // must not present "this is your new link" in that case.
+        alreadyPublished: !token,
       },
     };
   } catch (cause) {

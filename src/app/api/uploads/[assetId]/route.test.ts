@@ -25,6 +25,7 @@ const MALFORMED_36_CHAR_ID = "not-a-uuid-1234-1234-1234-123456789z";
 describe("/api/uploads/[assetId] security", () => {
   const mockRepo = {
     getAssetForServing: vi.fn(),
+    getDraft: vi.fn(),
     removeAsset: vi.fn(),
   };
   const mockObjects = {
@@ -156,6 +157,82 @@ describe("/api/uploads/[assetId] security", () => {
     );
     expect(res.status).toBe(200);
     expect(mockObjects.deleteMany).toHaveBeenCalledWith(["k1"]);
+    expect(mockRepo.removeAsset).toHaveBeenCalledWith(VALID_ID, "owner-hash");
+  });
+
+  it("refuses DELETE (409) and protects Filebase media when published apology still references asset", async () => {
+    vi.mocked(requireApiCreator).mockResolvedValue({
+      ok: true,
+      creator: { userId: "user-1", key: "owner-hash" },
+    });
+    mockRepo.getAssetForServing.mockResolvedValue({
+      id: VALID_ID,
+      apologyId: "apology-pub-1",
+      state: "uploaded",
+      objectKey: "k-live",
+      kind: "photo",
+      contentType: "image/webp",
+      sizeBytes: 1200,
+      createdAt: new Date().toISOString(),
+      ownerKeyHash: "owner-hash",
+      apologyStatus: "published",
+      expiresAt: null,
+    });
+    mockRepo.getDraft.mockResolvedValue({
+      id: "apology-pub-1",
+      status: "published",
+      customization: {
+        audio: { source: "default", volume: 0.5 },
+        photos: [{ id: VALID_ID, url: `/api/uploads/${VALID_ID}` }],
+        memoryStyle: "polaroid",
+      },
+    });
+
+    const res = await DELETE(
+      new Request("https://app.test/api/uploads/" + VALID_ID, { method: "DELETE" }),
+      { params: Promise.resolve({ assetId: VALID_ID }) },
+    );
+    expect(res.status).toBe(409);
+    expect(mockObjects.deleteMany).not.toHaveBeenCalled();
+    expect(mockRepo.removeAsset).not.toHaveBeenCalled();
+  });
+
+  it("allows DELETE once published record was saved without referencing the asset", async () => {
+    vi.mocked(requireApiCreator).mockResolvedValue({
+      ok: true,
+      creator: { userId: "user-1", key: "owner-hash" },
+    });
+    mockRepo.getAssetForServing.mockResolvedValue({
+      id: VALID_ID,
+      apologyId: "apology-pub-2",
+      state: "uploaded",
+      objectKey: "k-removed",
+      kind: "audio",
+      contentType: "audio/mpeg",
+      sizeBytes: 2400,
+      createdAt: new Date().toISOString(),
+      ownerKeyHash: "owner-hash",
+      apologyStatus: "published",
+      expiresAt: null,
+    });
+    mockRepo.getDraft.mockResolvedValue({
+      id: "apology-pub-2",
+      status: "published",
+      customization: {
+        audio: { source: "default", volume: 0.5 },
+        photos: [],
+        memoryStyle: "polaroid",
+      },
+    });
+    mockObjects.deleteMany.mockResolvedValue({ deleted: ["k-removed"], failed: [] });
+    mockRepo.removeAsset.mockResolvedValue(true);
+
+    const res = await DELETE(
+      new Request("https://app.test/api/uploads/" + VALID_ID, { method: "DELETE" }),
+      { params: Promise.resolve({ assetId: VALID_ID }) },
+    );
+    expect(res.status).toBe(200);
+    expect(mockObjects.deleteMany).toHaveBeenCalledWith(["k-removed"]);
     expect(mockRepo.removeAsset).toHaveBeenCalledWith(VALID_ID, "owner-hash");
   });
 });

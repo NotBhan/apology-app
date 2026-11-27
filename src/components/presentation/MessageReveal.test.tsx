@@ -28,4 +28,9 @@ describe("MessageReveal", () => {
     );
     expect(container.textContent).toContain("Every single word stays.");
   });
+
+  it("renders immediately when animate is false", () => {
+    render(<MessageReveal text="Still words" mode="typewriter" animate={false} />);
+    expect(screen.getByText("Still words")).toBeInTheDocument();
+  });
 });

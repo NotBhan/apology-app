@@ -41,4 +41,29 @@ describe("BirthdayCake", () => {
     expect(onBlowOut).toHaveBeenCalledTimes(1);
     expect(screen.getByText(/wish made! happy birthday!/i)).toBeInTheDocument();
   });
+
+  it("supports relighting candles in tap-relight mode and locks in single-wish mode", async () => {
+    const onRelight = vi.fn();
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <BirthdayCake
+        theme={confetti}
+        candleCount={3}
+        candleMode="tap-relight"
+        onRelight={onRelight}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /blow out the candles/i }));
+    const relightBtn = screen.getByRole("button", { name: /relight candles/i });
+    await user.click(relightBtn);
+
+    expect(onRelight).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: /blow out the candles/i })).toBeInTheDocument();
+
+    rerender(<BirthdayCake theme={confetti} candleCount={3} candleMode="single-wish" />);
+    await user.click(screen.getByRole("button", { name: /blow out the candles/i }));
+    expect(screen.queryByRole("button", { name: /relight candles/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /extinguished candles/i })).toBeDisabled();
+  });
 });

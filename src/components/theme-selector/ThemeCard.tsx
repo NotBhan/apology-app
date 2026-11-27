@@ -78,27 +78,6 @@ export function ThemeCard({ theme, selected, onSelect, onPreview }: ThemeCardPro
             >
               {theme.category}
             </span>
-            {onPreview ? (
-              <span
-                role="button"
-                tabIndex={0}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onPreview();
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onPreview();
-                  }
-                }}
-                className="rounded-full px-2.5 py-1 text-[0.62rem] font-semibold"
-                style={{ background: theme.palette.surface, color: theme.palette.text }}
-              >
-                Preview
-              </span>
-            ) : null}
           </div>
         </div>
 
@@ -122,6 +101,18 @@ export function ThemeCard({ theme, selected, onSelect, onPreview }: ThemeCardPro
           <p className="mt-1 text-[0.75rem] leading-relaxed text-[#8a7a9c]">{theme.tagline}</p>
         </div>
       </button>
+
+      {onPreview ? (
+        <button
+          type="button"
+          onClick={onPreview}
+          aria-label={`Preview ${theme.name} theme`}
+          className="absolute right-3 top-[122px] z-10 min-h-8 rounded-full px-3 py-1 text-[0.66rem] font-semibold shadow-sm transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8a5bc4]"
+          style={{ background: theme.palette.surface, color: theme.palette.text }}
+        >
+          Preview
+        </button>
+      ) : null}
 
       {selected ? (
         <motion.span

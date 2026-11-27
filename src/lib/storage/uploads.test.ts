@@ -18,7 +18,6 @@ function setup() {
 
 async function publishedRecord(backend: ReturnType<typeof setup>["backend"]) {
   const record = makeRecord({ ownerKeyHash: OWNER, status: "published" });
-  record.expiresAt = new Date(Date.now() + 86_400_000).toISOString();
   backend.state.apologies.set(record.id, record);
   return record;
 }
@@ -169,14 +168,14 @@ describe("upload versus deletion (deterministic interleavings)", () => {
     expect(ctx.backend.state.assets.get(record.id)?.[0]?.state).toBe("failed");
   });
 
-  it("expiry during PutObject: deferred, then finished by the next run", async () => {
+  it("deletion during PutObject: deferred, then finished by the next run", async () => {
     const record = await publishedRecord(ctx.backend);
     const token = record.accessToken;
 
     ctx.objects.onPut = async () => {
-      // The link expires while the upload is in flight and the Neon function
-      // runs. It must NOT finalise over a live reservation.
-      record.expiresAt = new Date(Date.now() - 60_000).toISOString();
+      // The author deletes the letter while the upload is in flight and the
+      // Neon function runs. It must NOT finalise over a live reservation.
+      await ctx.backend.repository.requestDeletionByOwner(record.id, OWNER);
       await runCleanup({ store: ctx.backend.lifecycle, objects: ctx.objects });
     };
 
@@ -189,7 +188,7 @@ describe("upload versus deletion (deterministic interleavings)", () => {
       }),
     ).rejects.toMatchObject({ status: 409 });
 
-    // Access is already gone.
+    // Access is gone the moment the author deleted it, not at any deadline.
     expect(await ctx.backend.repository.getPublishedByToken(token)).toBeUndefined();
     // The uploader removed the object it had just written.
     expect(ctx.objects.objects.size).toBe(0);

@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import { createFakeBackend } from "@/test/adapters/fake-backend";
 import { birthdayContentSchema } from "@/experiences/birthday/schema";
 import { requireExperience } from "@/experiences/registry";
+import { draftPayloadSchema } from "@/lib/validation/apology";
+import { validateDraftForPublish } from "@/lib/validation/publish";
+import { buildScenes } from "@/presentation/build-scenes";
+import { themeScopeVars } from "@/lib/theme-vars";
+import { getTheme } from "@/themes/registry";
 import { rowToRecord } from "./postgres-repository";
 import { toCreatorDraft, toPublished } from "./types";
 import type { ApologyRow } from "@/db/schema";
@@ -78,7 +83,7 @@ describe("experience persistence", () => {
     expect(matched?.experienceType).toBe("birthday");
 
     // 3. publish & getPublishedByToken preserves type via toPublished mapping
-    const publishedRecord = await backend.repository.publish(created.id, OWNER.scopeKey, 3);
+    const publishedRecord = await backend.repository.publish(created.id, OWNER.scopeKey);
     const publishedView = await backend.repository.getPublishedByToken(publishedRecord.accessToken);
     expect(publishedView?.experienceType).toBe("birthday");
   });
@@ -161,5 +166,223 @@ describe("experience persistence", () => {
     const creatorDraft = toCreatorDraft(bareRecord as ApologyRecord);
     expect(creatorDraft.experienceType).toBe("apology");
     expect(creatorDraft.content).toBeNull();
+  });
+
+  it("round-trips every Stage 2/3 Apology customization field across save, reload, Postgres mapping, publish, and rendering", async () => {
+    const backend = createFakeBackend();
+    const created = await backend.repository.createDraft(OWNER, {
+      recipientName: "Ananya",
+      senderName: "Rohan",
+    });
+
+    const customization = {
+      colors: {
+        background: "#fbf5ea",
+        primary: "#9b3d48",
+        secondary: "#d8b496",
+        accent: "#b57238",
+        text: "#2c1e16",
+        surface: "#fffdf8",
+      },
+      audio: { source: "custom" as const, trackId: "soft-piano", volume: 0.7 },
+      photos: [{ id: "photo-1", url: "/api/uploads/photo-1", caption: "By the lake" }],
+      memoryStyle: "scrapbook" as const,
+      content: {
+        openingTitle: "Read this tonight",
+        openingSubtitle: "Before you sleep",
+        openingCta: "Start reading",
+        envelopeHeader: "A personal letter",
+        envelopeSignOff: "Always yours",
+        closingHeadline: "Take all the time you need",
+        closingBody: "No pressure from me.",
+        sceneHeadings: {
+          hurt: "My mistake",
+          meaning: "Why you matter",
+          sorry: "What changes",
+          memory: "Moments I keep",
+          response: "Your thoughts",
+        },
+        showSituationLabel: true,
+        showMemoryScene: false,
+      },
+      visual: {
+        fontPairing: "editorial" as const,
+        textSize: "expressive" as const,
+        alignment: "left" as const,
+        decorationsEnabled: false,
+        decorationDensity: "minimal" as const,
+      },
+      interaction: {
+        envelopeStyle: "open-letter" as const,
+        transitionStyle: "paper" as const,
+        revealStyle: "ink" as const,
+        motionPreset: "still" as const,
+      },
+    };
+
+    const parsedPayload = draftPayloadSchema.parse({
+      recipientName: "Ananya",
+      senderName: "Rohan",
+      situation: "other",
+      situationCustom: "Missed our dinner",
+      language: "en",
+      messages: {
+        message1: "I was late and did not call.",
+        message2: "You matter to me.",
+        message3: "I will communicate earlier.",
+        personalNote: "Thank you for your patience.",
+      },
+      themeId: "romantic",
+      stickerPackId: "cats",
+      customization,
+    });
+
+    const saved = await backend.repository.saveDraft(created.id, OWNER.scopeKey, parsedPayload);
+    expect(saved.customization).toEqual(customization);
+
+    const reloaded = await backend.repository.getDraft(created.id);
+    expect(reloaded).toBeDefined();
+    expect(toCreatorDraft(reloaded!).customization).toEqual(customization);
+
+    // Postgres row mapper preserves nested customization JSONB identically
+    const pgRow: Partial<ApologyRow> = {
+      id: saved.id,
+      ownerKeyHash: OWNER.scopeKey,
+      experienceType: "apology",
+      content: null,
+      recipientName: saved.recipientName,
+      senderName: saved.senderName,
+      situation: saved.situation,
+      situationCustom: saved.situationCustom,
+      language: saved.language,
+      messages: saved.messages,
+      themeId: saved.themeId,
+      stickerPackId: saved.stickerPackId,
+      customization: saved.customization,
+      linkDurationDays: 3,
+      status: "published",
+      createdAt: new Date(saved.createdAt),
+      updatedAt: new Date(saved.updatedAt),
+      publishedAt: new Date(),
+    };
+    const pgRecord = rowToRecord(pgRow as ApologyRow, "live-token");
+    expect(toPublished(pgRecord).customization).toEqual(customization);
+
+    expect(validateDraftForPublish(pgRecord)).toEqual({ ok: true });
+    const published = await backend.repository.publish(created.id, OWNER.scopeKey);
+    const liveView = await backend.repository.getPublishedByToken(published.accessToken);
+    expect(liveView).toBeDefined();
+    expect(liveView!.customization).toEqual(customization);
+
+    const theme = getTheme(liveView!.themeId);
+    const scenes = buildScenes(liveView!, theme);
+    expect(scenes.find((s) => s.id === "opening")?.title).toBe("Read this tonight");
+    expect(scenes.some((s) => s.id === "letter")).toBe(true);
+    expect(scenes.some((s) => s.id === "envelope")).toBe(false);
+    expect(scenes.some((s) => s.id === "memory")).toBe(false);
+
+    const vars = themeScopeVars(theme, liveView!.customization);
+    expect(vars["--t-text"]).toBe("#2c1e16");
+    expect(vars["--t-surface"]).toBe("#fffdf8");
+    expect(vars["--t-text-scale"]).toBe("1.08");
+    expect(vars["--t-align"]).toBe("left");
+  });
+
+  it("persists Birthday customization, cake overrides, and photo focal points end-to-end across save, row mapping, and publish", async () => {
+    const { birthdayContentSchema } = await import("@/experiences/birthday/schema");
+    const { resolveBirthdayConfig } = await import("@/experiences/birthday/resolve");
+    const backend = createFakeBackend();
+    const created = await backend.repository.createDraft(OWNER, {
+      recipientName: "Riya",
+      senderName: "Arjun",
+    }, { experienceType: "birthday" });
+
+    const birthdayContent = birthdayContentSchema.parse({
+      recipientName: "Riya",
+      senderName: "Arjun",
+      age: 30,
+      headline: "Thirty & Thriving",
+      message: "You deserve every joy this year brings.",
+      wish: "Stay bold.",
+      themeId: "midnight-gold",
+      candleCount: 5,
+      photoLayout: "polaroid",
+      photos: [{ url: "/api/uploads/bday-photo-1", caption: "Toast", focalPoint: "50% 25%" }],
+      audio: "soft",
+      customization: {
+        colors: {
+          background: "#17141b",
+          surface: "#221d28",
+          primary: "#ebb968",
+          accent: "#ffe08a",
+          text: "#f7f0e6",
+        },
+        content: {
+          openingEyebrow: "chapter thirty",
+          letterHeading: "For Riya",
+          showCakeScene: true,
+          showGalleryScene: true,
+        },
+        visual: {
+          fontPairing: "editorial",
+          textSize: "expressive",
+          alignment: "left",
+          decorationsEnabled: true,
+          decorationDensity: "lush",
+          cake: { tiers: 3, flavor: "chocolate", topping: "stars" },
+        },
+        interaction: {
+          envelopeStyle: "ribbon",
+          transitionStyle: "paper",
+          motionPreset: "gentle",
+          giftReveal: "direct",
+          candleMode: "tap-relight",
+          celebrationIntensity: "grand",
+        },
+      },
+    });
+
+    const saved = await backend.repository.saveExperienceContent(
+      created.id,
+      OWNER.scopeKey,
+      birthdayContent,
+      { recipientName: birthdayContent.recipientName, senderName: birthdayContent.senderName },
+    );
+    expect(saved).toBeDefined();
+
+    const pgRow: Partial<ApologyRow> = {
+      id: saved!.id,
+      ownerKeyHash: OWNER.scopeKey,
+      experienceType: "birthday",
+      content: saved!.content,
+      recipientName: saved!.recipientName,
+      senderName: saved!.senderName,
+      situation: saved!.situation,
+      situationCustom: saved!.situationCustom,
+      language: saved!.language,
+      messages: saved!.messages,
+      themeId: saved!.themeId,
+      stickerPackId: saved!.stickerPackId,
+      customization: saved!.customization,
+      linkDurationDays: 1,
+      status: "published",
+      createdAt: new Date(saved!.createdAt),
+      updatedAt: new Date(saved!.updatedAt),
+      publishedAt: new Date(),
+    };
+    const pgRecord = rowToRecord(pgRow as ApologyRow, "bday-live-tok");
+    expect(validateDraftForPublish(pgRecord)).toEqual({ ok: true });
+
+    const published = await backend.repository.publish(created.id, OWNER.scopeKey);
+    const liveView = await backend.repository.getPublishedByToken(published.accessToken);
+    const reparsed = birthdayContentSchema.parse(liveView!.content);
+    expect(reparsed).toEqual(birthdayContent);
+
+    const resolved = resolveBirthdayConfig(reparsed);
+    expect(resolved.cake.tiers).toBe(3);
+    expect(resolved.cake.base).toBe("#5c3a28");
+    expect(resolved.interaction.envelopeStyle).toBe("ribbon");
+    expect(resolved.interaction.celebrationIntensity).toBe("grand");
+    expect(resolved.audioTrack?.src).toBe("/audio/midnight-glow.mp3");
   });
 });

@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  envelopeStyleSchema,
+  motionPresetSchema,
+  transitionStyleSchema,
+  visualCustomizationSchema,
+} from "@/lib/validation/customization";
 
 /**
  * Birthday content contract.
@@ -26,6 +32,101 @@ export const BIRTHDAY_PHOTO_LAYOUTS = [
 ] as const;
 
 export type BirthdayPhotoLayout = (typeof BIRTHDAY_PHOTO_LAYOUTS)[number];
+
+export const BIRTHDAY_CAKE_FLAVORS = [
+  "theme",
+  "vanilla",
+  "chocolate",
+  "strawberry",
+  "matcha",
+  "funfetti",
+] as const;
+
+export type BirthdayCakeFlavor = (typeof BIRTHDAY_CAKE_FLAVORS)[number];
+
+export const BIRTHDAY_CAKE_TOPPINGS = [
+  "theme",
+  "cherries",
+  "stars",
+  "strawberries",
+  "flowers",
+  "sprinkles",
+] as const;
+
+export type BirthdayCakeTopping = (typeof BIRTHDAY_CAKE_TOPPINGS)[number];
+
+export const BIRTHDAY_GIFT_REVEALS = ["tap-unwrap", "direct"] as const;
+export type BirthdayGiftReveal = (typeof BIRTHDAY_GIFT_REVEALS)[number];
+
+export const BIRTHDAY_CANDLE_MODES = ["tap-relight", "single-wish"] as const;
+export type BirthdayCandleMode = (typeof BIRTHDAY_CANDLE_MODES)[number];
+
+export const BIRTHDAY_CELEBRATION_INTENSITIES = ["subtle", "festive", "grand"] as const;
+export type BirthdayCelebrationIntensity = (typeof BIRTHDAY_CELEBRATION_INTENSITIES)[number];
+
+const hexColorSchema = z
+  .string()
+  .regex(/^#[0-9a-fA-F]{6}$/, "Use a 6-digit hex colour.");
+
+const optionalText = (max: number, label: string) =>
+  z.string().trim().max(max, `${label} must be ${max} characters or fewer.`).optional();
+
+export const birthdayColorsSchema = z.object({
+  background: hexColorSchema.optional(),
+  surface: hexColorSchema.optional(),
+  primary: hexColorSchema.optional(),
+  secondary: hexColorSchema.optional(),
+  accent: hexColorSchema.optional(),
+  text: hexColorSchema.optional(),
+});
+
+export const birthdayContentOverridesSchema = z.object({
+  openingEyebrow: optionalText(60, "Opening eyebrow"),
+  openingSubtitle: optionalText(120, "Opening subtitle"),
+  openingCta: optionalText(40, "Opening button label"),
+  wishCardBadge: optionalText(40, "Wish card label"),
+  cakeHeading: optionalText(60, "Cake heading"),
+  cakeSubtitle: optionalText(120, "Cake subtitle"),
+  cakeCta: optionalText(50, "Cake button label"),
+  letterEyebrow: optionalText(60, "Letter eyebrow"),
+  letterHeading: optionalText(60, "Letter heading"),
+  letterSignOff: optionalText(60, "Letter sign-off"),
+  galleryHeading: optionalText(60, "Gallery heading"),
+  gallerySubtitle: optionalText(120, "Gallery subtitle"),
+  galleryCta: optionalText(50, "Gallery button label"),
+  finaleHeading: optionalText(80, "Finale heading"),
+  showAgeBadge: z.boolean().optional(),
+  showCakeScene: z.boolean().optional(),
+  showGalleryScene: z.boolean().optional(),
+});
+
+export const birthdayCakeCustomizationSchema = z.object({
+  tiers: z.union([z.literal(2), z.literal(3)]).optional(),
+  flavor: z.enum(BIRTHDAY_CAKE_FLAVORS).optional(),
+  topping: z.enum(BIRTHDAY_CAKE_TOPPINGS).optional(),
+});
+
+export const birthdayVisualCustomizationSchema = visualCustomizationSchema.extend({
+  cake: birthdayCakeCustomizationSchema.optional(),
+});
+
+export const birthdayInteractionCustomizationSchema = z.object({
+  envelopeStyle: envelopeStyleSchema.optional(),
+  transitionStyle: transitionStyleSchema.optional(),
+  motionPreset: motionPresetSchema.optional(),
+  giftReveal: z.enum(BIRTHDAY_GIFT_REVEALS).optional(),
+  candleMode: z.enum(BIRTHDAY_CANDLE_MODES).optional(),
+  celebrationIntensity: z.enum(BIRTHDAY_CELEBRATION_INTENSITIES).optional(),
+});
+
+export const birthdayCustomizationSchema = z.object({
+  colors: birthdayColorsSchema.optional(),
+  content: birthdayContentOverridesSchema.optional(),
+  visual: birthdayVisualCustomizationSchema.optional(),
+  interaction: birthdayInteractionCustomizationSchema.optional(),
+});
+
+export type BirthdayCustomization = z.infer<typeof birthdayCustomizationSchema>;
 
 export const birthdayPhotoItemSchema = z.union([
   z.string().trim().min(1).max(2048),
@@ -112,6 +213,7 @@ export const birthdayContentSchema = z.object({
   photoLayout: z.enum(BIRTHDAY_PHOTO_LAYOUTS).default("theme-adaptive"),
   photos: z.array(birthdayPhotoItemSchema).max(5, "Up to 5 photos.").default([]),
   audio: z.enum(["none", "celebration", "soft"]).default("none"),
+  customization: birthdayCustomizationSchema.optional(),
 });
 
 export type BirthdayContent = z.infer<typeof birthdayContentSchema>;

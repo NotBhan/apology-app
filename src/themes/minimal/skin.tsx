@@ -86,43 +86,60 @@ function LoneMark({ shape, x, y, size }: { shape: Mark; x: number; y: number; si
   );
 }
 
-export default function Skin({ sceneId, paused, className }: ThemeSkinProps) {
+export default function Skin({
+  sceneId,
+  paused,
+  decorationsEnabled = true,
+  decorationDensity = "balanced",
+  className,
+}: ThemeSkinProps) {
   const scene = sceneId ?? "opening";
   const quiet = QUIET[scene] ?? QUIET.opening;
   const glow: CSSVars = { transition: EASE, opacity: 0.42 };
   if (!paused) glow.animation = "mn-breathe 22s ease-in-out infinite";
+  const decoFactor = decorationDensity === "minimal" ? 0.55 : decorationDensity === "lush" ? 1 : 0.85;
 
   return (
     <div className={`absolute inset-0 overflow-hidden pointer-events-none ${className ?? ""}`} aria-hidden data-scene={scene}>
       <style>{KEYFRAMES}</style>
 
-      {/* paper, and almost nothing on it */}
-      <div className="absolute inset-0" style={{ background: "radial-gradient(132% 92% at 50% -14%, #fffdf9 0%, #fbf8f2 56%, #f2ecdf 100%)" }} />
-      <div className="absolute left-1/2 top-[6%]" style={{ width: "min(120vw,780px)", height: "min(90vh,720px)", marginLeft: "calc(min(120vw,780px) * -0.5)", background: `radial-gradient(closest-side, rgba(255,253,246,0.85) 0%, rgba(255,253,246,0) 72%)`, ...glow }} />
+      {/* paper, respecting custom background & alt */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(132% 92% at 50% -14%, rgba(255,253,249,0.22) 0%, transparent 56%), linear-gradient(180deg, var(--t-bg) 0%, var(--t-bg-alt) 100%)",
+        }}
+      />
+      <div className="absolute left-1/2 top-[6%]" style={{ width: "min(120vw,780px)", height: "min(90vh,720px)", marginLeft: "calc(min(120vw,780px) * -0.5)", background: "radial-gradient(closest-side, var(--t-surface) 0%, transparent 72%)", ...glow }} />
 
-      <div className="absolute inset-x-0 bottom-0 h-[22vh]" style={{ background: "linear-gradient(to top, rgba(228,220,203,0.55), transparent)", opacity: quiet.shade }} />
+      <div className="absolute inset-x-0 bottom-0 h-[22vh]" style={{ background: "linear-gradient(to top, var(--t-bg-alt), transparent)", opacity: quiet.shade * 0.65 }} />
 
-      <GoldRule top={quiet.rules[0]} width={quiet.width} />
-      <GoldRule top={quiet.rules[1]} width={quiet.width} />
-      <SpacerRule top={quiet.rules[0] - 3.4} width={30} />
-      <SpacerRule top={quiet.rules[1] + 3.4} width={30} />
+      {decorationsEnabled ? (
+        <div className="absolute inset-0" style={{ opacity: decoFactor }}>
+          <GoldRule top={quiet.rules[0]} width={quiet.width} />
+          <GoldRule top={quiet.rules[1]} width={quiet.width} />
+          <SpacerRule top={quiet.rules[0] - 3.4} width={30} />
+          <SpacerRule top={quiet.rules[1] + 3.4} width={30} />
 
-      <LoneMark shape={quiet.mark} x={quiet.markX} y={quiet.markY} size={quiet.markSize} />
+          <LoneMark shape={quiet.mark} x={quiet.markX} y={quiet.markY} size={quiet.markSize} />
 
-      <div className="absolute" style={{ left: "12%", top: "12%", bottom: "12%", width: 1, background: `linear-gradient(180deg, transparent, ${GOLD} 18%, ${GOLD} 82%, transparent)`, opacity: quiet.margin, transition: EASE }} />
+          <div className="absolute" style={{ left: "12%", top: "12%", bottom: "12%", width: 1, background: `linear-gradient(180deg, transparent, var(--t-accent) 18%, var(--t-accent) 82%, transparent)`, opacity: quiet.margin, transition: EASE }} />
 
-      {CORNERS.map((c) => (
-        <div key={c.edges} className="absolute" style={{ ...c.style, width: 18, height: 18, opacity: quiet.ticks, transition: EASE }} />
-      ))}
+          {CORNERS.map((c) => (
+            <div key={c.edges} className="absolute" style={{ ...c.style, width: 18, height: 18, opacity: quiet.ticks, transition: EASE }} />
+          ))}
 
-      {quiet.baseline > 0 && (
-        <>
-          <div className="absolute left-1/2" style={{ top: "78%", width: "34%", height: 1, marginLeft: "-17%", background: `linear-gradient(90deg, transparent, ${GOLD} 40%, ${GOLD} 100%)`, opacity: quiet.baseline * 0.55, transition: EASE }} />
-          <div className="absolute left-1/2" style={{ top: "78%", width: 5, height: 5, marginLeft: -2.5, marginTop: -2, borderRadius: 9999, background: GOLD, opacity: quiet.baseline * 0.8, transition: EASE }} />
-        </>
-      )}
+          {quiet.baseline > 0 && (
+            <>
+              <div className="absolute left-1/2" style={{ top: "78%", width: "34%", height: 1, marginLeft: "-17%", background: `linear-gradient(90deg, transparent, var(--t-accent) 40%, var(--t-accent) 100%)`, opacity: quiet.baseline * 0.55, transition: EASE }} />
+              <div className="absolute left-1/2" style={{ top: "78%", width: 5, height: 5, marginLeft: -2.5, marginTop: -2, borderRadius: 9999, background: "var(--t-accent)", opacity: quiet.baseline * 0.8, transition: EASE }} />
+            </>
+          )}
+        </div>
+      ) : null}
 
-      <div className="absolute inset-x-0 top-0" style={{ height: "9vh", background: "linear-gradient(to bottom, rgba(255,253,249,0.9), transparent)" }} />
+      <div className="absolute inset-x-0 top-0" style={{ height: "9vh", background: "linear-gradient(to bottom, rgba(255,253,249,0.22), transparent)" }} />
     </div>
   );
 }

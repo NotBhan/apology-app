@@ -35,4 +35,23 @@ describe("BirthdayEnvelope", () => {
     expect(sealBtn).toBeInTheDocument();
     await user.click(sealBtn);
   });
+
+  it("renders open-letter directly as a stationery card with custom headings", () => {
+    render(
+      <BirthdayEnvelope
+        recipientName="Aria"
+        senderName="Leo"
+        message="Happy day!"
+        theme={theme}
+        styleVariant="open-letter"
+        letterHeading="Heartfelt Note"
+        letterSignOff="Warmly yours,"
+      />,
+    );
+
+    expect(screen.getByText("Heartfelt Note")).toBeInTheDocument();
+    expect(screen.getByText("Warmly yours,")).toBeInTheDocument();
+    expect(screen.getByText("Happy day!")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /open birthday letter/i })).not.toBeInTheDocument();
+  });
 });

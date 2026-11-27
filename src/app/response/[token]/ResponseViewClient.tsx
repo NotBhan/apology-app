@@ -102,13 +102,13 @@ export function ResponseViewClient({ response, parent, token }: ResponseViewClie
           },
         };
         return (
-          <div className="relative min-h-svh w-full bg-[#faf6ff] pt-14">
+          <div className="relative flex h-svh w-full flex-col overflow-hidden bg-[#faf6ff] pt-14">
             <ResponseContextBanner parent={parent} />
             <PresentationEngine
               content={contentWithTokens}
               theme={theme}
               mode="live"
-              className="h-svh w-full"
+              className="min-h-0 flex-1 w-full"
             />
           </div>
         );

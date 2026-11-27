@@ -53,7 +53,11 @@ export interface CleanupReport {
 
 export interface Candidate {
   apologyId: string;
-  /** `expired` means no job existed yet; `job` means a job is already durable. */
+  /**
+   * Always `job` in production: a record is only a deletion candidate because
+   * an explicit job exists. The `expired` value is retained for the in-memory
+   * legacy double and is never emitted by `PostgresLifecycleStore`.
+   */
   source: "expired" | "job";
 }
 

@@ -108,14 +108,14 @@ export const PLATFORM_COPY = {
     description:
       "Koi Koi is a place to create thoughtful, personalised experiences for the people who matter.",
     retention:
-      "Links last at most seven days, then the experience and its files are deleted.",
+      "Links stay live until you revoke or delete them, and deleting removes the experience and its files.",
     privacyLink: "What we store",
   },
 
   dashboard: {
     title: "My Experiences",
     description:
-      "Everything you've made lives here. Links last at most seven days; expired experiences are deleted, files and all.",
+      "Everything you've made lives here. Links stay live until you revoke or delete them.",
     emptyHeading: "Nothing here just yet.",
     emptyBody:
       "Your creations will find a home here. Start with something you want to say, celebrate, or share.",
@@ -132,7 +132,7 @@ export const PLATFORM_COPY = {
 
   notFound: {
     title: "This little experience isn't open right now.",
-    body: "Links like this are temporary, and this one may have expired or been closed by the person who shared it.",
+    body: "This link may have been revoked or deleted by the person who shared it.",
   },
 
   explore: {

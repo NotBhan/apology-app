@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
+import { useReducedMotionSafe } from "@/hooks/useMounted";
 import type { BirthdayTheme } from "@/experiences/birthday/themes";
 import {
   normalizeBirthdayPhotos,
@@ -118,7 +119,7 @@ function ThemeAdaptiveLayout({
   animate: boolean;
   onPhotoClick: (idx: number, e?: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionSafe();
   const still = reduce || !animate;
   const themeFamily = theme.decorations.family;
 
@@ -450,7 +451,7 @@ function ScrapbookLayout({
   animate: boolean;
   onPhotoClick: (idx: number, e?: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionSafe();
   const still = reduce || !animate;
   const rotations = [-3.5, 3, -2.5, 4, -3];
 
@@ -533,7 +534,7 @@ function PolaroidLayout({
   animate: boolean;
   onPhotoClick: (idx: number, e?: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionSafe();
   const still = reduce || !animate;
 
   return (
@@ -597,7 +598,7 @@ function SlideshowLayout({
   animate: boolean;
   onPhotoClick: (idx: number, e?: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionSafe();
   const [index, setIndex] = useState(0);
   const [visitedIndices, setVisitedIndices] = useState<Set<number>>(() => new Set([0]));
   const still = reduce || !animate;
@@ -708,23 +709,31 @@ function SlideshowLayout({
           <Icon name="chevron-left" size={15} />
         </button>
 
-        <div className="flex gap-1.5" aria-hidden>
+        <div role="tablist" aria-label="Choose photo" className="flex items-center gap-1.5">
           {photos.map((item, dot) => (
             <button
               key={item.id}
               type="button"
+              role="tab"
+              aria-selected={dot === index}
               onClick={() => {
                 markVisited(dot);
                 setIndex(dot);
               }}
               aria-label={`Jump to photo ${dot + 1}`}
-              className="h-2 w-2 rounded-full transition-all cursor-pointer"
-              style={{
-                background: theme.palette.primary,
-                opacity: dot === index ? 1 : 0.25,
-                transform: dot === index ? "scale(1.2)" : "scale(1)",
-              }}
-            />
+              className="grid h-8 w-6 place-items-center cursor-pointer focus:outline-none focus-visible:ring-2 rounded-full"
+              style={{ ["--tw-ring-color" as string]: theme.palette.primary }}
+            >
+              <span
+                aria-hidden="true"
+                className="block h-2 w-2 rounded-full transition-all"
+                style={{
+                  background: theme.palette.primary,
+                  opacity: dot === index ? 1 : 0.25,
+                  transform: dot === index ? "scale(1.2)" : "scale(1)",
+                }}
+              />
+            </button>
           ))}
         </div>
 
@@ -764,6 +773,7 @@ function LightboxModal({
 }) {
   const safeCurrent = Math.min(currentIndex, Math.max(0, photos.length - 1));
   const currentPhoto = photos[safeCurrent];
+  const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
@@ -772,13 +782,30 @@ function LightboxModal({
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
+        e.stopPropagation();
         onClose();
       } else if (e.key === "ArrowLeft" && photos.length > 1) {
         e.preventDefault();
+        e.stopPropagation();
         onNavigate((safeCurrent - 1 + photos.length) % photos.length);
       } else if (e.key === "ArrowRight" && photos.length > 1) {
         e.preventDefault();
+        e.stopPropagation();
         onNavigate((safeCurrent + 1) % photos.length);
+      } else if (e.key === "Tab" && dialogRef.current) {
+        const focusables = dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+        );
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
       }
     }
 
@@ -790,6 +817,7 @@ function LightboxModal({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label="Photo gallery preview"

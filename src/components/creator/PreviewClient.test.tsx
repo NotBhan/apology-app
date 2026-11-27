@@ -61,8 +61,7 @@ describe("PreviewClient share and navigation controls", () => {
       data: {
         token: "tok-share-abc",
         path: "/letter/tok-share-abc",
-        expiresAt: "2026-11-28T10:00:00.000Z",
-        durationDays: 3,
+        alreadyPublished: false,
       },
     });
 
@@ -71,7 +70,7 @@ describe("PreviewClient share and navigation controls", () => {
     expect(publishBtn).toBeInTheDocument();
 
     await user.click(publishBtn);
-    expect(publishDraftAction).toHaveBeenCalledWith(mockDraft.id, 3);
+    expect(publishDraftAction).toHaveBeenCalledWith(mockDraft.id);
     expect(await screen.findByRole("dialog", { name: /Share with QR/i })).toBeInTheDocument();
   });
 });

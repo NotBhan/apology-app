@@ -59,49 +59,6 @@ export class PostgresLifecycleStore implements LifecycleStore {
     }));
   }
 
-  /**
-   * Same atomic intent as the manual path, restricted to the expiry predicate.
-   * Retained for backward-compatible interface contracts.
-   */
-  async requestDeletionForExpiry(apologyId: string, now: Date): Promise<boolean> {
-    const result = await this.db.execute(sql`
-      with locked as (
-        select a.id, a.owner_key_hash from ${apologies} a
-        where a.id = ${apologyId}
-          and a.status = 'published'
-          and a.expires_at is not null
-          and a.expires_at <= ${now.toISOString()}
-        for update
-      ),
-      keys as (
-        select coalesce(jsonb_agg(x.object_key), '[]'::jsonb) as k
-        from ${apologyAssets} x
-        where x.apology_id = (select id from locked)
-      ),
-      intent as (
-        insert into ${deletionJobs} (resource_type, resource_id, owner_key_hash, object_keys, state, reason, fencing_token)
-        select 'apology', locked.id, locked.owner_key_hash, keys.k, 'pending', 'expired', 1
-        from locked, keys
-        on conflict (resource_type, resource_id) do update
-          set object_keys = (
-                select to_jsonb(array(
-                  select distinct value
-                  from jsonb_array_elements_text(
-                    ${deletionJobs}.object_keys || excluded.object_keys) as value))
-              ),
-              updated_at = now()
-          where ${deletionJobs}.state <> 'completed'
-        returning resource_id
-      )
-      update ${apologies} a
-      set status = 'deleted', expires_at = null, updated_at = now()
-      where a.id in (select resource_id from intent)
-      returning a.id
-    `);
-
-    return rowsOf(result).length > 0;
-  }
-
   async claim(
     apologyId: string,
     now: Date,

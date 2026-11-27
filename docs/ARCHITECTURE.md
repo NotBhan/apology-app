@@ -29,8 +29,8 @@ exists or is configured.
 
 ### AD-01 — Neon over Firestore
 
-Relational data with explicit constraints. `apologies.status`, duration bounds
-and "published implies expires_at + published_at + token hash" are CHECK
+Relational data with explicit constraints. `apologies.status`, the legacy
+duration bounds and "published implies published_at + token hash" are CHECK
 constraints, so an invalid row cannot be written even by a build that forgets to
 validate.
 
@@ -57,16 +57,21 @@ the row marked `failed`, and the client gets `409`.
 ### AD-04 — Token hashing, and what it costs
 
 Only `sha256(token)` is stored. A database read therefore cannot produce a
-working link. The cost is that a token cannot be recovered, so **renewal mints a
-new link**: the previous URL stops working when a letter is republished. The
-Manage page surfaces the new URL rather than pretending the old one survived.
+working link. The cost is that a plaintext token cannot be recovered after the
+call that minted it.
+
+Because of that cost, publishing is **idempotent for a live record**: a repeat
+publish keeps the stored hash and returns no new plaintext, so a link that is
+already in a recipient's hands is never replaced. Only a revoked record mints a
+new token — that is the only way to issue a fresh link without reviving the one
+the author deliberately killed.
 
 ### AD-05 — Media is authorised, then redirected
 
 `/api/uploads/[assetId]` resolves the asset row, checks the owning apology's
 liveness (`canServeAsset`), and only then issues a **60-second** pre-signed GET
-with a `307`. Responses are `private, no-store` because authorisation changes at
-the expiry instant.
+with a `307`. Responses are `private, no-store` because authorisation changes the
+moment a record is revoked or deleted.
 
 A leaked object key is useless: the key never appears in a URL the browser keeps,
 and the asset id alone still requires a live letter.
@@ -100,12 +105,17 @@ Failure at 4–6 records a sanitised error, leaves the row and the tombstone
 untouched, and restores no access. The next scheduled run retries because
 candidate selection includes `failed` jobs.
 
-## 4. Expiry
+## 4. Link lifetime
 
-`expires_at` is computed server-side at publish (1–7 days, default 3) and is
-absent from `draftPayloadSchema`. Access is enforced on every read by
-`isLinkLive()`; physical deletion is a separate, eventual process. An expired,
-revoked, deleted or unknown token all produce the same 404.
+Published links are permanent. `status === 'published'` is the entire liveness
+rule, enforced on every read by `isLinkLive(status)`; there is no `expires_at`
+gate, no TTL and no expiry sweep. Physical deletion is a separate, eventual
+process driven only by an explicit `deletion_jobs` row.
+
+`expires_at` and `link_duration_days` remain nullable legacy columns. Rows
+written before permanent links may still carry values; they are ignored on read
+and never selected for deletion. An unknown, revoked or deleted token all
+produce the same 404.
 
 ## 5. Security
 
@@ -124,7 +134,7 @@ revoked, deleted or unknown token all produce the same 404.
 ## 6. Failure surfaces
 
 `error.tsx` shows a digest only. `global-error.tsx` supplies its own document.
-`not-found.tsx` is uniform for unknown, expired, revoked and deleted links.
+`not-found.tsx` is uniform for unknown, revoked and deleted links.
 
 **No `loading.tsx` on a route that can fail before rendering** (a `notFound()`, or a
 data-layer throw such as missing configuration). The shell flushes with `200`

@@ -176,17 +176,22 @@ export class PostgresRepository implements ApologyRepository {
   }
 
   /**
-   * Publish or renew. Always mints a new token: only the hash is stored, so the
-   * previous link cannot be reproduced and therefore cannot survive renewal.
+   * Publishes a draft, or re-issues its link.
+   *
+   * The first publish mints a token. A repeat publish for an already-published
+   * row keeps the existing token hash, so a link that was already sent keeps
+   * working: re-opening Manage or pressing Share must never invalidate a link
+   * that is already in a recipient's hands. A revoked row always gets a new
+   * token, because that is the only way to "un-revoke" without reviving the
+   * link the author deliberately killed.
+   *
    * The guard and the update are the same statement, so a concurrent deletion
    * cannot interleave.
    */
   async publish(
     id: string,
     ownerKeyHash: string,
-    durationDays?: number,
   ): Promise<ApologyRecord> {
-    void durationDays;
     const token = createLinkToken();
     const tokenHash = hashLinkToken(token);
 
@@ -203,7 +208,11 @@ export class PostgresRepository implements ApologyRepository {
       )
       update ${apologies} a
       set status = 'published',
-          private_token_hash = ${tokenHash},
+          private_token_hash = case
+            when a.status = 'published' and a.private_token_hash is not null
+              then a.private_token_hash
+            else ${tokenHash}
+          end,
           published_at = coalesce(a.published_at, now()),
           expires_at = null,
           link_duration_days = null,
@@ -228,12 +237,18 @@ export class PostgresRepository implements ApologyRepository {
                 a.created_at as "createdAt",
                 a.updated_at as "updatedAt",
                 a.published_at as "publishedAt",
-                a.expires_at as "expiresAt"
+                a.expires_at as "expiresAt",
+                a.private_token_hash as "privateTokenHash"
     `);
 
     const [raw] = rowsOf(result);
     if (!raw) throw await this.explainWriteFailure(id, ownerKeyHash);
-    return rowToRecord(raw as unknown as ApologyRow, token);
+
+    // The plaintext token is only knowable when this call minted it. When the
+    // existing hash was kept, the link is unchanged and cannot be re-displayed;
+    // an empty `accessToken` is how the caller distinguishes the two cases.
+    const retained = raw.privateTokenHash === tokenHash;
+    return rowToRecord(raw as unknown as ApologyRow, retained ? token : "");
   }
 
   async revoke(id: string, ownerKeyHash: string): Promise<ApologyRecord> {
@@ -397,8 +412,8 @@ export class PostgresRepository implements ApologyRepository {
   async getPublishedByToken(token: string): Promise<PublishedApology | undefined> {
     const record = await this.getByToken(token);
     if (!record) return undefined;
-    // Expired, revoked, deleted and never-published are indistinguishable.
-    if (!isLinkLive(record.status, record.expiresAt)) return undefined;
+    // Revoked, deleted and never-published are indistinguishable to a recipient.
+    if (!isLinkLive(record.status)) return undefined;
     return toPublished(record);
   }
 

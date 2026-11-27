@@ -40,24 +40,23 @@ export default function PrivacyPage() {
           and a random link token. No email, phone number, location or device information.
         </Section>
 
-        <Section title="Links are temporary">
-          You choose a window of one to seven days when you publish; there is no way to make a
-          link permanent. The deadline is calculated on the server, so a client cannot extend it.
-          At that moment the link stops opening and the recipient sees the same page as for a link
-          that never existed. Photos and audio stop being served at the same time, so a saved
-          image URL does not outlive the experience.
+        <Section title="Links stay live until you remove them">
+          A published link does not expire. It keeps opening for anyone who has it until you revoke
+          it or delete the experience. Revoking stops the link immediately and the recipient then
+          sees the same page as for a link that never existed; the photos and audio stop being
+          served at the same moment, so a saved image URL does not outlive your decision.
         </Section>
 
         <Section title="Deletion is automatic, and asynchronous">
-          A cleanup job runs hourly. It permanently deletes the experience, both names, the messages,
-          the note, the theme and sticker settings, the token, and every uploaded photo and audio
-          file belonging to it.
+          Once you ask for deletion, a cleanup job runs hourly. It permanently deletes the
+          experience, both names, the messages, the note, the theme and sticker settings, the token,
+          and every uploaded photo and audio file belonging to it.
           <br />
           <br />
-          Deletion is <strong className="font-semibold text-[#4b2f6b]">not instant</strong> at the
-          expiry second. Access stops immediately; data removal follows on the next run — normally
-          within about an hour. If storage deletion fails, the job is recorded and retried on the
-          next run rather than silently forgotten.
+          Deletion is <strong className="font-semibold text-[#4b2f6b]">not instant</strong>.
+          Access stops immediately; data removal follows on the next run — normally within about an
+          hour. If storage deletion fails, the job is recorded and retried on the next run rather
+          than silently forgotten.
         </Section>
 
         <Section title="What remains afterwards">
@@ -67,9 +66,9 @@ export default function PrivacyPage() {
         </Section>
 
         <Section title="Deleting it yourself">
-          &ldquo;Delete now&rdquo; in Manage runs exactly the same pipeline as expiry: files first,
-          then the record. If storage is briefly unavailable the deletion is queued and retried,
-          and the interface will not claim it finished.
+          &ldquo;Delete now&rdquo; in Manage runs exactly the same pipeline as any other deletion:
+          files first, then the record. If storage is briefly unavailable the deletion is queued and
+          retried, and the interface will not claim it finished.
         </Section>
 
         <Section title="Your responses stay with you">

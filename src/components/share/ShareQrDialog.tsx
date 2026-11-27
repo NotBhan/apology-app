@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/ui/icons";
 import { absoluteRecipientUrl, qrFilename, renderQrBlob, renderQrDataUrl } from "@/lib/sharing/qr";
 
@@ -25,9 +25,45 @@ export function ShareQrDialog({
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const url = absoluteRecipientUrl(path);
   const filename = qrFilename(experienceType);
+
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButtonRef.current?.focus();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key === "Tab" && dialogRef.current) {
+        const focusables = dialogRef.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        );
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      previousFocus?.focus();
+    };
+  }, [onClose]);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,12 +121,13 @@ export function ShareQrDialog({
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-[420px] rounded-3xl bg-white p-5 shadow-xl">
+      <div ref={dialogRef} className="w-full max-w-[420px] rounded-3xl bg-white p-5 shadow-xl">
         <div className="flex items-start justify-between gap-3">
           <h2 id="share-qr-title" className="text-[1.1rem] font-semibold text-[#33203f]">
             Share with QR
           </h2>
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={onClose}
             className="rounded-full p-2 text-[#8a7a9c]"
@@ -140,7 +177,13 @@ export function ShareQrDialog({
             href={dataUrl ?? undefined}
             download={filename}
             aria-disabled={!dataUrl}
-            onClick={() => setStatus({ kind: "saved", message: "QR downloaded." })}
+            onClick={(event) => {
+              if (!dataUrl) {
+                event.preventDefault();
+                return;
+              }
+              setStatus({ kind: "saved", message: "QR downloaded." });
+            }}
             className="flex min-h-11 items-center justify-center rounded-full bg-[#6d3fa8] px-4 text-sm font-semibold text-white aria-disabled:opacity-50"
           >
             Download QR

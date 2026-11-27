@@ -67,7 +67,7 @@ describe("publishDraftAction ownership gate", () => {
       updatedAt: new Date().toISOString(),
     });
 
-    const result = await publishDraftAction("draft-1", 7);
+    const result = await publishDraftAction("draft-1");
 
     expect(result.ok).toBe(false);
     expect(result.error).toBe("This draft belongs to another browser.");

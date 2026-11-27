@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { motion } from "framer-motion";
+import { useReducedMotionSafe } from "@/hooks/useMounted";
 import type { BirthdayTheme } from "@/experiences/birthday/themes";
+import type { BirthdayGiftReveal } from "@/experiences/birthday/schema";
 
 type GiftStage = "wrapped" | "untying" | "opening" | "opened";
 
@@ -10,6 +12,8 @@ export interface BirthdayGiftBoxProps {
   recipientName: string;
   senderName: string;
   theme: BirthdayTheme;
+  animate?: boolean;
+  revealMode?: BirthdayGiftReveal;
   onOpened?: () => void;
   className?: string;
 }
@@ -18,33 +22,47 @@ export function BirthdayGiftBox({
   recipientName,
   senderName,
   theme,
+  animate = true,
+  revealMode = "tap-unwrap",
   onOpened,
   className = "",
 }: BirthdayGiftBoxProps) {
-  const reduce = useReducedMotion();
-  const [stage, setStage] = useState<GiftStage>("wrapped");
+  const reduce = useReducedMotionSafe();
+  const still = reduce || !animate;
+  const [stage, setStage] = useState<GiftStage>(revealMode === "direct" ? "opened" : "wrapped");
+  const timersRef = useRef<number[]>([]);
+  const uid = useId().replace(/:/g, "");
+
+  useEffect(() => {
+    return () => {
+      timersRef.current.forEach((id) => window.clearTimeout(id));
+      timersRef.current = [];
+    };
+  }, []);
 
   const openGift = useCallback(() => {
     if (stage !== "wrapped") return;
-    if (reduce) {
+    if (still || revealMode === "direct") {
       setStage("opened");
       onOpened?.();
       return;
     }
 
     setStage("untying");
-    window.setTimeout(() => setStage("opening"), 350);
-    window.setTimeout(() => {
-      setStage("opened");
-      onOpened?.();
-    }, 1200);
-  }, [stage, reduce, onOpened]);
+    timersRef.current.push(window.setTimeout(() => setStage("opening"), 350));
+    timersRef.current.push(
+      window.setTimeout(() => {
+        setStage("opened");
+        onOpened?.();
+      }, 1200),
+    );
+  }, [stage, still, revealMode, onOpened]);
 
   const isUntied = stage === "untying" || stage === "opening" || stage === "opened";
   const isOpen = stage === "opening" || stage === "opened";
   const isComplete = stage === "opened";
 
-  const idPrefix = `bday-gift-${theme.id}`;
+  const idPrefix = `bday-gift-${theme.id}-${uid}`;
 
   return (
     <div className={`relative flex w-full flex-col items-center select-none ${className}`}>
@@ -57,14 +75,14 @@ export function BirthdayGiftBox({
         }}
         onClick={openGift}
         animate={
-          reduce
+          still
             ? undefined
             : isComplete
               ? { scale: 0.98, opacity: 0.85 }
               : { y: [0, -6, 0] }
         }
         transition={
-          reduce || isComplete
+          still || isComplete
             ? { duration: 0.4 }
             : { duration: 3.6, repeat: Infinity, ease: "easeInOut" }
         }
@@ -383,7 +401,7 @@ export function BirthdayGiftBox({
           </motion.g>
         </svg>
 
-        {/* Interactive Tap Area / Accessible Button */}
+        {/* Interactive Tap Area / Accessible Button (visible focus ring without opacity-0 hiding it) */}
         <button
           type="button"
           onClick={(e) => {
@@ -392,7 +410,8 @@ export function BirthdayGiftBox({
           }}
           disabled={isComplete}
           aria-label={`Open birthday gift box for ${recipientName || "your friend"}`}
-          className="absolute inset-0 h-full w-full opacity-0 cursor-pointer focus:outline-none focus-visible:ring-2 rounded-2xl"
+          className="absolute inset-0 h-full w-full bg-transparent text-transparent cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 rounded-2xl"
+          style={{ ["--tw-ring-color" as string]: theme.palette.primary }}
         >
           Open Gift
         </button>

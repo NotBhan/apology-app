@@ -141,7 +141,14 @@ function Deckle({ edge }: { edge: "top" | "bottom" }) {
   );
 }
 
-export default function Skin({ sceneId, focus = 0, paused = false, className }: ThemeSkinProps) {
+export default function Skin({
+  sceneId,
+  focus = 0,
+  paused = false,
+  decorationsEnabled = true,
+  decorationDensity = "balanced",
+  className,
+}: ThemeSkinProps) {
   const scene = sceneId ?? "opening";
   const dim = 1 - Math.min(0.4, Math.max(0, focus) * 0.4);
   const sealed = scene === "envelope";
@@ -149,70 +156,76 @@ export default function Skin({ sceneId, focus = 0, paused = false, className }: 
   const memory = scene === "memory";
   const answering = scene === "response";
   const bouquet = scene === "opening" || scene === "closing";
+  const hearts = decorationDensity === "minimal" ? HEARTS.slice(0, 4) : HEARTS;
+  const petals = decorationDensity === "minimal" ? PETALS.slice(0, 3) : PETALS;
 
   return (
     <div className={["pointer-events-none absolute inset-0 overflow-hidden", className].filter(Boolean).join(" ")} aria-hidden>
       <div className="absolute inset-0" style={{ background: "var(--t-bg)" }} />
-      <div className="absolute inset-0" style={{ background: "radial-gradient(126% 96% at 50% -6%, #fdf8ff 0%, var(--t-bg) 44%, var(--t-bg-alt) 100%)", opacity: dim }} />
+      <div className="absolute inset-0" style={{ background: "radial-gradient(126% 96% at 50% -6%, var(--t-surface) 0%, var(--t-bg) 44%, var(--t-bg-alt) 100%)", opacity: dim * 0.75 }} />
       <div
         className="absolute left-1/2 top-1/2 h-[76vh] w-[76vh] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
         style={{ background: "radial-gradient(closest-side, var(--t-secondary), transparent 72%)", opacity: 0.24 * dim, ...(paused ? { animation: "none" } : cv({ animation: "cc-breathe 14s ease-in-out infinite" })) }}
       />
       <div className="absolute inset-0" style={{ background: "radial-gradient(112% 88% at 50% 44%, transparent 42%, var(--t-bg-alt) 100%)", opacity: 0.55 }} />
 
-      {(scene === "opening" || sealed || scene === "closing") && <Ribbon side="left" paused={paused} />}
-      {(sealed || scene === "closing") && <Ribbon side="right" paused={paused} />}
-
-      <div style={{ opacity: letter || answering ? 0.55 * dim : dim }}>
-        {HEARTS.map((spec) => (
-          <FloatingHeart key={`${spec.x}-${spec.y}`} spec={spec} paused={paused} dim={spec.tone === "var(--t-accent)" ? 0.75 : 0.9} />
-        ))}
-      </div>
-
-      {bouquet && <Bouquet mode={scene === "closing" ? "closing" : "opening"} paused={paused} />}
-
-      {letter && (
+      {decorationsEnabled ? (
         <>
-          <Deckle edge="top" />
-          <Deckle edge="bottom" />
-        </>
-      )}
+          {(scene === "opening" || sealed || scene === "closing") && <Ribbon side="left" paused={paused} />}
+          {(sealed || scene === "closing") && <Ribbon side="right" paused={paused} />}
 
-      {(letter || memory || scene === "closing") && (
-        <div className="absolute inset-0">
-          {PETALS.map((petal) => {
-            const body = { left: `${petal.x}%`, width: petal.s, height: petal.s * 1.35, borderRadius: "62% 62% 48% 48% / 74% 74% 38% 38%", background: "var(--t-secondary)", opacity: 0.7 };
-            const anim = paused ? { animation: "none" } : cv({ animation: `cc-rise ${petal.dur}s linear ${petal.delay}s infinite`, "--dx": `${petal.dx}px`, "--o": 0.72 });
-            return <div key={petal.x} className="absolute bottom-[6%]" style={{ ...body, ...anim }} />;
-          })}
-        </div>
-      )}
-      {sealed && <WaxHeart paused={paused} />}
-      {memory && (
-        <svg className="absolute inset-x-0 top-[8%] h-[16vh] w-full" viewBox="0 0 400 90" fill="none" preserveAspectRatio="none">
-          <path d="M-10 26C70 66 120 4 200 34s130 40 210 2" stroke="var(--t-border)" strokeWidth="1.2" opacity="0.9" />
-          {[60, 112, 168, 226, 284, 338].map((x, i) => (
-            <g key={x} transform={`translate(${x} ${i % 2 === 0 ? 30 + ((i * 4) % 14) : 34 - ((i * 3) % 12)})`}>
-              <line x1="0" y1="-26" x2="0" y2="0" stroke="var(--t-border)" strokeWidth="0.8" />
-              <path d="M12 20.7C6.3 16.9 2.7 13.5 2.7 9.7 2.7 7 4.9 4.8 7.5 4.8c1.7 0 3.2.8 4.2 2.2.9-1.4 2.5-2.2 4.2-2.2 2.6 0 4.8 2.2 4.8 4.9 0 3.8-3.6 7.2-9.3 11z" transform="translate(-9 0) scale(0.78)" fill="var(--t-secondary)" />
-            </g>
-          ))}
-        </svg>
-      )}
-      {answering && (
-        <div className="absolute left-1/2 top-1/2 h-[54vh] w-[54vh] -translate-x-1/2 -translate-y-1/2">
-          <div className="absolute inset-0 rounded-full" style={{ background: "radial-gradient(closest-side, var(--t-secondary), transparent 74%)", opacity: 0.3 }} />
-          <div className="absolute inset-[12%] rounded-full border" style={{ borderColor: "var(--t-border)", opacity: 0.7 }} />
-          {HALO.map((spot) => {
-            const anim = paused ? { animation: "none", opacity: 0.65 } : cv({ animation: `cc-twinkle ${4 + (spot.s % 3)}s ease-in-out ${spot.delay}s infinite` });
-            return (
-              <div key={`${spot.x}-${spot.y}`} className="absolute" style={{ left: `calc(${spot.x}% - ${spot.s / 2}px)`, top: `calc(${spot.y}% - ${spot.s / 2}px)`, color: "var(--t-primary)", ...anim }}>
-                <Heart size={spot.s} />
-              </div>
-            );
-          })}
-        </div>
-      )}
+          <div style={{ opacity: letter || answering ? 0.55 * dim : dim }}>
+            {hearts.map((spec) => (
+              <FloatingHeart key={`${spec.x}-${spec.y}`} spec={spec} paused={paused} dim={spec.tone === "var(--t-accent)" ? 0.75 : 0.9} />
+            ))}
+          </div>
+
+          {bouquet && <Bouquet mode={scene === "closing" ? "closing" : "opening"} paused={paused} />}
+
+          {letter && (
+            <>
+              <Deckle edge="top" />
+              <Deckle edge="bottom" />
+            </>
+          )}
+
+          {(letter || memory || scene === "closing") && (
+            <div className="absolute inset-0">
+              {petals.map((petal) => {
+                const body = { left: `${petal.x}%`, width: petal.s, height: petal.s * 1.35, borderRadius: "62% 62% 48% 48% / 74% 74% 38% 38%", background: "var(--t-secondary)", opacity: 0.7 };
+                const anim = paused ? { animation: "none" } : cv({ animation: `cc-rise ${petal.dur}s linear ${petal.delay}s infinite`, "--dx": `${petal.dx}px`, "--o": 0.72 });
+                return <div key={petal.x} className="absolute bottom-[6%]" style={{ ...body, ...anim }} />;
+              })}
+            </div>
+          )}
+          {sealed && <WaxHeart paused={paused} />}
+          {memory && (
+            <svg className="absolute inset-x-0 top-[8%] h-[16vh] w-full" viewBox="0 0 400 90" fill="none" preserveAspectRatio="none">
+              <path d="M-10 26C70 66 120 4 200 34s130 40 210 2" stroke="var(--t-border)" strokeWidth="1.2" opacity="0.9" />
+              {[60, 112, 168, 226, 284, 338].map((x, i) => (
+                <g key={x} transform={`translate(${x} ${i % 2 === 0 ? 30 + ((i * 4) % 14) : 34 - ((i * 3) % 12)})`}>
+                  <line x1="0" y1="-26" x2="0" y2="0" stroke="var(--t-border)" strokeWidth="0.8" />
+                  <path d="M12 20.7C6.3 16.9 2.7 13.5 2.7 9.7 2.7 7 4.9 4.8 7.5 4.8c1.7 0 3.2.8 4.2 2.2.9-1.4 2.5-2.2 4.2-2.2 2.6 0 4.8 2.2 4.8 4.9 0 3.8-3.6 7.2-9.3 11z" transform="translate(-9 0) scale(0.78)" fill="var(--t-secondary)" />
+                </g>
+              ))}
+            </svg>
+          )}
+          {answering && (
+            <div className="absolute left-1/2 top-1/2 h-[54vh] w-[54vh] -translate-x-1/2 -translate-y-1/2">
+              <div className="absolute inset-0 rounded-full" style={{ background: "radial-gradient(closest-side, var(--t-secondary), transparent 74%)", opacity: 0.3 }} />
+              <div className="absolute inset-[12%] rounded-full border" style={{ borderColor: "var(--t-border)", opacity: 0.7 }} />
+              {HALO.map((spot) => {
+                const anim = paused ? { animation: "none", opacity: 0.65 } : cv({ animation: `cc-twinkle ${4 + (spot.s % 3)}s ease-in-out ${spot.delay}s infinite` });
+                return (
+                  <div key={`${spot.x}-${spot.y}`} className="absolute" style={{ left: `calc(${spot.x}% - ${spot.s / 2}px)`, top: `calc(${spot.y}% - ${spot.s / 2}px)`, color: "var(--t-primary)", ...anim }}>
+                    <Heart size={spot.s} />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      ) : null}
       <div className="absolute inset-0" style={{ background: "repeating-linear-gradient(0deg, rgba(123, 63, 160, 0.035) 0 1px, transparent 1px 3px)", opacity: 0.5 }} />
     </div>
   );

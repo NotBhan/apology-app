@@ -124,4 +124,119 @@ describe("birthday themes", () => {
   it("returns undefined for an unknown theme", () => {
     expect(getBirthdayTheme("nope")).toBeUndefined();
   });
+
+  it("accepts and preserves Stage 4 customization across all domains", () => {
+    const parsed = birthdayContentSchema.parse({
+      ...valid,
+      audio: "celebration",
+      photos: [{ url: "https://example.com/p.jpg", caption: "Cake", focalPoint: "50% 25%" }],
+      customization: {
+        colors: {
+          background: "#17141b",
+          surface: "#221d28",
+          primary: "#ebb968",
+          text: "#f7f0e6",
+        },
+        content: {
+          openingEyebrow: "special birthday edition",
+          openingCta: "Unwrap now",
+          letterHeading: "For Maya",
+          letterSignOff: "Always celebrating you,",
+          showCakeScene: true,
+          showGalleryScene: false,
+        },
+        visual: {
+          fontPairing: "editorial",
+          textSize: "expressive",
+          alignment: "left",
+          decorationsEnabled: false,
+          decorationDensity: "minimal",
+          cake: { tiers: 3, flavor: "chocolate", topping: "cherries" },
+        },
+        interaction: {
+          envelopeStyle: "open-letter",
+          transitionStyle: "paper",
+          motionPreset: "gentle",
+          giftReveal: "direct",
+          candleMode: "single-wish",
+          celebrationIntensity: "grand",
+        },
+      },
+    });
+
+    expect(parsed.audio).toBe("celebration");
+    expect(parsed.customization?.visual?.cake?.flavor).toBe("chocolate");
+    expect(parsed.customization?.interaction?.envelopeStyle).toBe("open-letter");
+  });
+
+  it("rejects invalid colors or unsupported customization values", () => {
+    expect(
+      birthdayContentSchema.safeParse({
+        ...valid,
+        customization: { colors: { background: "not-hex" } },
+      }).success,
+    ).toBe(false);
+
+    expect(
+      birthdayContentSchema.safeParse({
+        ...valid,
+        customization: { visual: { cake: { tiers: 5 } } },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("resolves defaults safely for legacy content and applies overrides cleanly", async () => {
+    const { resolveBirthdayConfig } = await import("./resolve");
+    const legacy = resolveBirthdayConfig(birthdayContentSchema.parse(valid));
+    expect(legacy.scenes).toEqual(["opening", "wish", "message", "gallery", "finale"]);
+    expect(legacy.interaction.envelopeStyle).toBe("wax-seal");
+    expect(legacy.interaction.candleMode).toBe("tap-relight");
+    expect(legacy.audioTrack).toBeUndefined();
+
+    const customized = resolveBirthdayConfig(
+      birthdayContentSchema.parse({
+        ...valid,
+        audio: "soft",
+        customization: {
+          content: {
+            showCakeScene: false,
+            showGalleryScene: false,
+            finaleHeading: "Cheers to you",
+          },
+          visual: {
+            cake: { tiers: 3, flavor: "strawberry", topping: "stars" },
+            decorationsEnabled: false,
+          },
+        },
+      }),
+    );
+
+    expect(customized.scenes).toEqual(["opening", "message", "finale"]);
+    expect(customized.cake.tiers).toBe(3);
+    expect(customized.cake.topping).toBe("stars");
+    expect(customized.decorations.enabled).toBe(false);
+    expect(customized.content.finaleHeading).toBe("Cheers to you");
+    expect(customized.audioTrack?.src).toBe("/audio/soft-lavender.mp3");
+  });
+
+  it("maps every selectable Birthday audio track to a real /public/audio asset and fails safely on none/invalid IDs", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const { BIRTHDAY_THEME_IDS } = await import("./schema");
+    const { resolveBirthdayAudioTrack } = await import("./resolve");
+
+    for (const themeId of BIRTHDAY_THEME_IDS) {
+      expect(resolveBirthdayAudioTrack("none", themeId)).toBeUndefined();
+      expect(resolveBirthdayAudioTrack(undefined, themeId)).toBeUndefined();
+      expect(resolveBirthdayAudioTrack("invalid-legacy-id", themeId)).toBeUndefined();
+
+      for (const option of ["celebration", "soft"] as const) {
+        const track = resolveBirthdayAudioTrack(option, themeId);
+        expect(track).toBeDefined();
+        expect(track!.src.startsWith("/audio/")).toBe(true);
+        const diskPath = path.join(process.cwd(), "public", track!.src);
+        expect(fs.existsSync(diskPath), `${diskPath} missing on disk`).toBe(true);
+      }
+    }
+  });
 });

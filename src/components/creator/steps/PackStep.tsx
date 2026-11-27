@@ -1,5 +1,6 @@
 "use client";
 
+import { useReducedMotion } from "framer-motion";
 import type { StickerPackId } from "@/types/sticker";
 import { STICKER_PACK_LIST, getStickerPack } from "@/sticker-packs/registry";
 import { PackCard } from "@/components/sticker-selector/PackCard";
@@ -23,6 +24,7 @@ const STATE_LABELS: Record<(typeof PREVIEW_STATES)[number], string> = {
 
 export function PackStep({ packId, suggestedPackId, onChange, onNext, onBack }: PackStepProps) {
   const pack = getStickerPack(packId);
+  const reduce = useReducedMotion();
 
   return (
     <div className="space-y-6">
@@ -56,7 +58,7 @@ export function PackStep({ packId, suggestedPackId, onChange, onNext, onBack }: 
           {PREVIEW_STATES.map((state) => (
             <div key={state} className="flex flex-col items-center gap-1">
               <div className="aspect-square w-full">
-                <StickerRenderer packId={packId} state={state} animate />
+                <StickerRenderer packId={packId} state={state} animate={!reduce} />
               </div>
               <span className="text-[0.62rem] uppercase tracking-[0.1em] text-[#a394b4]">
                 {STATE_LABELS[state]}

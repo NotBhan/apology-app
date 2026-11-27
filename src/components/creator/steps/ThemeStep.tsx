@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { ThemeId } from "@/types/theme";
 import { THEME_LIST, getTheme } from "@/themes/registry";
 import { ThemeCard } from "@/components/theme-selector/ThemeCard";
@@ -28,6 +28,44 @@ export function ThemeStep({
 }: ThemeStepProps) {
   const [preview, setPreview] = useState<ThemeId | null>(null);
   const previewTheme = preview ? getTheme(preview) : null;
+  const reduce = useReducedMotion();
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!preview) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButtonRef.current?.focus();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setPreview(null);
+        return;
+      }
+      if (event.key === "Tab" && modalRef.current) {
+        const focusables = modalRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        );
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      previousFocus?.focus();
+    };
+  }, [preview]);
 
   return (
     <div className="space-y-6">
@@ -78,9 +116,10 @@ export function ThemeStep({
             aria-label={`${previewTheme.name} preview`}
           >
             <motion.div
-              initial={{ y: 40, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 30, opacity: 0 }}
+              ref={modalRef}
+              initial={reduce ? false : { y: 40, opacity: 0 }}
+              animate={reduce ? undefined : { y: 0, opacity: 1 }}
+              exit={reduce ? undefined : { y: 30, opacity: 0 }}
               transition={{ type: "spring", stiffness: 260, damping: 30 }}
               onClick={(event) => event.stopPropagation()}
               className="w-full max-w-[420px] overflow-hidden rounded-t-[26px] bg-white sm:rounded-[26px]"
@@ -90,7 +129,7 @@ export function ThemeStep({
                 style={{ ...themeScopeVars(previewTheme), background: "var(--t-bg)" }}
               >
                 <div className="absolute inset-0">
-                  <ThemeCanvas themeId={previewTheme.id} sceneId="opening" />
+                  <ThemeCanvas themeId={previewTheme.id} sceneId="opening" paused={Boolean(reduce)} />
                 </div>
 
                 <div className="absolute inset-0 flex flex-col items-center justify-between px-5 py-6 text-center">
@@ -135,7 +174,7 @@ export function ThemeStep({
                   </p>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="secondary" onClick={() => setPreview(null)} className="flex-1">
+                  <Button ref={closeButtonRef} variant="secondary" onClick={() => setPreview(null)} className="flex-1">
                     Close
                   </Button>
                   <Button

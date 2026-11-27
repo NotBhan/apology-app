@@ -1,54 +1,41 @@
 // @vitest-environment node
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { createDb } from "@/db/client";
 import { PostgresRepository } from "@/lib/storage/postgres-repository";
 import { PostgresLifecycleStore } from "@/lib/lifecycle/postgres-store";
 import { runCleanup } from "@/lib/lifecycle/protocol";
-import { FilebaseObjectStore } from "@/lib/storage/filebase-store";
+import { createS3Transport, FilebaseObjectStore } from "@/lib/storage/filebase-store";
 import { storeUpload } from "@/lib/storage/uploads";
 import type { LifecycleStore } from "@/lib/lifecycle/store";
 import type { ObjectStore } from "@/lib/storage/object-store";
+import {
+  resolveIsolatedAcceptanceEnv,
+  verifyConnectedTestDatabaseIdentity,
+} from "@/test/db-safety";
 
 /**
- * Production infrastructure acceptance.
+ * Isolated infrastructure acceptance suite.
  *
- * This is the ONLY suite that touches real infrastructure. It is skipped unless
- * `ACCEPTANCE=1` and the provider credentials are present, so `npm test` stays
- * hermetic and offline.
+ * Requires BOTH:
+ * - `ACCEPTANCE=1`
+ * - Isolated `TEST_DATABASE_URL` and `FILEBASE_TEST_BUCKET`
  *
- *   ACCEPTANCE=1 npm run acceptance
- *
- * Nothing here is a fake: real Neon queries, real Filebase objects, real
- * pre-signed URLs fetched over HTTPS. If a test here fails, the external
- * contract is not met — no amount of green unit tests changes that.
+ * Never falls back to `DATABASE_URL` or live `FILEBASE_BUCKET`.
  */
+const ISOLATED = resolveIsolatedAcceptanceEnv();
+const REQUESTED = ISOLATED.requested;
+const READY = REQUESTED && ISOLATED.ready;
+const ACCEPTANCE_CFG = ISOLATED.config;
 
-/**
- * Two distinct gates, deliberately:
- *
- * - `ACCEPTANCE` unset → skipped, so `npm test` stays hermetic and offline.
- * - `ACCEPTANCE=1` but credentials missing → **fails**. Silently skipping an
- *   acceptance run would let the orchestrator report a pass it never observed,
- *   which is the one failure mode this suite exists to prevent.
- */
-const REQUESTED = process.env.ACCEPTANCE === "1";
-const READY =
-  Boolean(process.env.DATABASE_URL) &&
-  Boolean(process.env.FILEBASE_ACCESS_KEY) &&
-  Boolean(process.env.FILEBASE_SECRET_KEY) &&
-  Boolean(process.env.FILEBASE_BUCKET);
-
-// Runs only when both gates pass, so a missing-credential run reports one clear
-// failure instead of five confusing ones.
 const suite = READY ? describe : describe.skip;
 
 if (REQUESTED && !READY) {
-  describe("production infrastructure acceptance", () => {
-    it("requires provider credentials", () => {
+  describe("isolated infrastructure acceptance", () => {
+    it("requires isolated acceptance credentials", () => {
       throw new Error(
-        "ACCEPTANCE=1 but credentials are missing. Set DATABASE_URL, " +
-          "FILEBASE_ACCESS_KEY, FILEBASE_SECRET_KEY and FILEBASE_BUCKET.",
+        ISOLATED.reason ??
+          "ACCEPTANCE=1 but isolated credentials are missing. Set TEST_DATABASE_URL and FILEBASE_TEST_BUCKET.",
       );
     });
   });
@@ -65,13 +52,25 @@ const PNG = new Uint8Array(
 // These tests talk to real Neon and Filebase over the network: a single case
 // can spend seconds on uploads and deletes, and the batch case does three of
 // each. The 5s default is a property of the unit suite, not of this one.
-suite("production infrastructure acceptance", { timeout: 60_000 }, () => {
-  const db = READY ? createDb(process.env.DATABASE_URL!) : (null as never);
-  const repository = READY ? new PostgresRepository(db) : (null as never);
-  const lifecycle = READY ? new PostgresLifecycleStore(db) : (null as never);
-  const objects = READY ? FilebaseObjectStore.fromEnv() : (null as never);
+suite("isolated infrastructure acceptance", { timeout: 60_000 }, () => {
+  const db = ACCEPTANCE_CFG ? createDb(ACCEPTANCE_CFG.testDatabaseUrl) : (null as never);
+  const repository = ACCEPTANCE_CFG ? new PostgresRepository(db) : (null as never);
+  const lifecycle = ACCEPTANCE_CFG ? new PostgresLifecycleStore(db) : (null as never);
+  const objects = ACCEPTANCE_CFG
+    ? new FilebaseObjectStore(
+        createS3Transport({
+          accessKeyId: ACCEPTANCE_CFG.accessKeyId,
+          secretAccessKey: ACCEPTANCE_CFG.secretAccessKey,
+          bucket: ACCEPTANCE_CFG.bucket,
+          endpoint: ACCEPTANCE_CFG.endpoint,
+          region: ACCEPTANCE_CFG.region,
+        }),
+      )
+    : (null as never);
+  let dbVerified = false;
 
   async function wipe() {
+    if (!dbVerified) return;
     // Objects first: a stranded object after the row is gone is exactly the
     // failure this suite exists to rule out.
     const rows = await db.execute(sql`
@@ -90,12 +89,24 @@ suite("production infrastructure acceptance", { timeout: 60_000 }, () => {
         and owner_key_hash = ${OWNER}`);
   }
 
+  beforeAll(async () => {
+    if (!READY || !ACCEPTANCE_CFG) return;
+    await verifyConnectedTestDatabaseIdentity(
+      async (sqlText) => {
+        const res = await db.execute(sql.raw(sqlText));
+        return ((res as unknown as { rows?: Array<{ db_name?: string | null }> }).rows ?? []);
+      },
+      ACCEPTANCE_CFG.testDatabaseUrl,
+    );
+    dbVerified = true;
+  });
+
   beforeEach(async () => {
-    if (READY) await wipe();
+    if (READY && dbVerified) await wipe();
   });
 
   afterAll(async () => {
-    if (READY) await wipe();
+    if (READY && dbVerified) await wipe();
   });
 
   async function seedPublished(): Promise<{
@@ -140,7 +151,7 @@ suite("production infrastructure acceptance", { timeout: 60_000 }, () => {
       },
     );
 
-    const published = await repository.publish(draft.id, OWNER, 1);
+    const published = await repository.publish(draft.id, OWNER);
     return { id: draft.id, token: published.accessToken, objectKey: asset.objectKey };
   }
 

@@ -132,3 +132,79 @@ describe("createDraftSchema", () => {
     expect(result.success && result.data).not.toHaveProperty("role");
   });
 });
+
+describe("three-domain customization contracts", () => {
+  it("preserves legacy drafts with omitted content, visual, and interaction domains", () => {
+    const parsed = draftPayloadSchema.safeParse(valid);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.customization.content).toBeUndefined();
+      expect(parsed.data.customization.visual).toBeUndefined();
+      expect(parsed.data.customization.interaction).toBeUndefined();
+    }
+  });
+
+  it("accepts bounded content, visual, interaction, and contrast colour overrides", () => {
+    const parsed = draftPayloadSchema.safeParse({
+      ...valid,
+      customization: {
+        ...valid.customization,
+        colors: {
+          background: "#1b1426",
+          primary: "#f3c7d6",
+          text: "#fffaf3",
+          surface: "#281f36",
+        },
+        content: {
+          openingTitle: "For Ananya, quietly",
+          openingSubtitle: "Before the night ends",
+          openingCta: "Read this slowly",
+          envelopeHeader: "A personal letter",
+          envelopeSignOff: "Always yours",
+          closingHeadline: "Whenever you are ready",
+          closingBody: "No rush at all.",
+          sceneHeadings: {
+            hurt: "Where I went wrong",
+            memory: "Us at our best",
+          },
+          showSituationLabel: true,
+          showMemoryScene: true,
+        },
+        visual: {
+          fontPairing: "editorial",
+          textSize: "expressive",
+          alignment: "left",
+          decorationsEnabled: true,
+          decorationDensity: "minimal",
+        },
+        interaction: {
+          envelopeStyle: "ribbon",
+          transitionStyle: "paper",
+          revealStyle: "ink",
+          motionPreset: "gentle",
+        },
+      },
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("rejects out-of-enum visual or interaction presets and over-long copy", () => {
+    const badVisual = draftPayloadSchema.safeParse({
+      ...valid,
+      customization: {
+        ...valid.customization,
+        visual: { fontPairing: "comic-sans" },
+      },
+    });
+    expect(badVisual.success).toBe(false);
+
+    const badCopy = draftPayloadSchema.safeParse({
+      ...valid,
+      customization: {
+        ...valid.customization,
+        content: { openingCta: "x".repeat(41) },
+      },
+    });
+    expect(badCopy.success).toBe(false);
+  });
+});

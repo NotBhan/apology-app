@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { useReducedMotion } from "framer-motion";
 
 const subscribe = () => () => {};
 
@@ -19,4 +20,14 @@ export function useMounted(): boolean {
     () => true,
     () => false,
   );
+}
+
+/**
+ * Returns `true` only after hydration completes when the user prefers reduced
+ * motion, avoiding SSR-vs-client hydration mismatches on initial styles.
+ */
+export function useReducedMotionSafe(): boolean {
+  const mounted = useMounted();
+  const prefersReduced = useReducedMotion();
+  return mounted && Boolean(prefersReduced);
 }

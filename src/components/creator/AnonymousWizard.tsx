@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ApologyDraft, PhotoAsset } from "@/types/apology";
 import { Wizard, type WizardGateway } from "./Wizard";
@@ -59,24 +59,31 @@ function persist(draft: ApologyDraft) {
  */
 export function AnonymousWizard({ signedIn = false }: { signedIn?: boolean }) {
   const initial = useMemo(() => load(), []);
+  const latestDraftRef = useRef<ApologyDraft>(initial);
   const router = useRouter();
   const [adopting, setAdopting] = useState(false);
   const [adoptError, setAdoptError] = useState<string | null>(null);
+
+  const handleDraftChange = useCallback((nextDraft: ApologyDraft) => {
+    latestDraftRef.current = nextDraft;
+    persist(nextDraft);
+  }, []);
 
   const gateway: WizardGateway = useMemo(
     () => ({
       async save(_id, payload) {
         const merged = {
-          ...initial,
+          ...latestDraftRef.current,
           ...(payload as Partial<ApologyDraft>),
           updatedAt: new Date().toISOString(),
         } as ApologyDraft;
+        latestDraftRef.current = merged;
         persist(merged);
         return merged;
       },
 
       async publish() {
-        persist(initial);
+        persist(latestDraftRef.current);
         router.push(`/auth/sign-in?callbackURL=${encodeURIComponent("/create/start")}`);
         throw new Error("Sign in to publish. Your draft is kept in this browser.");
       },
@@ -89,7 +96,7 @@ export function AnonymousWizard({ signedIn = false }: { signedIn?: boolean }) {
         throw new Error("Sign in to add photos.");
       },
     }),
-    [initial, router],
+    [router],
   );
 
   async function adopt() {
@@ -147,7 +154,7 @@ export function AnonymousWizard({ signedIn = false }: { signedIn?: boolean }) {
           {adoptError}
         </p>
       ) : null}
-      <Wizard initialDraft={initial} gateway={gateway} onDraftChange={persist} />
+      <Wizard initialDraft={initial} gateway={gateway} onDraftChange={handleDraftChange} />
     </div>
   );
 }

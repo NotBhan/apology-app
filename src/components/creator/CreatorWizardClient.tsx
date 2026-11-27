@@ -14,8 +14,8 @@ const gateway: WizardGateway = {
     return result.data;
   },
 
-  async publish(id, durationDays) {
-    const result = await publishDraftAction(id, durationDays);
+  async publish(id) {
+    const result = await publishDraftAction(id);
     if (!result.ok || !result.data) {
       throw new Error(result.error ?? "Could not publish this letter.");
     }
@@ -37,6 +37,16 @@ const gateway: WizardGateway = {
       height: meta.height,
       focalPoint: "50% 50%",
     };
+  },
+
+  async deleteAsset(_draftId, assetId) {
+    const res = await fetch(`/api/uploads/${encodeURIComponent(assetId)}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new Error(data?.error ?? "Could not delete that file.");
+    }
   },
 };
 

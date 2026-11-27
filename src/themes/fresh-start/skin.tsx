@@ -106,59 +106,76 @@ function Frames({ opacity }: { opacity: number }) {
   );
 }
 
-export default function Skin({ sceneId, paused, className }: ThemeSkinProps) {
+export default function Skin({
+  sceneId,
+  paused,
+  decorationsEnabled = true,
+  decorationDensity = "balanced",
+  className,
+}: ThemeSkinProps) {
   const scene = sceneId ?? "opening";
   const field = FIELD[scene] ?? FIELD.opening;
   const sky = 100 - field.horizon;
+  const flyCount = Math.max(
+    1,
+    Math.round(
+      FLIES.length *
+        (decorationDensity === "minimal" ? 0.35 : decorationDensity === "lush" ? 1 : 0.4 + field.flies * 0.6),
+    ),
+  );
 
   return (
     <div className={`absolute inset-0 overflow-hidden pointer-events-none ${className ?? ""}`} aria-hidden data-scene={scene}>
       <style>{KEYFRAMES}</style>
 
-      <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, #e9f2df 0%, #f1f6ea 44%, #faf3e5 100%)" }} />
-      <div className="absolute inset-x-0 top-0 h-[62%]" style={{ background: "radial-gradient(72% 86% at 50% 4%, rgba(253,231,207,0.78) 0%, rgba(253,231,207,0) 74%)", opacity: field.haze, transition: EASE }} />
+      <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, var(--t-bg) 0%, var(--t-bg-alt) 100%)" }} />
+      <div className="absolute inset-x-0 top-0 h-[62%]" style={{ background: "radial-gradient(72% 86% at 50% 4%, var(--t-secondary) 0%, transparent 74%)", opacity: 0.28 * field.haze, transition: EASE }} />
 
-      {/* soft morning clouds */}
-      <div className="absolute" style={{ left: "6%", top: "14%", width: "34vw", height: "9vh", borderRadius: 999, background: "linear-gradient(180deg, rgba(255,255,255,0.82), rgba(255,255,255,0.05))", filter: "blur(14px)", opacity: 0.6 * field.haze + 0.2, transition: EASE }} />
-      <div className="absolute" style={{ right: "4%", top: "21%", width: "28vw", height: "7vh", borderRadius: 999, background: "linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0.02))", filter: "blur(16px)", opacity: 0.5 * field.haze + 0.18, transition: EASE }} />
+      {decorationsEnabled ? (
+        <>
+          {/* soft morning clouds */}
+          <div className="absolute" style={{ left: "6%", top: "14%", width: "34vw", height: "9vh", borderRadius: 999, background: "linear-gradient(180deg, rgba(255,255,255,0.68), rgba(255,255,255,0.05))", filter: "blur(14px)", opacity: 0.55 * field.haze + 0.15, transition: EASE }} />
+          <div className="absolute" style={{ right: "4%", top: "21%", width: "28vw", height: "7vh", borderRadius: 999, background: "linear-gradient(180deg, rgba(255,255,255,0.58), rgba(255,255,255,0.02))", filter: "blur(16px)", opacity: 0.45 * field.haze + 0.15, transition: EASE }} />
 
-      {/* sunrise arcs, sitting on the horizon */}
-      <div className="absolute left-1/2" style={{ bottom: `${sky}%`, width: "min(150vw, 900px)", height: "min(75vw, 450px)", marginLeft: "calc(min(150vw,900px) * -0.5)", transform: `translateY(2px) scale(${field.arc})`, transformOrigin: "50% 100%", transition: EASE }}>
-        <svg viewBox="0 0 400 200" width="100%" height="100%" aria-hidden preserveAspectRatio="xMidYMax meet">
-          <circle cx="200" cy="200" r="192" fill="none" stroke="#b6cf9a" strokeWidth="0.7" opacity="0.55" />
-          <circle cx="200" cy="200" r="150" fill="none" stroke="#cfe0b8" strokeWidth="0.7" opacity="0.65" />
-          <circle cx="200" cy="200" r="112" fill="none" stroke="#f3cfae" strokeWidth="0.7" opacity="0.7" />
-          <circle cx="200" cy="200" r="78" fill="none" stroke="#f7ddc0" strokeWidth="0.7" opacity="0.7" />
-        </svg>
-      </div>
+          {/* sunrise arcs, sitting on the horizon */}
+          <div className="absolute left-1/2" style={{ bottom: `${sky}%`, width: "min(150vw, 900px)", height: "min(75vw, 450px)", marginLeft: "calc(min(150vw,900px) * -0.5)", transform: `translateY(2px) scale(${field.arc})`, transformOrigin: "50% 100%", transition: EASE }}>
+            <svg viewBox="0 0 400 200" width="100%" height="100%" aria-hidden preserveAspectRatio="xMidYMax meet">
+              <circle cx="200" cy="200" r="192" fill="none" stroke="var(--t-primary)" strokeWidth="0.7" opacity="0.28" />
+              <circle cx="200" cy="200" r="150" fill="none" stroke="var(--t-primary)" strokeWidth="0.7" opacity="0.34" />
+              <circle cx="200" cy="200" r="112" fill="none" stroke="var(--t-accent)" strokeWidth="0.7" opacity="0.38" />
+              <circle cx="200" cy="200" r="78" fill="none" stroke="var(--t-secondary)" strokeWidth="0.7" opacity="0.4" />
+            </svg>
+          </div>
 
-      {/* the sun, low and warm */}
-      <div className="absolute left-1/2" style={{ bottom: `calc(${sky}% + ${field.sun}px)`, width: "min(30vw,180px)", height: "min(30vw,180px)", marginLeft: "calc(min(30vw,180px) * -0.5)", borderRadius: 9999, background: "radial-gradient(circle at 46% 46%, #fff9ea 0%, #ffe2b8 46%, #f7bd8a 72%, rgba(240,168,130,0) 74%)", transition: EASE }} />
-      <div className="absolute left-1/2" style={{ bottom: `calc(${sky}% - 30px)`, width: "min(70vw,420px)", height: "min(70vw,420px)", marginLeft: "calc(min(70vw,420px) * -0.5)", background: "radial-gradient(circle at 50% 62%, rgba(247,189,138,0.32) 0%, rgba(247,189,138,0) 64%)", transition: EASE }} />
+          {/* the sun, low and warm */}
+          <div className="absolute left-1/2" style={{ bottom: `calc(${sky}% + ${field.sun}px)`, width: "min(30vw,180px)", height: "min(30vw,180px)", marginLeft: "calc(min(30vw,180px) * -0.5)", borderRadius: 9999, background: "radial-gradient(circle at 46% 46%, #fff9ea 0%, var(--t-secondary) 52%, transparent 74%)", opacity: 0.85, transition: EASE }} />
+          <div className="absolute left-1/2" style={{ bottom: `calc(${sky}% - 30px)`, width: "min(70vw,420px)", height: "min(70vw,420px)", marginLeft: "calc(min(70vw,420px) * -0.5)", background: "radial-gradient(circle at 50% 62%, var(--t-accent) 0%, transparent 64%)", opacity: 0.22, transition: EASE }} />
 
-      {/* meadow: horizon line then two hills */}
-      <div className="absolute inset-x-0" style={{ top: `${field.horizon}%`, height: 1, background: "linear-gradient(90deg, rgba(76,115,80,0) 0%, rgba(76,115,80,0.55) 26%, rgba(76,115,80,0.55) 74%, rgba(76,115,80,0) 100%)", transition: EASE }} />
-      <div className="absolute inset-x-0 bottom-0" style={{ top: `${field.horizon}%` }}>
-        <svg viewBox="0 0 1440 320" width="100%" height="100%" preserveAspectRatio="none" aria-hidden>
-          <path d="M0 96C240 40 420 128 690 92S1080 24 1440 78V320H0Z" fill="#dfeaca" opacity="0.9" />
-          <path d="M0 164C300 112 520 190 820 156s380-52 620 4v160H0Z" fill="#cadfb4" opacity="0.92" />
-          <path d="M0 250C280 208 560 268 880 240s400-38 560 2v78H0Z" fill="#b6cf9a" />
-        </svg>
-        <div className="absolute inset-x-0 bottom-0" style={{ height: "38%", background: "linear-gradient(to top, rgba(214,229,196,0.55), transparent)" }} />
-      </div>
+          {/* meadow: horizon line then two hills */}
+          <div className="absolute inset-x-0" style={{ top: `${field.horizon}%`, height: 1, background: "linear-gradient(90deg, transparent 0%, var(--t-primary) 26%, var(--t-primary) 74%, transparent 100%)", opacity: 0.35, transition: EASE }} />
+          <div className="absolute inset-x-0 bottom-0" style={{ top: `${field.horizon}%` }}>
+            <svg viewBox="0 0 1440 320" width="100%" height="100%" preserveAspectRatio="none" aria-hidden>
+              <path d="M0 96C240 40 420 128 690 92S1080 24 1440 78V320H0Z" fill="var(--t-secondary)" opacity="0.22" />
+              <path d="M0 164C300 112 520 190 820 156s380-52 620 4v160H0Z" fill="var(--t-secondary)" opacity="0.32" />
+              <path d="M0 250C280 208 560 268 880 240s400-38 560 2v78H0Z" fill="var(--t-primary)" opacity="0.22" />
+            </svg>
+            <div className="absolute inset-x-0 bottom-0" style={{ height: "38%", background: "linear-gradient(to top, var(--t-bg-alt), transparent)", opacity: 0.7 }} />
+          </div>
 
-      {STEMS.map(([left, h, delay, flip], i) => (
-        <Stem key={i} left={left} h={h} delay={delay} flip={flip} paused={paused} />
-      ))}
+          {STEMS.map(([left, h, delay, flip], i) => (
+            <Stem key={i} left={left} h={h} delay={delay} flip={flip} paused={paused} />
+          ))}
 
-      {FLIES.slice(0, Math.max(2, Math.round(FLIES.length * (0.4 + field.flies * 0.6)))).map(([path, dur, delay, size, wing, rest], i) => (
-        <Butterfly key={i} path={path} dur={dur} delay={delay} size={size} wing={wing} rest={rest} paused={paused} />
-      ))}
+          {FLIES.slice(0, flyCount).map(([path, dur, delay, size, wing, rest], i) => (
+            <Butterfly key={i} path={path} dur={dur} delay={delay} size={size} wing={wing} rest={rest} paused={paused} />
+          ))}
 
-      <Frames opacity={field.frames * 0.85} />
-      <div className="absolute" style={{ left: "50%", top: "34%", width: "min(62vw,340px)", height: "min(40vw,220px)", marginLeft: "calc(min(62vw,340px) * -0.5)", border: "1px solid rgba(196,160,116,0.55)", borderRadius: 6, background: "linear-gradient(160deg, rgba(226,203,166,0.18), rgba(226,203,166,0.04))", opacity: field.card, transition: EASE }} />
+          <Frames opacity={field.frames * 0.85} />
+          <div className="absolute" style={{ left: "50%", top: "34%", width: "min(62vw,340px)", height: "min(40vw,220px)", marginLeft: "calc(min(62vw,340px) * -0.5)", border: "1px solid var(--t-border)", borderRadius: 6, background: "linear-gradient(160deg, var(--t-surface), transparent)", opacity: field.card, transition: EASE }} />
+        </>
+      ) : null}
 
-      <div className="absolute inset-x-0 bottom-0 h-[26vh]" style={{ background: "linear-gradient(to top, rgba(214,229,196,0.6), transparent)", opacity: 0.8 }} />
+      <div className="absolute inset-x-0 bottom-0 h-[26vh]" style={{ background: "linear-gradient(to top, var(--t-bg-alt), transparent)", opacity: 0.7 }} />
     </div>
   );
 }

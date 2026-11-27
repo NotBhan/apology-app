@@ -10,6 +10,7 @@ interface LetterCardProps {
   body: string;
   variant?: ThemeAssets["letter"];
   signature?: boolean;
+  signOff?: string;
   className?: string;
   revealMode?: "ink" | "fade" | "typewriter";
   animate?: boolean;
@@ -25,6 +26,7 @@ export function LetterCard({
   body,
   variant = "plain",
   signature = true,
+  signOff = "with all of me",
   className,
   revealMode = "fade",
   animate = true,
@@ -48,13 +50,13 @@ export function LetterCard({
       {variant === "deckle" ? <Deckle /> : null}
       {variant === "note" ? <NoteEdges /> : null}
 
-      <div className="relative">
+      <div className="relative" style={{ textAlign: "left" }}>
         <p
           className="mb-4 text-sm sm:text-base"
           style={{
             fontFamily: "var(--t-font-deco)",
             color: "var(--t-primary)",
-            fontSize: "1.15rem",
+            fontSize: "calc(1.15rem * var(--t-text-scale, 1))",
           }}
         >
           {recipientName || "you"},
@@ -64,11 +66,14 @@ export function LetterCard({
           initial={still ? false : { opacity: 0 }}
           animate={still ? undefined : { opacity: 1 }}
           transition={{ duration: revealMode === "typewriter" ? 0.2 : 0.9 }}
-          className="whitespace-pre-wrap text-[0.95rem] leading-[1.75] sm:text-base"
+          className="whitespace-pre-wrap leading-[1.75]"
           style={{
             fontFamily:
               revealMode === "typewriter" ? "var(--t-font-deco)" : "var(--t-font-body)",
-            fontSize: revealMode === "typewriter" ? "1.15rem" : undefined,
+            fontSize:
+              revealMode === "typewriter"
+                ? "calc(1.15rem * var(--t-text-scale, 1))"
+                : "calc(0.95rem * var(--t-text-scale, 1))",
           }}
         >
           {body}
@@ -85,7 +90,7 @@ export function LetterCard({
               className="block text-[0.7rem] uppercase tracking-[0.18em]"
               style={{ color: "var(--t-muted)" }}
             >
-              with all of me
+              {signOff || "with all of me"}
             </span>
             <span
               className="block text-2xl"

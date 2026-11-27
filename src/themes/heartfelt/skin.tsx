@@ -120,7 +120,13 @@ function LetterheadRule({ className, tone }: { className: string; tone: string }
   );
 }
 
-export default function Skin({ sceneId, paused = false, className }: ThemeSkinProps) {
+export default function Skin({
+  sceneId,
+  paused = false,
+  decorationsEnabled = true,
+  decorationDensity = "balanced",
+  className,
+}: ThemeSkinProps) {
   const scene = sceneId ?? "opening";
   const opening = scene === "opening";
   const sealed = scene === "envelope";
@@ -128,52 +134,57 @@ export default function Skin({ sceneId, paused = false, className }: ThemeSkinPr
   const memory = scene === "memory";
   const closing = scene === "closing";
   const answering = scene === "response";
+  const blooms = decorationDensity === "minimal" ? BLOOMS.slice(0, 2) : BLOOMS;
 
   return (
     <div className={["pointer-events-none absolute inset-0 overflow-hidden", className].filter(Boolean).join(" ")} aria-hidden>
-      <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, #fbf7ee 0%, var(--t-bg) 52%, var(--t-bg-alt) 100%)" }} />
-      <Fibre />
-      <div className="absolute inset-0" style={{ background: "radial-gradient(108% 82% at 50% 42%, transparent 40%, rgba(90, 70, 50, 0.16) 100%)", opacity: 0.85 }} />
-      {BLOOMS.map((bloom) => (
-        <InkBloom key={bloom.left} left={bloom.left} top={bloom.top} size={bloom.size} opacity={bloom.opacity} paused={paused} />
-      ))}
-      {(letter || opening) && <><Deckle edge="top" /><Deckle edge="bottom" /></>}
-      {letter && <RuledSheet paused={paused} />}
-      {letter && <CornerFold corner="tl" />}
-      {opening && <Envelope narrow paused={paused} />}
-      {sealed && (
+      <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, var(--t-bg) 0%, var(--t-bg-alt) 100%)" }} />
+      {decorationsEnabled ? (
         <>
-          <div className="absolute inset-0" style={{ background: "radial-gradient(82% 66% at 50% 54%, rgba(255, 251, 242, 0.5), transparent 68%)" }} />
-          <Envelope paused={paused} />
-          {POSTMARKS.map((mark) => (
-            <svg key={mark.left} viewBox="-50 -50 100 100" width={mark.size} height={mark.size} className="absolute" style={{ left: mark.left, top: mark.top, transform: `rotate(${mark.rotate}deg)`, color: "var(--t-secondary)" }}>
-              <circle r="43" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.42" />
-              <circle r="34" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="3 5" opacity="0.34" />
-              <path d="M-47 5h94M-47 13h70" stroke="currentColor" strokeWidth="1.2" opacity="0.3" />
-            </svg>
+          <Fibre />
+          <div className="absolute inset-0" style={{ background: "radial-gradient(108% 82% at 50% 42%, transparent 40%, var(--t-bg-alt) 100%)", opacity: 0.6 }} />
+          {blooms.map((bloom) => (
+            <InkBloom key={bloom.left} left={bloom.left} top={bloom.top} size={bloom.size} opacity={bloom.opacity} paused={paused} />
           ))}
+          {(letter || opening) && <><Deckle edge="top" /><Deckle edge="bottom" /></>}
+          {letter && <RuledSheet paused={paused} />}
+          {letter && <CornerFold corner="tl" />}
+          {opening && <Envelope narrow paused={paused} />}
+          {sealed && (
+            <>
+              <div className="absolute inset-0" style={{ background: "radial-gradient(82% 66% at 50% 54%, var(--t-surface), transparent 68%)", opacity: 0.4 }} />
+              <Envelope paused={paused} />
+              {POSTMARKS.map((mark) => (
+                <svg key={mark.left} viewBox="-50 -50 100 100" width={mark.size} height={mark.size} className="absolute" style={{ left: mark.left, top: mark.top, transform: `rotate(${mark.rotate}deg)`, color: "var(--t-secondary)" }}>
+                  <circle r="43" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.42" />
+                  <circle r="34" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="3 5" opacity="0.34" />
+                  <path d="M-47 5h94M-47 13h70" stroke="currentColor" strokeWidth="1.2" opacity="0.3" />
+                </svg>
+              ))}
+            </>
+          )}
+          {memory && (
+            <>
+              <CornerFold corner="tr" />
+              {STAMPS.map((stamp) => (
+                <div key={stamp.left} className="absolute h-[68px] w-[54px]" style={{ left: stamp.left, top: stamp.top, transform: `rotate(${stamp.rotate}deg)`, background: "var(--t-surface)", border: "1px dashed var(--t-border)" }}>
+                  <div className="absolute inset-[6px]" style={{ background: "linear-gradient(140deg, var(--t-secondary), var(--t-primary))", opacity: 0.25 }} />
+                </div>
+              ))}
+              {POSTMARKS.map((mark) => (
+                <div key={`${mark.left}-ring`} className="absolute rounded-full border" style={{ left: mark.left, top: mark.top, width: mark.size * 0.7, height: mark.size * 0.7, borderColor: "var(--t-secondary)", opacity: 0.28 }} />
+              ))}
+            </>
+          )}
+          {closing && <><CornerFold corner="br" /><div className="absolute left-1/2 top-[38%] h-[110px] w-[110px] -translate-x-1/2"><WaxSeal size={110} paused={paused} subtle /></div></>}
+          {answering && <div className="absolute left-[7%] top-[64%] h-[58px] w-[58px] -translate-y-1/2 opacity-70"><WaxSeal size={58} paused={paused} subtle /></div>}
+          <LetterheadRule className="left-1/2 top-[9%] w-[min(56vw,300px)] -translate-x-1/2" tone="var(--t-secondary)" />
+          {(letter || sealed || closing || answering) && (
+            <LetterheadRule className="left-1/2 bottom-[9%] w-[min(44vw,240px)] -translate-x-1/2" tone="var(--t-secondary)" />
+          )}
         </>
-      )}
-      {memory && (
-        <>
-          <CornerFold corner="tr" />
-          {STAMPS.map((stamp) => (
-            <div key={stamp.left} className="absolute h-[68px] w-[54px]" style={{ left: stamp.left, top: stamp.top, transform: `rotate(${stamp.rotate}deg)`, background: "var(--t-surface)", border: "1px dashed rgba(90, 70, 50, 0.42)" }}>
-              <div className="absolute inset-[6px]" style={{ background: "linear-gradient(140deg, rgba(156, 124, 82, 0.3), rgba(140, 47, 47, 0.2))" }} />
-            </div>
-          ))}
-          {POSTMARKS.map((mark) => (
-            <div key={`${mark.left}-ring`} className="absolute rounded-full border" style={{ left: mark.left, top: mark.top, width: mark.size * 0.7, height: mark.size * 0.7, borderColor: "var(--t-secondary)", opacity: 0.28 }} />
-          ))}
-        </>
-      )}
-      {closing && <><CornerFold corner="br" /><div className="absolute left-1/2 top-[38%] h-[110px] w-[110px] -translate-x-1/2"><WaxSeal size={110} paused={paused} subtle /></div></>}
-      {answering && <div className="absolute left-[7%] top-[64%] h-[58px] w-[58px] -translate-y-1/2 opacity-70"><WaxSeal size={58} paused={paused} subtle /></div>}
-      <LetterheadRule className="left-1/2 top-[9%] w-[min(56vw,300px)] -translate-x-1/2" tone="var(--t-secondary)" />
-      {(letter || sealed || closing || answering) && (
-        <LetterheadRule className="left-1/2 bottom-[9%] w-[min(44vw,240px)] -translate-x-1/2" tone="var(--t-secondary)" />
-      )}
-      <div className="absolute inset-0" style={{ background: "linear-gradient(200deg, rgba(255, 251, 242, 0.28) 0%, transparent 38%, rgba(90, 70, 50, 0.12) 100%)" }} />
+      ) : null}
+      <div className="absolute inset-0" style={{ background: "linear-gradient(200deg, var(--t-surface) 0%, transparent 40%, var(--t-bg-alt) 100%)", opacity: 0.28 }} />
     </div>
   );
 }

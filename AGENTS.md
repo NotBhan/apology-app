@@ -35,10 +35,13 @@ storage may define components, timing functions or selectors.
 
 ## Link lifetime
 
-- Published links are temporary: `MIN_LINK_DAYS` to `MAX_LINK_DAYS` (1–7).
-- `expiresAt` is always computed on the server. Never accept it from a client
-  and never add it to `draftPayloadSchema`.
-- A published record without a valid future `expiresAt` must never be served.
+- Published links are **permanent**. `status === 'published'` is the whole
+  liveness rule; there is no TTL, no `expiresAt` gate and no expiry sweep.
+- `isLinkLive(status)` takes no expiry argument on purpose. Never reintroduce
+  one, and never treat a missing expiry as "dead".
+- Re-publishing an already-published record must keep the token it issued, so a
+  link that was already sent keeps working. Only a revoked record mints a new one.
+- Revoking or deleting is the only way to take a link out of service.
 
 ## Adding a theme
 
@@ -56,10 +59,12 @@ storage may define components, timing functions or selectors.
 
 ## Legacy records
 
-- A published record with no `expires_at` is inaccessible and purgeable. Never
-  treat a missing expiry as permanent access.
-- New rows cannot reach that state: `apologies_published_complete` is a CHECK
-  constraint. Only rows written before the constraint existed could lack one.
+- A published record with no `expires_at` is **live**, not dead. Permanence is
+  the current model, so a missing expiry is the normal state.
+- Rows written before the permanent-link migration may still carry an
+  `expires_at`; it is ignored on read and never selected by the cleanup worker.
+- `apologies_published_complete` requires `published_at` and
+  `private_token_hash`, not an expiry.
 
 ## No Firebase, no cron
 
@@ -79,10 +84,12 @@ storage may define components, timing functions or selectors.
 
 ## Deletion lifecycle
 
-- Expiry enforcement and deletion are separate responsibilities. Access stops
-  from `isLinkLive()`; physical removal is the purge worker.
-- `src/lib/lifecycle/purge.ts` is the only deletion path. Manual delete and the
-  scheduled cron both call it — never delete a record directly.
+- Access and deletion are separate responsibilities. Access stops from
+  `isLinkLive()`; physical removal is the purge worker.
+- `src/lib/lifecycle/protocol.ts` is the only deletion path. Manual delete and
+  the scheduled worker both call it — never delete a record directly.
+- Only a durable `deletion_jobs` row makes a record a candidate. There is no
+  expiry sweep: a live link can never be selected for deletion.
 - Order is fixed: **assets first, then the record**. A record pointing at
   missing photos is worse than a leftover file.
 - Every step is idempotent and the job lease prevents concurrent workers from
@@ -121,10 +128,34 @@ storage may define components, timing functions or selectors.
   `src/lib/design/symbols.ts` is the reference, and a test enforces the ban.
 - Recipient responses are never transmitted. Do not add an endpoint for them.
 
-## Before finishing work
+## Validation policy (changed-file-first, mandatory DB safety)
 
-```bash
-npm run validate   # lint → typecheck → test → build
-```
+These rules take precedence over generic instructions to run `npm run validate` after every change.
+
+### Lint
+
+- For isolated changes, run ESLint only on edited TypeScript/TSX files:
+  `npx eslint <edited files...>`
+- Preserve existing ESLint rules and configuration; do not run full-repo lint for isolated presentation changes.
+
+### Tests
+
+- Run directly relevant tests for edited components/behavior plus affected dependent tests when shared components or contracts change.
+- Do not run the entire test suite automatically for isolated UI edits, and never delete or weaken existing tests to make edits pass.
+
+### Typecheck and build
+
+- Run `npm run typecheck` when changes affect shared interfaces, schemas, module registration, API contracts, persistence, routing, or shared component contracts.
+- Run `npm run build` when changes affect routing, module integration, or production compilation.
+
+### Database safety — mandatory
+
+- Never use `DATABASE_URL` as a test database fallback or target in tests.
+- Destructive integration suites require an explicitly configured isolated `TEST_DATABASE_URL` (distinct from `DATABASE_URL`) and must verify connected database identity (`verifyConnectedTestDatabaseIdentity`) before any `DELETE` or fixture setup.
+- Infrastructure acceptance (`src/acceptance/infrastructure.test.ts`) requires both `ACCEPTANCE=1` and isolated `TEST_DATABASE_URL` + `FILEBASE_TEST_BUCKET` (never `FILEBASE_BUCKET`).
+- Missing isolated test configuration must skip or fail safely without writing to production Neon or Filebase.
+- Never run cleanup workers or destructive tests against production.
+
+## Responsive checks
 
 Mobile checks at 360 px and 390 px: no horizontal overflow, no console errors.

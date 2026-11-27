@@ -7,7 +7,6 @@ import { getTheme } from "@/themes/registry";
 import { getStickerPack } from "@/sticker-packs/registry";
 import { resolveSituationLabel } from "@/content/situations";
 import { deleteDraftAction, publishDraftAction, revokeDraftAction } from "@/app/create/actions";
-import { daysRemaining, formatDuration, formatExpiry, isExpired } from "@/lib/expiry";
 import { useMounted } from "@/hooks/useMounted";
 import { Icon } from "@/components/ui/icons";
 import { OptimizedPhoto } from "@/components/ui/OptimizedPhoto";
@@ -80,9 +79,7 @@ function ManageRow({
   const mounted = useMounted();
   const [pending, startTransition] = useTransition();
   const [status, setStatus] = useState(draft.status);
-  const [expiresAt, setExpiresAt] = useState(draft.expiresAt);
   const [confirming, setConfirming] = useState<null | "revoke" | "delete">(null);
-  const [renewed, setRenewed] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [sharePath, setSharePath] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
@@ -122,9 +119,9 @@ function ManageRow({
     rowSubtitle = `${bdayTheme.name} · Happy Birthday`;
   }
 
-  const expired = status === "published" && isExpired(expiresAt);
-  const remaining = daysRemaining(expiresAt);
-  const renewable = expired && !cleanupPending;
+  // A published link never expires on its own. Only the author's explicit
+  // revoke (or a queued deletion) takes it out of service.
+  const live = status === "published";
 
   function act(kind: "revoke" | "delete") {
     startTransition(async () => {
@@ -147,16 +144,27 @@ function ManageRow({
     });
   }
 
-  /** Re-publishes with the window the sender already chose, same token. */
-  function renew() {
+  /** Opens the share dialog without rotating the link already sent. */
+  function share() {
     startTransition(async () => {
-      const result = await publishDraftAction(draft.id, draft.linkDurationDays);
+      setNotice(null);
+      setSharing(true);
+      const result = await publishDraftAction(draft.id);
+      setSharing(false);
       if (result.ok && result.data) {
         setStatus("published");
-        setExpiresAt(result.data.expiresAt);
-        setRenewed(true);
+        if (result.data.path) {
+          setSharePath(result.data.path);
+        } else {
+          // The record was already published, so this call preserved the token
+          // it issued earlier. The plaintext cannot be recovered by design; the
+          // link the recipient already holds is still live.
+          setNotice(
+            "This link is already live and unchanged. If you no longer have it, revoke and republish to issue a new one.",
+          );
+        }
       } else {
-        setNotice(result.error ?? "This letter can no longer be renewed.");
+        setNotice(result.error ?? "Could not generate share link.");
       }
     });
   }
@@ -169,28 +177,18 @@ function ManageRow({
             <h2 className="truncate text-[1rem] font-semibold text-[#33203f]">
               {draft.recipientName || "Untitled letter"}
             </h2>
-            <StatusPill status={status} expired={expired} cleanupPending={cleanupPending} />
+            <StatusPill status={status} cleanupPending={cleanupPending} />
           </div>
           <p className="mt-0.5 text-[0.74rem] text-[#8a7a9c]">{rowSubtitle}</p>
 
           {status === "published" ? (
-            <p
-              className={`mt-0.5 text-[0.68rem] ${
-                expired ? "font-semibold text-[#a8556b]" : "text-[#3f7a4a]"
-              }`}
-            >
+            <p className="mt-0.5 text-[0.68rem] text-[#3f7a4a]">
               {/* Dates are timezone-dependent; render them after mount only. */}
               {!mounted
-                ? expired
-                  ? "Link expired"
-                  : "Link active"
-                : expired
-                  ? cleanupPending
-                    ? "Expired — files being deleted"
-                    : "Expired — awaiting cleanup"
-                  : remaining <= 1
-                    ? `Expires tomorrow · ${formatExpiry(expiresAt)}`
-                    : `${remaining} days remaining · ${formatExpiry(expiresAt)}`}
+                ? "Link active"
+                : cleanupPending
+                  ? "Deleting — files being removed"
+                  : "Live · stays active until you revoke or delete it"}
             </p>
           ) : (
             <p className="mt-0.5 text-[0.68rem] text-[#b3a5c2]">
@@ -228,39 +226,14 @@ function ManageRow({
         <button
           type="button"
           disabled={pending || sharing}
-          onClick={() => {
-            startTransition(async () => {
-              setNotice(null);
-              setSharing(true);
-              const result = await publishDraftAction(draft.id, draft.linkDurationDays);
-              setSharing(false);
-              if (result.ok && result.data) {
-                setStatus("published");
-                setExpiresAt(result.data.expiresAt);
-                setSharePath(result.data.path);
-              } else {
-                setNotice(result.error ?? "Could not generate share link.");
-              }
-            });
-          }}
+          onClick={share}
           className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-[#6d3fa8] px-3.5 text-[0.74rem] font-semibold text-white shadow-sm transition hover:bg-[#5b3290] disabled:opacity-50 cursor-pointer motion-safe:active:scale-95"
         >
           <Icon name="share" size={13} />
-          <span>{sharing ? "Preparing…" : status === "published" && !expired ? "Share / QR" : "Share"}</span>
+          <span>{sharing ? "Preparing…" : live ? "Share / QR" : "Share"}</span>
         </button>
 
-        {renewable ? (
-          <button
-            type="button"
-            disabled={pending}
-            onClick={renew}
-            className="inline-flex min-h-9 items-center rounded-full bg-[#6d3fa8] px-3 text-[0.74rem] font-semibold text-white disabled:opacity-50"
-          >
-            {pending ? "Renewing…" : `Renew ${formatDuration(draft.linkDurationDays)}`}
-          </button>
-        ) : null}
-
-        {status === "published" && !expired ? (
+        {live ? (
           <button
             type="button"
             disabled={pending}
@@ -395,12 +368,6 @@ function ManageRow({
         </div>
       ) : null}
 
-      {renewed ? (
-        <p className="mt-2 rounded-xl bg-[#f0f8f2] px-3 py-2 text-[0.72rem] text-[#3f7a4a]">
-          Link renewed — live until {formatExpiry(expiresAt)}.
-        </p>
-      ) : null}
-
       {notice ? (
         <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-amber-50/90 px-3 py-2 text-[0.72rem] text-amber-900 border border-amber-200">
           <span>{notice}</span>
@@ -427,7 +394,7 @@ function ManageRow({
         <div className="mt-3 rounded-2xl bg-[#faf6ff] p-3">
           <p className="text-[0.76rem] text-[#5b4a6d]">
             {confirming === "revoke"
-              ? "Revoking stops the link from opening for anyone. The letter and its files stay until the link expires."
+              ? "Revoking stops the link from opening for anyone, immediately. The letter and its files stay in your account until you delete them."
               : "Deleting removes this letter, its messages and its uploaded photos and audio permanently. This cannot be undone."}
           </p>
           <div className="mt-2 flex gap-2">
@@ -488,23 +455,22 @@ function DeletedRow({ tombstone }: { tombstone: DeletionTombstone }) {
 
 function StatusPill({
   status,
-  expired,
   cleanupPending,
 }: {
   status: ApologyDraft["status"];
-  expired: boolean;
   cleanupPending: boolean;
 }) {
   const map = {
     draft: { label: "Draft", className: "bg-[#f4eefb] text-[#7c6892]" },
-    published: expired
-      ? {
-          label: cleanupPending ? "Deleting" : "Expired",
-          className: "bg-[#fdf1f3] text-[#a8556b]",
-        }
-      : { label: "Live", className: "bg-[#e8f5ec] text-[#3f7a4a]" },
+    published: {
+      label: "Live",
+      className: "bg-[#e8f5ec] text-[#3f7a4a]",
+    },
     revoked: { label: "Revoked", className: "bg-[#fdf1f3] text-[#a8556b]" },
-    deleted: { label: "Deleting", className: "bg-[#fdf1f3] text-[#a8556b]" },
+    deleted: {
+      label: cleanupPending ? "Deleting" : "Deleted",
+      className: "bg-[#fdf1f3] text-[#a8556b]",
+    },
   } as const;
   const item = map[status];
   return (

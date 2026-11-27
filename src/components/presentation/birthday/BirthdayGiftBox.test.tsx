@@ -37,4 +37,19 @@ describe("BirthdayGiftBox", () => {
     await user.click(giftBtn);
     expect(screen.getByText(/unwrapping your gift/i)).toBeInTheDocument();
   });
+
+  it("keeps trigger visibly focusable and supports direct reveal mode", () => {
+    render(
+      <BirthdayGiftBox
+        recipientName="Aria"
+        senderName="Leo"
+        theme={theme}
+        revealMode="direct"
+      />,
+    );
+
+    const giftBtn = screen.getByRole("button", { name: /open birthday gift box for aria/i });
+    expect(giftBtn.className).not.toContain("opacity-0");
+    expect(screen.getByText(/gift box unwrapped!/i)).toBeInTheDocument();
+  });
 });

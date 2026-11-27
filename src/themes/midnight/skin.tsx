@@ -133,7 +133,13 @@ function MidnightEnvelope({ paused }: { paused: boolean }) {
   );
 }
 
-export default function Skin({ sceneId, paused = false, className }: ThemeSkinProps) {
+export default function Skin({
+  sceneId,
+  paused = false,
+  decorationsEnabled = true,
+  decorationDensity = "balanced",
+  className,
+}: ThemeSkinProps) {
   const scene = sceneId ?? "opening";
   const opening = scene === "opening";
   const letter = scene === "letter";
@@ -142,7 +148,13 @@ export default function Skin({ sceneId, paused = false, className }: ThemeSkinPr
   const closing = scene === "closing";
   const answering = scene === "response";
   const quiet = !opening && !letter && !sealed && !memory && !closing && !answering;
-  const starCount = letter || closing ? 22 : memory ? 50 : opening ? 58 : 40;
+  const baseStars = letter || closing ? 22 : memory ? 50 : opening ? 58 : 40;
+  const starCount =
+    decorationDensity === "minimal"
+      ? Math.max(10, Math.round(baseStars * 0.45))
+      : decorationDensity === "lush"
+        ? baseStars + 12
+        : baseStars;
 
   return (
     <div className={["pointer-events-none absolute inset-0 overflow-hidden", className].filter(Boolean).join(" ")} aria-hidden>
@@ -159,44 +171,48 @@ export default function Skin({ sceneId, paused = false, className }: ThemeSkinPr
         }
       `}</style>
       <div className="absolute inset-0" style={{ background: "var(--t-bg)" }} />
-      <div className="absolute inset-0" style={{ background: "radial-gradient(132% 104% at 50% 114%, var(--t-bg-alt) 0%, var(--t-bg) 58%, #070a1c 100%)" }} />
-      {(opening || quiet || memory || closing) && <Aurora paused={paused} />}
-      <div className="absolute inset-x-0 bottom-0 h-[38vh]" style={{ background: "radial-gradient(124% 100% at 50% 132%, rgba(143, 166, 255, 0.34), rgba(169, 139, 255, 0.12) 46%, transparent 74%)", opacity: closing ? 1.15 : 0.85 }} />
-      <StarField count={starCount} paused={paused} />
-      {(opening || quiet || sealed || memory) && <Moon left={sealed ? "8%" : "68%"} top={sealed ? "16%" : "9%"} size={sealed ? 88 : 128} />}
-      {(opening || quiet) && (
-        <Constellation shape={SHAPES.dipper} paused={paused} className="left-[6%] top-[14%] h-[34vh] w-[46vw]" />
-      )}
-      {letter && <Constellation shape={SHAPES.signature} paused={paused} className="inset-x-[8%] top-[10%] h-[26vh] w-[84%]" />}
-      {sealed && <Constellation shape={SHAPES.crown} paused={paused} className="inset-x-[14%] top-[8%] h-[25vh] w-[72%]" />}
-      {memory && <Constellation shape={SHAPES.swan} paused={paused} className="inset-x-[10%] top-[6%] h-[30vh] w-[80%]" />}
-      {answering && <Constellation shape={SHAPES.heart} paused={paused} className="left-1/2 top-[38%] h-[42vh] w-[62vw] -translate-x-1/2 -translate-y-1/2" />}
-      {letter && (
+      <div className="absolute inset-0" style={{ background: "radial-gradient(132% 104% at 50% 114%, var(--t-bg-alt) 0%, var(--t-bg) 62%, transparent 100%)" }} />
+      {decorationsEnabled ? (
         <>
-          <div
-            className="absolute left-1/2 top-1/2 h-[64vh] w-[76vw] -translate-x-1/2 -translate-y-1/2 rounded-[48px]"
-            style={{ background: "radial-gradient(closest-side, rgba(143, 166, 255, 0.2), transparent 78%)" }}
-          />
-          <div className="absolute inset-x-[18%] top-[78%] h-px" style={{ background: "linear-gradient(90deg, transparent, rgba(143, 166, 255, 0.5), transparent)" }} />
+          {(opening || quiet || memory || closing) && <Aurora paused={paused} />}
+          <div className="absolute inset-x-0 bottom-0 h-[38vh]" style={{ background: "radial-gradient(124% 100% at 50% 132%, var(--t-primary), var(--t-secondary) 46%, transparent 74%)", opacity: closing ? 0.28 : 0.2 }} />
+          <StarField count={starCount} paused={paused} />
+          {(opening || quiet || sealed || memory) && <Moon left={sealed ? "8%" : "68%"} top={sealed ? "16%" : "9%"} size={sealed ? 88 : 128} />}
+          {(opening || quiet) && (
+            <Constellation shape={SHAPES.dipper} paused={paused} className="left-[6%] top-[14%] h-[34vh] w-[46vw]" />
+          )}
+          {letter && <Constellation shape={SHAPES.signature} paused={paused} className="inset-x-[8%] top-[10%] h-[26vh] w-[84%]" />}
+          {sealed && <Constellation shape={SHAPES.crown} paused={paused} className="inset-x-[14%] top-[8%] h-[25vh] w-[72%]" />}
+          {memory && <Constellation shape={SHAPES.swan} paused={paused} className="inset-x-[10%] top-[6%] h-[30vh] w-[80%]" />}
+          {answering && <Constellation shape={SHAPES.heart} paused={paused} className="left-1/2 top-[38%] h-[42vh] w-[62vw] -translate-x-1/2 -translate-y-1/2" />}
+          {letter && (
+            <>
+              <div
+                className="absolute left-1/2 top-1/2 h-[64vh] w-[76vw] -translate-x-1/2 -translate-y-1/2 rounded-[48px]"
+                style={{ background: "radial-gradient(closest-side, var(--t-primary), transparent 78%)", opacity: 0.14 }}
+              />
+              <div className="absolute inset-x-[18%] top-[78%] h-px" style={{ background: "linear-gradient(90deg, transparent, var(--t-primary), transparent)", opacity: 0.45 }} />
+            </>
+          )}
+          {sealed && <MidnightEnvelope paused={paused} />}
+          {(memory || closing) && (
+            <>
+              <ShootingStar paused={paused} top="16%" delay={2.5} />
+              <ShootingStar paused={paused} top="34%" delay={9.5} />
+            </>
+          )}
+          {answering && (
+            <div className="absolute left-1/2 top-[58%] h-[52vh] w-[52vh] -translate-x-1/2 -translate-y-1/2 rounded-full">
+              <div className="absolute inset-0 rounded-full" style={{ background: "radial-gradient(closest-side, var(--t-accent), transparent 74%)", opacity: 0.18 }} />
+              <div className="absolute inset-[16%] rounded-full border" style={{ borderColor: "var(--t-border)", opacity: 0.55 }} />
+            </div>
+          )}
         </>
-      )}
-      {sealed && <MidnightEnvelope paused={paused} />}
-      {(memory || closing) && (
-        <>
-          <ShootingStar paused={paused} top="16%" delay={2.5} />
-          <ShootingStar paused={paused} top="34%" delay={9.5} />
-        </>
-      )}
-      {answering && (
-        <div className="absolute left-1/2 top-[58%] h-[52vh] w-[52vh] -translate-x-1/2 -translate-y-1/2 rounded-full">
-          <div className="absolute inset-0 rounded-full" style={{ background: "radial-gradient(closest-side, rgba(245, 217, 139, 0.22), transparent 74%)" }} />
-          <div className="absolute inset-[16%] rounded-full border" style={{ borderColor: "rgba(245, 217, 139, 0.28)" }} />
-        </div>
-      )}
+      ) : null}
       {closing && (
-        <div className="absolute inset-x-0 bottom-0 h-[26vh]" style={{ background: "linear-gradient(180deg, transparent, rgba(20, 26, 61, 0.85))" }} />
+        <div className="absolute inset-x-0 bottom-0 h-[26vh]" style={{ background: "linear-gradient(180deg, transparent, var(--t-bg-alt))", opacity: 0.85 }} />
       )}
-      <div className="absolute inset-0" style={{ background: "radial-gradient(120% 92% at 50% 46%, transparent 42%, rgba(5, 7, 22, 0.78) 100%)" }} />
+      <div className="absolute inset-0" style={{ background: "radial-gradient(120% 92% at 50% 46%, transparent 42%, var(--t-bg-alt) 100%)", opacity: 0.55 }} />
     </div>
   );
 }

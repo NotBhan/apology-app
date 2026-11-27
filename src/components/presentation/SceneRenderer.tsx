@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import type { ApologyContent } from "@/presentation/build-scenes";
 import type { PresentationScene, ResponseOption } from "@/types/scene";
@@ -12,6 +12,7 @@ import { CharacterController } from "./CharacterController";
 import { MessageReveal } from "./MessageReveal";
 import { LetterCard } from "./LetterCard";
 import { EnvelopeAnimation } from "./EnvelopeAnimation";
+import { paginateLetter } from "./paginateLetter";
 import { MemoryGallery } from "./MemoryGallery";
 import { ResponsePanel } from "./ResponsePanel";
 import { cn } from "@/lib/cn";
@@ -142,15 +143,17 @@ function Character({
 /* ----------------------------------------------------------------- opening */
 
 function OpeningScene(props: SceneRendererProps) {
-  const { scene, content, theme, index, total, onNext } = props;
+  const { scene, content, theme, index, total, animate, onNext } = props;
   const reduce = useReducedMotion();
+  const still = reduce || !animate;
+  const hasCustomTitle = Boolean(content.customization.content?.openingTitle?.trim());
 
   return (
     <div className="relative flex h-full flex-col items-center justify-between px-5 pb-7 pt-4">
       <div className="w-full text-center">
         <motion.p
-          initial={reduce ? false : { opacity: 0, y: -8 }}
-          animate={reduce ? undefined : { opacity: 1, y: 0 }}
+          initial={still ? false : { opacity: 0, y: -8 }}
+          animate={still ? undefined : { opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.1 }}
           className="text-[0.62rem] uppercase tracking-[0.34em]"
           style={{ color: "var(--t-muted)" }}
@@ -163,28 +166,33 @@ function OpeningScene(props: SceneRendererProps) {
         <Character props={props} state={theme.characterStates.opening ?? "apologizing"} width="58%" />
 
         <motion.h1
-          initial={reduce ? false : { opacity: 0, y: 18 }}
-          animate={reduce ? undefined : { opacity: 1, y: 0 }}
+          initial={still ? false : { opacity: 0, y: 18 }}
+          animate={still ? undefined : { opacity: 1, y: 0 }}
           transition={{ duration: 0.9, delay: 0.25, ease: [0.22, 1, 0.36, 1] }}
-          className="mt-1 max-w-[15ch] text-balance text-center text-[clamp(1.9rem,8vw,2.6rem)] leading-[1.08]"
+          className="mt-1 max-w-[15ch] text-balance text-center leading-[1.08]"
           style={{
             fontFamily: "var(--t-font-heading)",
             fontWeight: "var(--t-heading-weight)" as unknown as number,
             letterSpacing: "var(--t-heading-tracking)",
+            fontSize: "calc(clamp(1.9rem,8vw,2.6rem) * var(--t-text-scale, 1))",
             color: "var(--t-text)",
           }}
         >
-          {greeting(scene.title, content.recipientName)}
+          {hasCustomTitle ? scene.title : greeting(scene.title, content.recipientName)}
         </motion.h1>
 
         <motion.p
-          initial={reduce ? false : { opacity: 0 }}
-          animate={reduce ? undefined : { opacity: 1 }}
+          initial={still ? false : { opacity: 0 }}
+          animate={still ? undefined : { opacity: 1 }}
           transition={{ duration: 1, delay: 0.5 }}
           className="max-w-[26ch] text-center text-sm leading-relaxed"
-          style={{ fontFamily: "var(--t-font-deco)", color: "var(--t-primary)", fontSize: "1.05rem" }}
+          style={{
+            fontFamily: "var(--t-font-deco)",
+            color: "var(--t-primary)",
+            fontSize: "calc(1.05rem * var(--t-text-scale, 1))",
+          }}
         >
-          {content.senderName} made this for you, {content.recipientName || "you"}.
+          {scene.body || `${content.senderName} made this for you, ${content.recipientName || "you"}.`}
         </motion.p>
       </div>
 
@@ -208,9 +216,18 @@ function greeting(title: string | undefined, name: string) {
 /* ----------------------------------------------------------------- message */
 
 function MessageScene(props: SceneRendererProps) {
-  const { scene, content, theme, index, onNext, onCharacterState } = props;
+  const { scene, content, theme, index, animate, onNext, onCharacterState } = props;
   const reduce = useReducedMotion();
+  const still = reduce || !animate;
+  const customContent = content.customization.content;
   const situation = resolveSituationLabel(content.situation, content.situationCustom);
+  const showSituationBadge =
+    index === 1 &&
+    customContent?.showSituationLabel !== false &&
+    Boolean(content.situation === "other" ? content.situationCustom?.trim() : customContent?.showSituationLabel === true);
+  const revealPref = content.customization.interaction?.revealStyle;
+  const revealMode =
+    !revealPref || revealPref === "theme" ? theme.motion.messageReveal : revealPref;
 
   return (
     <div className="relative flex h-full flex-col items-center px-5 pb-7 pt-2">
@@ -221,16 +238,29 @@ function MessageScene(props: SceneRendererProps) {
           width={index % 2 === 0 ? "44%" : "50%"}
         />
 
-        <div className="w-full max-w-[340px] text-center">
+        <div className="w-full max-w-[340px]" style={{ textAlign: "var(--t-align, center)" as "left" | "center" }}>
+          {showSituationBadge ? (
+            <p
+              className="mb-1.5 inline-block rounded-full border px-2.5 py-0.5 text-[0.64rem] font-medium"
+              style={{
+                borderColor: "var(--t-border)",
+                color: "var(--t-muted)",
+                background: "color-mix(in oklab, var(--t-surface) 75%, transparent)",
+              }}
+            >
+              {situation}
+            </p>
+          ) : null}
           <Eyebrow theme={theme}>
             {scene.eyebrow ?? situation}
           </Eyebrow>
           <h2
-            className="mt-1.5 text-balance text-[clamp(1.35rem,5.6vw,1.75rem)] leading-[1.15]"
+            className="mt-1.5 text-balance leading-[1.15]"
             style={{
               fontFamily: "var(--t-font-heading)",
               fontWeight: "var(--t-heading-weight)" as unknown as number,
               letterSpacing: "var(--t-heading-tracking)",
+              fontSize: "calc(clamp(1.35rem,5.6vw,1.75rem) * var(--t-text-scale, 1))",
               color: "var(--t-text)",
             }}
           >
@@ -239,21 +269,25 @@ function MessageScene(props: SceneRendererProps) {
         </div>
 
         <motion.div
-          className="w-full max-w-[340px] rounded-[20px] px-5 py-4 text-center shadow-[0_16px_40px_-28px_rgba(0,0,0,0.55)]"
+          className="w-full max-w-[340px] rounded-[20px] px-5 py-4 shadow-[0_16px_40px_-28px_rgba(0,0,0,0.55)]"
           style={{
             background: "color-mix(in oklab, var(--t-surface) 92%, transparent)",
             border: "1px solid var(--t-border)",
+            textAlign: "var(--t-align, center)" as "left" | "center",
           }}
-          initial={reduce ? false : { opacity: 0, y: 16, scale: 0.98 }}
-          animate={reduce ? undefined : { opacity: 1, y: 0, scale: 1 }}
+          initial={still ? false : { opacity: 0, y: 16, scale: 0.98 }}
+          animate={still ? undefined : { opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.6, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
         >
-          <MessageReveal
-            text={scene.body ?? ""}
-            mode={theme.motion.messageReveal}
-            delay={0.35}
-            className="text-[0.94rem] leading-[1.7]"
-          />
+          <div style={{ fontSize: "calc(0.94rem * var(--t-text-scale, 1))" }}>
+            <MessageReveal
+              text={scene.body ?? ""}
+              mode={revealMode}
+              delay={0.35}
+              animate={!still}
+              className="leading-[1.7]"
+            />
+          </div>
         </motion.div>
       </div>
 
@@ -275,8 +309,29 @@ function MessageScene(props: SceneRendererProps) {
 /* ------------------------------------------------------------------ letter */
 
 function LetterScene(props: SceneRendererProps) {
-  const { scene, content, theme, onNext } = props;
+  const { scene, content, theme, animate, onNext } = props;
   const reduce = useReducedMotion();
+  const still = reduce || !animate;
+  const note = scene.body || content.messages.personalNote;
+  const pages = useMemo(() => paginateLetter(note), [note]);
+  const [pageState, setPageState] = useState<{ noteKey: string; index: number }>({
+    noteKey: note,
+    index: 0,
+  });
+  const page =
+    pageState.noteKey === note ? Math.min(pageState.index, Math.max(0, pages.length - 1)) : 0;
+  const setPage = (nextPage: number) => setPageState({ noteKey: note, index: nextPage });
+  const revealPref = content.customization.interaction?.revealStyle;
+  const letterReveal =
+    revealPref === "typewriter"
+      ? "typewriter"
+      : !revealPref || revealPref === "theme"
+        ? theme.motion.messageReveal === "typewriter"
+          ? "typewriter"
+          : "ink"
+        : revealPref === "fade"
+          ? "fade"
+          : "ink";
 
   return (
     <div className="relative flex h-full flex-col items-center px-5 pb-7 pt-2">
@@ -297,20 +352,48 @@ function LetterScene(props: SceneRendererProps) {
       <div className="flex w-full flex-1 items-center justify-center overflow-y-auto no-scrollbar">
         <motion.div
           className="w-full max-w-[360px]"
-          initial={reduce ? false : { opacity: 0, y: 24, rotate: -0.8 }}
-          animate={reduce ? undefined : { opacity: 1, y: 0, rotate: 0 }}
+          initial={still ? false : { opacity: 0, y: 24, rotate: -0.8 }}
+          animate={still ? undefined : { opacity: 1, y: 0, rotate: 0 }}
           transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
         >
           <LetterCard
             recipientName={content.recipientName}
             senderName={content.senderName}
-            body={scene.body || content.messages.personalNote}
+            body={pages[page] ?? note}
             variant={theme.assets.letter}
-            revealMode={
-              theme.motion.messageReveal === "typewriter" ? "typewriter" : "ink"
-            }
-            animate={props.animate}
+            signOff={content.customization.content?.envelopeSignOff}
+            revealMode={letterReveal}
+            animate={!still}
           />
+          {pages.length > 1 ? (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 px-1">
+              <button
+                type="button"
+                onClick={() => setPage(Math.max(0, page - 1))}
+                disabled={page === 0}
+                className="min-h-9 rounded-full border px-3.5 py-1.5 text-[0.74rem] font-semibold disabled:opacity-40"
+                style={{ borderColor: "var(--t-border)", color: "var(--t-text)" }}
+              >
+                Previous page
+              </button>
+              <span
+                className="text-[0.64rem] uppercase tracking-[0.14em]"
+                style={{ color: "var(--t-muted)" }}
+                aria-live="polite"
+              >
+                page {page + 1} of {pages.length}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage(Math.min(pages.length - 1, page + 1))}
+                disabled={page >= pages.length - 1}
+                className="min-h-9 rounded-full px-4 py-1.5 text-[0.74rem] font-semibold text-white disabled:opacity-50"
+                style={{ background: "var(--t-accent, #6d3fa8)" }}
+              >
+                {page >= pages.length - 1 ? "End of letter" : "Next page"}
+              </button>
+            </div>
+          ) : null}
         </motion.div>
       </div>
 
@@ -326,7 +409,9 @@ function LetterScene(props: SceneRendererProps) {
 /* ---------------------------------------------------------------- envelope */
 
 function EnvelopeScene(props: SceneRendererProps) {
-  const { scene, content, theme, onNext, envelopeOpened, onEnvelopeOpened } = props;
+  const { scene, content, theme, animate, onNext, envelopeOpened, onEnvelopeOpened } = props;
+  const sealStyle =
+    content.customization.interaction?.envelopeStyle === "ribbon" ? "ribbon" : "wax-seal";
 
   return (
     <div className="relative flex h-full flex-col items-center px-5 pb-7 pt-2">
@@ -351,7 +436,10 @@ function EnvelopeScene(props: SceneRendererProps) {
           body={content.messages.personalNote || content.messages.message3}
           variant={theme.assets.envelope}
           letterVariant={theme.assets.letter}
-          ctaLabel={scene.ctaLabel ?? "Tap the seal"}
+          sealStyle={sealStyle}
+          signOff={content.customization.content?.envelopeSignOff}
+          animate={animate}
+          ctaLabel={scene.ctaLabel ?? (sealStyle === "ribbon" ? "Untie the ribbon" : "Tap the seal")}
           onOpened={onEnvelopeOpened}
         />
       </div>
@@ -390,11 +478,11 @@ function MemoryScene(props: SceneRendererProps) {
         </h2>
       </div>
 
-      <div className="flex w-full flex-1 items-center justify-center overflow-hidden">
+      <div className="no-scrollbar flex min-h-0 w-full flex-1 items-start justify-center overflow-y-auto py-1">
         <MemoryGallery
           photos={photos}
           style={content.customization.memoryStyle}
-          className="max-h-full"
+          className="w-full"
           animate={props.animate}
           onSeenAll={onSeenMemory}
         />
@@ -412,8 +500,9 @@ function MemoryScene(props: SceneRendererProps) {
 /* ----------------------------------------------------------------- closing */
 
 function ClosingScene(props: SceneRendererProps) {
-  const { scene, content, theme, onNext } = props;
+  const { scene, content, theme, animate, onNext } = props;
   const reduce = useReducedMotion();
+  const still = reduce || !animate;
 
   return (
     <div className="relative flex h-full flex-col items-center justify-between px-5 pb-7 pt-4">
@@ -421,15 +510,19 @@ function ClosingScene(props: SceneRendererProps) {
         <Eyebrow theme={theme}>{scene.eyebrow}</Eyebrow>
       </div>
 
-      <div className="flex w-full flex-1 flex-col items-center justify-center gap-4">
+      <div
+        className="flex w-full flex-1 flex-col items-center justify-center gap-4"
+        style={{ textAlign: "var(--t-align, center)" as "left" | "center" }}
+      >
         <Character props={props} state={scene.characterState ?? "flowers"} width="50%" />
 
         <h2
-          className="text-balance text-center text-[clamp(1.4rem,5.8vw,1.8rem)] leading-tight"
+          className="text-balance leading-tight"
           style={{
             fontFamily: "var(--t-font-heading)",
             fontWeight: "var(--t-heading-weight)" as unknown as number,
             letterSpacing: "var(--t-heading-tracking)",
+            fontSize: "calc(clamp(1.4rem,5.8vw,1.8rem) * var(--t-text-scale, 1))",
             color: "var(--t-text)",
           }}
         >
@@ -437,11 +530,11 @@ function ClosingScene(props: SceneRendererProps) {
         </h2>
 
         <motion.p
-          initial={reduce ? false : { opacity: 0 }}
-          animate={reduce ? undefined : { opacity: 1 }}
+          initial={still ? false : { opacity: 0 }}
+          animate={still ? undefined : { opacity: 1 }}
           transition={{ duration: 1.1, delay: 0.3 }}
-          className="max-w-[30ch] whitespace-pre-wrap text-center text-[0.9rem] leading-[1.75]"
-          style={{ color: "var(--t-text)" }}
+          className="max-w-[30ch] whitespace-pre-wrap leading-[1.75]"
+          style={{ color: "var(--t-text)", fontSize: "calc(0.9rem * var(--t-text-scale, 1))" }}
         >
           {scene.body}
         </motion.p>
@@ -466,14 +559,14 @@ function ClosingScene(props: SceneRendererProps) {
 /* ----------------------------------------------------------------- response */
 
 function ResponseScene(props: SceneRendererProps) {
-  const { scene, content, theme, onReplay, onCharacterState } = props;
+  const { scene, content, theme, animate, onReplay, onCharacterState } = props;
   const [choice, setChoice] = useState<ResponseOption | null>(null);
   const celebrate = choice ? RESPONSE_COPY[choice].celebratory : false;
 
   return (
     <div className="relative flex h-full flex-col px-5 pb-7 pt-1">
       <AnimatePresence>
-        {celebrate ? <GentleCelebration key="celebration" /> : null}
+        {celebrate ? <GentleCelebration key="celebration" animate={animate} /> : null}
       </AnimatePresence>
 
       <div className="no-scrollbar flex-1 overflow-y-auto">
@@ -517,9 +610,9 @@ function ResponseScene(props: SceneRendererProps) {
  * A restrained celebration: a few slow-rising lights, no confetti, no sound
  * burst. Forgiveness is warm, not a jackpot.
  */
-function GentleCelebration() {
+function GentleCelebration({ animate = true }: { animate?: boolean }) {
   const reduce = useReducedMotion();
-  if (reduce) return null;
+  if (reduce || !animate) return null;
 
   return (
     <motion.div

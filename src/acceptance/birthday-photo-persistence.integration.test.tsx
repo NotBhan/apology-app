@@ -705,4 +705,231 @@ describe("Birthday Photo Gallery — Lifecycle, Persistence & Compatibility Audi
       }
     });
   });
+
+  describe("6. Stage 4 Customization — Fresh-Context Persistence & Preview/Published Parity", () => {
+    it("persists Content, Visual, and Interaction overrides across POST -> PATCH -> fresh NewBirthdayPage load (ignoring sessionStorage) -> Publish -> LetterPage", async () => {
+      const user = userEvent.setup();
+      const { resolveBirthdayConfig } = await import("@/experiences/birthday/resolve");
+
+      // Step 1: Create Birthday draft via POST /api/drafts
+      const initialContent = birthdayContentSchema.parse({
+        recipientName: "Maya",
+        senderName: "Kai",
+        headline: "Thirty Years Bright",
+        message: "You bring warmth everywhere you go.",
+        themeId: "confetti",
+      });
+
+      const createRes = await createDraftRoute(
+        new Request("http://localhost/api/drafts", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ experienceType: "birthday", content: initialContent }),
+        }),
+      );
+      expect(createRes.status).toBe(201);
+      const { draft } = await createRes.json();
+      const draftId = draft.id as string;
+
+      // Step 2: Update all three customization domains via PATCH /api/experiences/birthday/[draftId]
+      const updatedContent = birthdayContentSchema.parse({
+        recipientName: "Maya",
+        senderName: "Kai",
+        age: 30,
+        headline: "Thirty Years Bright",
+        message: "You bring warmth everywhere you go.",
+        wish: "Keep shining.",
+        themeId: "midnight-gold",
+        candleCount: 5,
+        photoLayout: "polaroid",
+        photos: [
+          {
+            url: "https://example.com/toast.jpg",
+            caption: "Midnight toast",
+            focalPoint: "50% 25%",
+          },
+        ],
+        audio: "soft",
+        customization: {
+          colors: {
+            background: "#17141b",
+            surface: "#221d28",
+            primary: "#ebb968",
+            secondary: "#d97757",
+            accent: "#ffe08a",
+            text: "#f7f0e6",
+          },
+          content: {
+            openingEyebrow: "chapter thirty",
+            openingSubtitle: "Celebration unlocked",
+            openingCta: "Unwrap your day",
+            wishCardBadge: "Golden Chapter",
+            cakeHeading: "close your eyes",
+            cakeSubtitle: "Five bright flames for tonight",
+            cakeCta: "Blow them out",
+            letterEyebrow: "From Kai's desk",
+            letterHeading: "Personal Dispatch",
+            letterSignOff: "Always cheering for you,",
+            galleryHeading: "Captured nights",
+            gallerySubtitle: "Snapshots kept forever",
+            galleryCta: "To the finale",
+            finaleHeading: "Forever celebrated",
+            showAgeBadge: false,
+            showCakeScene: true,
+            showGalleryScene: true,
+          },
+          visual: {
+            fontPairing: "editorial",
+            textSize: "expressive",
+            alignment: "left",
+            decorationsEnabled: false,
+            decorationDensity: "lush",
+            cake: { tiers: 3, flavor: "chocolate", topping: "cherries" },
+          },
+          interaction: {
+            giftReveal: "direct",
+            envelopeStyle: "ribbon",
+            candleMode: "single-wish",
+            celebrationIntensity: "grand",
+            transitionStyle: "paper",
+            motionPreset: "gentle",
+          },
+        },
+      });
+
+      const patchRes = await updateExperienceRoute(
+        new Request(`http://localhost/api/experiences/birthday/${draftId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ content: updatedContent }),
+        }),
+        { params: Promise.resolve({ experienceId: "birthday", draftId }) },
+      );
+      expect(patchRes.status).toBe(200);
+
+      // Step 3: Simulate closing editor and opening in a fresh context with conflicting sessionStorage
+      window.sessionStorage.setItem(
+        "koi.birthday.draft",
+        JSON.stringify({
+          recipientName: "StaleBrowserName",
+          headline: "StaleHeadline",
+          themeId: "pastel",
+          customization: { visual: { cake: { tiers: 2, flavor: "vanilla" } } },
+        }),
+      );
+
+      const reopenJsx = await NewBirthdayPage({
+        searchParams: Promise.resolve({ draftId }),
+      });
+      const { unmount: unmountEditor } = render(reopenJsx);
+
+      // Confirm DB-persisted values restored (stale browser draft ignored)
+      expect(screen.getByDisplayValue("Maya")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("Thirty Years Bright")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("Midnight toast")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Focus photo 1 Top" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "3 Tiers" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "Rich Cocoa" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "Cherries" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "Ribbon wrap" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "Instant reveal" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "Single wish" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "Grand" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "Soft & Warm" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByDisplayValue("Forever celebrated")).toBeInTheDocument();
+      expect(screen.queryByDisplayValue("StaleHeadline")).not.toBeInTheDocument();
+      unmountEditor();
+
+      // Step 4: Publish draft via POST /api/drafts/[draftId]/publish
+      const publishRes = await publishRoute(
+        new Request(`http://localhost/api/drafts/${draftId}/publish`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({}),
+        }),
+        { params: Promise.resolve({ draftId }) },
+      );
+      expect(publishRes.status).toBe(200);
+      const { token } = await publishRes.json();
+      expect(typeof token).toBe("string");
+
+      // Step 5: Clear sessionStorage (fresh recipient browser) & open /letter/[token]
+      window.sessionStorage.clear();
+      const previewConfig = resolveBirthdayConfig(updatedContent);
+
+      const letterJsx = await LetterPage({ params: Promise.resolve({ token }) });
+      const { container, unmount: unmountPublished } = render(letterJsx);
+
+      // Opening scene parity
+      expect(screen.getByText(previewConfig.content.openingEyebrow)).toBeInTheDocument();
+      expect(screen.getByText(previewConfig.content.openingSubtitle)).toBeInTheDocument();
+      expect(screen.getByText("Gift box unwrapped!")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /play music/i })).toBeInTheDocument();
+
+      // Advance to Cake / Wish scene (no age chapter badge because showAgeBadge: false)
+      await user.click(screen.getByRole("button", { name: previewConfig.content.openingCta }));
+      expect(screen.getByText(previewConfig.content.wishCardBadge)).toBeInTheDocument();
+      expect(screen.queryByText(/Chapter 30/i)).not.toBeInTheDocument();
+      expect(screen.getByText(previewConfig.content.cakeHeading)).toBeInTheDocument();
+      expect(screen.getByText(previewConfig.content.cakeSubtitle)).toBeInTheDocument();
+      expect(container.querySelector("#bottom-tier-3")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: previewConfig.content.cakeCta }));
+      expect(screen.queryByRole("button", { name: /Relight candles/i })).not.toBeInTheDocument();
+
+      // Advance to Letter scene
+      await user.click(screen.getByRole("button", { name: "Continue" }));
+      expect(screen.getByText(previewConfig.content.letterEyebrow)).toBeInTheDocument();
+
+      // Advance to Gallery scene (verify focal point preserved)
+      await user.click(screen.getByRole("button", { name: "Continue" }));
+      expect(screen.getByRole("heading", { name: previewConfig.content.galleryHeading })).toBeInTheDocument();
+      const renderedImg = screen.getByAltText("Midnight toast");
+      expect(renderedImg).toHaveStyle({ objectPosition: "50% 25%" });
+
+      // Advance to Finale scene
+      await user.click(screen.getByRole("button", { name: previewConfig.content.galleryCta }));
+      expect(screen.getByRole("heading", { name: previewConfig.content.finaleHeading })).toBeInTheDocument();
+      unmountPublished();
+    });
+
+    it("renders legacy Birthday rows without customization using safe defaults without mutating persisted record content", async () => {
+      const legacyRaw = {
+        recipientName: "Sam",
+        senderName: "Alex",
+        headline: "Happy Birthday Sam",
+        message: "Best wishes!",
+        themeId: "pastel",
+      };
+
+      const createRes = await createDraftRoute(
+        new Request("http://localhost/api/drafts", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ experienceType: "birthday", content: legacyRaw }),
+        }),
+      );
+      expect(createRes.status).toBe(201);
+      const { draft } = await createRes.json();
+
+      // Stored content remains untouched (does not inject a synthetic customization object)
+      const storedDraft = await mockRepo.getDraft(draft.id);
+      expect((storedDraft?.content as Record<string, unknown>).customization).toBeUndefined();
+
+      const publishRes = await publishRoute(
+        new Request(`http://localhost/api/drafts/${draft.id}/publish`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({}),
+        }),
+        { params: Promise.resolve({ draftId: draft.id }) },
+      );
+      const { token } = await publishRes.json();
+      const letterJsx = await LetterPage({ params: Promise.resolve({ token }) });
+      render(letterJsx);
+
+      expect(screen.getByRole("heading", { name: "Happy Birthday Sam" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Open it" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /play music/i })).not.toBeInTheDocument();
+    });
+  });
 });

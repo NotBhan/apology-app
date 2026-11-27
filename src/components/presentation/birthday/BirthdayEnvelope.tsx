@@ -1,11 +1,14 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { motion } from "framer-motion";
+import { useReducedMotionSafe } from "@/hooks/useMounted";
 import type { BirthdayTheme } from "@/experiences/birthday/themes";
 import { normalizeBirthdayPhotos, type BirthdayPhotoItem } from "@/experiences/birthday/schema";
 import { Icon } from "@/components/ui/icons";
 import { OptimizedPhoto } from "@/components/ui/OptimizedPhoto";
+import type { EnvelopeStyle } from "@/types/customization";
+import { BirthdayMessageCard } from "./BirthdayMessageCard";
 
 type Stage = "sealed" | "cracking" | "opening" | "rising" | "unfolded";
 
@@ -15,6 +18,12 @@ export interface BirthdayEnvelopeProps {
   message?: string;
   photos?: BirthdayPhotoItem[];
   theme: BirthdayTheme;
+  animate?: boolean;
+  styleVariant?: EnvelopeStyle;
+  letterHeading?: string;
+  letterSignOff?: string;
+  textScale?: string;
+  alignment?: "center" | "left";
   onOpened?: () => void;
   className?: string;
 }
@@ -25,28 +34,66 @@ export function BirthdayEnvelope({
   message,
   photos = [],
   theme,
+  animate = true,
+  styleVariant = "wax-seal",
+  letterHeading = "Personal Letter",
+  letterSignOff = "With warmest wishes,",
+  textScale = "1",
+  alignment = "center",
   onOpened,
   className = "",
 }: BirthdayEnvelopeProps) {
-  const reduce = useReducedMotion();
-  const [stage, setStage] = useState<Stage>("sealed");
+  const reduce = useReducedMotionSafe();
+  const still = reduce || !animate;
+  const [stage, setStage] = useState<Stage>(styleVariant === "open-letter" ? "unfolded" : "sealed");
+  const timersRef = useRef<number[]>([]);
   const normalizedPhotos = normalizeBirthdayPhotos(photos);
+
+  useEffect(() => {
+    return () => {
+      timersRef.current.forEach((id) => window.clearTimeout(id));
+      timersRef.current = [];
+    };
+  }, []);
 
   const open = useCallback(() => {
     if (stage !== "sealed") return;
-    if (reduce) {
+    if (still) {
       setStage("unfolded");
       onOpened?.();
       return;
     }
     setStage("cracking");
-    window.setTimeout(() => setStage("opening"), 350);
-    window.setTimeout(() => setStage("rising"), 900);
-    window.setTimeout(() => {
-      setStage("unfolded");
-      onOpened?.();
-    }, 1500);
-  }, [stage, reduce, onOpened]);
+    timersRef.current.push(window.setTimeout(() => setStage("opening"), 350));
+    timersRef.current.push(window.setTimeout(() => setStage("rising"), 900));
+    timersRef.current.push(
+      window.setTimeout(() => {
+        setStage("unfolded");
+        onOpened?.();
+      }, 1500),
+    );
+  }, [stage, still, onOpened]);
+
+  if (styleVariant === "open-letter") {
+    return (
+      <BirthdayMessageCard
+        recipientName={recipientName}
+        senderName={senderName}
+        message={
+          message ||
+          "Wishing you another wonderful year filled with happiness, adventures, and unforgettable moments!"
+        }
+        photos={normalizedPhotos}
+        theme={theme}
+        animate={animate}
+        heading={letterHeading}
+        signOff={letterSignOff}
+        textScale={textScale}
+        alignment={alignment}
+        className={className}
+      />
+    );
+  }
 
   const revealed = stage === "unfolded";
   const flapOpen = stage === "opening" || stage === "rising" || revealed;
@@ -54,20 +101,25 @@ export function BirthdayEnvelope({
 
   return (
     <div className={`relative flex w-full flex-col items-center ${className}`}>
-      {/* Outer Envelope Container */}
+      {/* Outer Envelope Container (smoothly tucks away once unfolded stationery reveals) */}
       <motion.div
-        className="relative cursor-pointer"
+        className={`relative ${revealed ? "pointer-events-none" : "cursor-pointer"}`}
         style={{
           width: "min(88vw, 360px)",
           height: "calc(min(88vw, 360px) / 1.45)",
         }}
         onClick={open}
-        animate={{
-          opacity: revealed ? 0.35 : 1,
-          scale: revealed ? 0.94 : 1,
-          y: revealed ? -10 : 0,
-        }}
-        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+        aria-hidden={revealed}
+        animate={
+          still
+            ? revealed
+              ? { opacity: 0, height: 0, overflow: "hidden" }
+              : { opacity: 1 }
+            : revealed
+              ? { opacity: 0, scale: 0.9, height: 0, overflow: "hidden" }
+              : { opacity: 1, scale: 1 }
+        }
+        transition={still ? { duration: 0 } : { duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
       >
         {/* Envelope Back Panel */}
         <div
@@ -98,7 +150,7 @@ export function BirthdayEnvelope({
               className="text-[10px] font-semibold uppercase tracking-[0.24em]"
               style={{ color: theme.palette.accent }}
             >
-              Personal Letter
+              {letterHeading}
             </span>
             <span
               className="text-base font-bold truncate max-w-full"
@@ -134,19 +186,34 @@ export function BirthdayEnvelope({
         <div className="absolute inset-0 z-20 overflow-hidden rounded-[14px] pointer-events-none">
           <svg viewBox="0 0 360 248" className="h-full w-full" preserveAspectRatio="none">
             {/* Left triangle flap */}
-            <path d="M 0 0 L 180 150 L 0 248 Z" fill={theme.envelope.paper} opacity="0.96" />
+            <path d="M 0 0 L 180 150 L 0 248 Z" fill={theme.envelope.paper} opacity="1" />
             {/* Right triangle flap */}
-            <path d="M 360 0 L 180 150 L 360 248 Z" fill={theme.envelope.paper} opacity="0.96" />
+            <path d="M 360 0 L 180 150 L 360 248 Z" fill={theme.envelope.paper} opacity="1" />
             {/* Bottom trapezoid fold */}
             <path
               d="M 0 248 L 180 130 L 360 248 Z"
               fill={theme.envelope.flap}
               stroke={theme.envelope.accent}
               strokeWidth="1"
-              opacity="0.92"
+              opacity="1"
             />
           </svg>
         </div>
+
+        {/* Ribbon sash variant when styleVariant === "ribbon" */}
+        {styleVariant === "ribbon" && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-[22] overflow-hidden rounded-[14px]"
+          >
+            <div
+              className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-3.5 w-full opacity-90 shadow-sm"
+              style={{
+                background: `linear-gradient(90deg, ${theme.envelope.accent}, ${theme.palette.primary}, ${theme.envelope.accent})`,
+              }}
+            />
+          </div>
+        )}
 
         {/* Top Folding Flap with Seal */}
         <motion.div
@@ -160,7 +227,7 @@ export function BirthdayEnvelope({
             rotateX: flapOpen ? -168 : 0,
             zIndex: flapOpen ? 0 : 25,
           }}
-          transition={{ duration: 0.72, ease: [0.22, 1, 0.36, 1] }}
+          transition={still ? { duration: 0 } : { duration: 0.72, ease: [0.22, 1, 0.36, 1] }}
         >
           <svg viewBox="0 0 360 155" className="h-full w-full" preserveAspectRatio="none">
             <path
@@ -247,9 +314,9 @@ export function BirthdayEnvelope({
       {/* Unfolded Full Personal Letter Stationery */}
       {revealed && (
         <motion.div
-          initial={reduce ? false : { opacity: 0, y: 24, scale: 0.96 }}
-          animate={reduce ? undefined : { opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+          initial={still ? false : { opacity: 0, y: 24, scale: 0.96 }}
+          animate={still ? undefined : { opacity: 1, y: 0, scale: 1 }}
+          transition={still ? { duration: 0 } : { duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
           className="mt-6 w-full max-w-[520px] rounded-3xl p-6 sm:p-9 shadow-xl text-left"
           style={{
             background: theme.palette.surface,
@@ -267,7 +334,7 @@ export function BirthdayEnvelope({
                 className="text-[10px] uppercase font-bold tracking-[0.2em]"
                 style={{ color: theme.palette.accent }}
               >
-                Personal Letter
+                {letterHeading}
               </p>
               <p className="text-sm font-semibold opacity-85" style={{ color: theme.palette.text }}>
                 Dear {recipientName || "Friend"},
@@ -285,11 +352,12 @@ export function BirthdayEnvelope({
           </div>
 
           {/* Main Message Body */}
-          <div className="space-y-4">
+          <div className={alignment === "center" ? "space-y-4 text-center" : "space-y-4 text-left"}>
             <p
-              className="whitespace-pre-line text-[clamp(1.05rem,3.2vw,1.3rem)] leading-relaxed font-normal"
+              className="whitespace-pre-line leading-relaxed font-normal"
               style={{
                 fontFamily: theme.typography.bodyFont,
+                fontSize: `calc(clamp(1.05rem, 3.2vw, 1.3rem) * ${textScale})`,
                 color: theme.palette.text,
               }}
             >
@@ -341,7 +409,7 @@ export function BirthdayEnvelope({
           {/* Signature Sign-Off */}
           <div className="mt-8 pt-4 text-right border-t border-dashed" style={{ borderColor: theme.palette.border }}>
             <p className="text-xs italic opacity-75" style={{ color: theme.palette.mutedText }}>
-              With warmest wishes,
+              {letterSignOff}
             </p>
             <p
               className="text-lg font-bold"

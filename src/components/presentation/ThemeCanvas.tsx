@@ -20,7 +20,18 @@ const SKINS: Record<ThemeId, ComponentType<ThemeSkinProps>> = {
   minimal: dynamic(() => import("@/themes/minimal/skin")),
 };
 
-export function ThemeCanvas({ themeId, ...props }: ThemeSkinProps & { themeId: ThemeId }) {
+export function ThemeCanvas({
+  themeId,
+  decorationsEnabled = true,
+  decorationDensity = "balanced",
+  ...props
+}: ThemeSkinProps & { themeId: ThemeId }) {
   const Skin = SKINS[themeId] ?? SKINS.romantic;
-  return <Skin {...props} />;
+  return (
+    <Skin
+      {...props}
+      decorationsEnabled={decorationsEnabled}
+      decorationDensity={decorationDensity}
+    />
+  );
 }

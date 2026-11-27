@@ -1,12 +1,19 @@
 "use client";
 
 import { useMemo } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
+import { useMounted, useReducedMotionSafe } from "@/hooks/useMounted";
+import type { BirthdayCelebrationIntensity } from "@/experiences/birthday/schema";
 import type { BirthdayTheme } from "@/experiences/birthday/themes";
+import type { DecorationDensity } from "@/types/customization";
 
 interface BirthdayCelebrationProps {
   theme: BirthdayTheme;
   burst?: boolean;
+  enabled?: boolean;
+  animate?: boolean;
+  density?: DecorationDensity;
+  intensity?: BirthdayCelebrationIntensity;
   className?: string;
 }
 
@@ -30,9 +37,15 @@ function pseudo(seed: number): number {
 export function BirthdayCelebration({
   theme,
   burst = false,
+  enabled = true,
+  animate = true,
+  density = "balanced",
+  intensity = "festive",
   className = "",
 }: BirthdayCelebrationProps) {
-  const reduce = useReducedMotion();
+  const mounted = useMounted();
+  const reduce = useReducedMotionSafe();
+  const still = !mounted || reduce || !animate || !enabled;
 
   const particles = useMemo(() => {
     const palette = [
@@ -43,7 +56,10 @@ export function BirthdayCelebration({
       theme.cake.accent,
     ];
 
-    const count = burst ? 36 : 18;
+    const densityFactor = density === "minimal" ? 0.5 : density === "lush" ? 1.45 : 1;
+    const intensityFactor = intensity === "subtle" ? 0.65 : intensity === "grand" ? 1.4 : 1;
+    const baseCount = burst ? 34 : 18;
+    const count = Math.max(6, Math.min(60, Math.round(baseCount * densityFactor * intensityFactor)));
     const kind = theme.decorations.ambientParticles;
 
     const items: ParticleSpec[] = [];
@@ -81,9 +97,9 @@ export function BirthdayCelebration({
       });
     }
     return items;
-  }, [theme, burst]);
+  }, [theme, burst, density, intensity]);
 
-  if (reduce) return null;
+  if (still) return null;
 
   return (
     <div

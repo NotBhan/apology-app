@@ -12,6 +12,9 @@ vi.mock("@/components/customization/PhotosPanel", () => ({
 vi.mock("@/components/customization/ColorsPanel", () => ({
   ColorsPanel: () => <div>colours panel</div>,
 }));
+vi.mock("@/components/customization/StyleAndMotionPanel", () => ({
+  StyleAndMotionPanel: () => <div>style and motion panel</div>,
+}));
 
 import { CustomizeStep } from "./CustomizeStep";
 

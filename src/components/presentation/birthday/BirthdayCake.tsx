@@ -1,29 +1,41 @@
 "use client";
 
 import { useId, useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
+import { useReducedMotionSafe } from "@/hooks/useMounted";
+import type { BirthdayCandleMode } from "@/experiences/birthday/schema";
 import type { BirthdayTheme } from "@/experiences/birthday/themes";
 
 interface BirthdayCakeProps {
   theme: BirthdayTheme;
   candleCount?: number;
+  animate?: boolean;
+  candleMode?: BirthdayCandleMode;
+  ctaLabel?: string;
   isBlownOut?: boolean;
   onBlowOut?: () => void;
+  onRelight?: () => void;
   className?: string;
 }
 
 export function BirthdayCake({
   theme,
   candleCount = 3,
+  animate = true,
+  candleMode = "tap-relight",
+  ctaLabel = "Blow out the candles",
   isBlownOut: controlledBlownOut,
   onBlowOut,
+  onRelight,
   className = "",
 }: BirthdayCakeProps) {
   const [internalBlownOut, setInternalBlownOut] = useState(false);
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionSafe();
+  const still = reduce || !animate;
   const idPrefix = useId().replace(/:/g, "");
 
   const blownOut = controlledBlownOut !== undefined ? controlledBlownOut : internalBlownOut;
+  const canRelight = candleMode === "tap-relight";
   const count = Math.max(1, Math.min(7, candleCount));
   const isThreeTier = theme.cake.tiers === 3;
   const topY = isThreeTier ? 48 : 70;
@@ -33,9 +45,19 @@ export function BirthdayCake({
     : (count <= 3 ? 74 : count <= 5 ? 96 : 112);
 
   function handleBlowOut() {
-    if (blownOut) return;
+    if (blownOut) {
+      if (canRelight) {
+        handleRelight();
+      }
+      return;
+    }
     setInternalBlownOut(true);
     onBlowOut?.();
+  }
+
+  function handleRelight() {
+    setInternalBlownOut(false);
+    onRelight?.();
   }
 
   // Calculate candle horizontal positions across top tier
@@ -52,10 +74,12 @@ export function BirthdayCake({
       <button
         type="button"
         onClick={handleBlowOut}
-        disabled={blownOut}
+        disabled={blownOut && !canRelight}
         aria-label={
           blownOut
-            ? "Birthday cake with extinguished candles"
+            ? canRelight
+              ? "Birthday cake with extinguished candles, tap to relight"
+              : "Birthday cake with extinguished candles"
             : "Interactive birthday cake with lit candles"
         }
         className="group relative cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 rounded-2xl p-2 transition-transform active:scale-[0.98]"
@@ -460,7 +484,7 @@ export function BirthdayCake({
                     {/* Flickering SVG Flame (Grouped Flame Tear + Core) */}
                     <motion.g
                       animate={
-                        reduce
+                        still
                           ? undefined
                           : {
                               scaleY: [1, 1.15, 0.92, 1.1, 1],
@@ -468,11 +492,15 @@ export function BirthdayCake({
                               rotate: [-2, 3, -1, 2, -2],
                             }
                       }
-                      transition={{
-                        duration: 0.65 + (idx % 3) * 0.1,
-                        repeat: Infinity,
-                        ease: "easeInOut",
-                      }}
+                      transition={
+                        still
+                          ? undefined
+                          : {
+                              duration: 0.65 + (idx % 3) * 0.1,
+                              repeat: Infinity,
+                              ease: "easeInOut",
+                            }
+                      }
                       style={{
                         transformOrigin: `${cx}px ${candleY - 5}px`,
                       }}
@@ -491,9 +519,9 @@ export function BirthdayCake({
                 ) : (
                   /* Smoke Wisps after blowout */
                   <motion.g
-                    initial={{ opacity: 0.9, y: 0 }}
-                    animate={{ opacity: 0, y: -24 }}
-                    transition={{ duration: 1.8, delay: idx * 0.1, ease: "easeOut" }}
+                    initial={still ? false : { opacity: 0.9, y: 0 }}
+                    animate={still ? { opacity: 0.45, y: -6 } : { opacity: 0, y: -24 }}
+                    transition={still ? { duration: 0 } : { duration: 1.8, delay: idx * 0.1, ease: "easeOut" }}
                   >
                     <path
                       d={`M ${cx} ${candleY - 6} Q ${cx - 4} ${candleY - 14} ${cx + 2} ${candleY - 22} T ${cx - 2} ${candleY - 32}`}
@@ -512,32 +540,49 @@ export function BirthdayCake({
       </button>
 
       {/* Action Prompt / Badge */}
-      <div className="mt-2 text-center">
+      <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-center">
         {!blownOut ? (
           <button
             type="button"
             onClick={handleBlowOut}
-            className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-xs font-semibold shadow-sm transition hover:shadow active:scale-95 cursor-pointer"
+            className="inline-flex min-h-11 items-center gap-2 rounded-full px-5 py-2.5 text-xs font-semibold shadow-sm transition hover:shadow active:scale-95 cursor-pointer"
             style={{
               background: theme.palette.primary,
               color: theme.palette.surface,
             }}
           >
-            <span>Blow out the candles</span>
+            <span>{ctaLabel}</span>
           </button>
         ) : (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold"
-            style={{
-              background: theme.palette.surface,
-              color: theme.palette.primary,
-              border: `1px solid ${theme.palette.border}`,
-            }}
-          >
-            <span>Wish made! Happy Birthday!</span>
-          </motion.div>
+          <>
+            <motion.div
+              initial={still ? false : { opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={still ? { duration: 0 } : undefined}
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold"
+              style={{
+                background: theme.palette.surface,
+                color: theme.palette.primary,
+                border: `1px solid ${theme.palette.border}`,
+              }}
+            >
+              <span>Wish made! Happy Birthday!</span>
+            </motion.div>
+            {canRelight && (
+              <button
+                type="button"
+                onClick={handleRelight}
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-full px-4 py-2 text-xs font-medium transition hover:opacity-85 cursor-pointer"
+                style={{
+                  background: "transparent",
+                  color: theme.palette.mutedText,
+                  border: `1px solid ${theme.palette.border}`,
+                }}
+              >
+                Relight candles
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

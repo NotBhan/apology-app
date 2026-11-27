@@ -42,12 +42,9 @@ export async function runCleanup(deps: CleanupDeps): Promise<CleanupReport> {
   const outcomes: SaveResult[] = [];
 
   for (const candidate of candidates) {
-    // An expired apology gets its durable intent first; a job candidate already
-    // has one.
-    if (candidate.source === "expired") {
-      await deps.store.requestDeletionForExpiry(candidate.apologyId, now);
-    }
-
+    // Every candidate already carries durable intent: a published link is only
+    // ever deleted because its author asked for it. There is no expiry sweep,
+    // so a live record can never be selected here.
     const job = await deps.store.claim(candidate.apologyId, now, leaseMs);
     if (!job) {
       outcomes.push({

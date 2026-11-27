@@ -230,4 +230,76 @@ describe("birthday presentation", () => {
     await user.click(screen.getByRole("button", { name: /Close photo preview/i }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
+
+  it("blocks global ArrowRight scene advance while photo lightbox is open and respects scene visibility toggles", async () => {
+    const user = userEvent.setup();
+    const customContent = birthdayContentSchema.parse({
+      ...content,
+      audio: "celebration",
+      photos: [
+        { url: "https://example.com/m1.jpg", caption: "First", focalPoint: "50% 25%" },
+        { url: "https://example.com/m2.jpg", caption: "Second" },
+      ],
+      customization: {
+        content: {
+          openingEyebrow: "custom edition",
+          openingCta: "Begin",
+          finaleHeading: "Forever celebrated",
+          showCakeScene: false,
+        },
+        interaction: {
+          envelopeStyle: "open-letter",
+          motionPreset: "still",
+        },
+      },
+    });
+
+    render(<BirthdayLetter content={customContent} />);
+
+    // 4 scenes because cake scene is hidden, audio control rendered
+    expect(screen.getByText("1/4")).toBeInTheDocument();
+    expect(screen.getByText("custom edition")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /play music/i })).toBeInTheDocument();
+
+    // Advance straight to open-letter message scene (skipping hidden cake)
+    await user.click(screen.getByRole("button", { name: "Begin" }));
+    expect(screen.getByText("Dear Riya,")).toBeInTheDocument();
+
+    // Advance to gallery and open lightbox
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(screen.getByRole("button", { name: /View photo 1/i }));
+    expect(screen.getByText("Photo 1 of 2")).toBeInTheDocument();
+
+    // ArrowRight navigates photo inside lightbox without leaving gallery scene
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByText("Photo 2 of 2")).toBeInTheDocument();
+    expect(screen.getByText("3/4")).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    // Go to finale with custom heading
+    await user.click(screen.getByRole("button", { name: "One last thing" }));
+    expect(screen.getByRole("heading", { name: "Forever celebrated" })).toBeInTheDocument();
+  });
+
+  it("disables audio controls for 'none' and toggles mute state cleanly when an audio track is active", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <BirthdayLetter content={birthdayContentSchema.parse({ ...content, audio: "none" })} />,
+    );
+    expect(screen.queryByRole("button", { name: /play music/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /mute music/i })).not.toBeInTheDocument();
+
+    rerender(
+      <BirthdayLetter content={birthdayContentSchema.parse({ ...content, audio: "soft" })} />,
+    );
+    const muteBtn = screen.getByRole("button", { name: /mute music/i });
+    expect(muteBtn).toHaveAttribute("aria-pressed", "false");
+    await user.click(muteBtn);
+    expect(screen.getByRole("button", { name: /unmute music/i })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
 });

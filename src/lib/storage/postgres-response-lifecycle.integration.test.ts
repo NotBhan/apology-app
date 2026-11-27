@@ -7,13 +7,25 @@ import { ResponseRepository } from "./response-repository";
 import { PostgresLifecycleStore } from "@/lib/lifecycle/postgres-store";
 import { runCleanup } from "@/lib/lifecycle/protocol";
 import type { ObjectStore } from "./object-store";
+import { verifyConnectedTestDatabaseIdentity } from "@/test/db-safety";
 
-const TEST_DB_URL =
-  process.env.TEST_DATABASE_URL ||
-  process.env.DATABASE_URL ||
-  "postgresql://postgres:postgres@localhost:54329/postgres";
+/**
+ * Destructive integration suite.
+ *
+ * It truncates `apologies`, `responses`, `apology_assets`, `response_assets`,
+ * `deletion_jobs` and `deletion_tombstones` before every test, so it must never
+ * be pointed at a database that holds real rows.
+ *
+ * `TEST_DATABASE_URL` is therefore the **only** accepted target. There is
+ * deliberately no `DATABASE_URL` fallback: that variable points at the app's
+ * own Neon branch, and falling back to it meant `npm test` (and `npm run
+ * validate`) silently deleted production publications. Without an explicit
+ * test URL the suite skips instead.
+ */
+const TEST_DB_URL = process.env.TEST_DATABASE_URL;
+const TEST_DB = TEST_DB_URL!;
 
-describe("PostgreSQL Real DB Integration: Response Repository & Lifecycle", () => {
+describe.skipIf(!TEST_DB_URL)("PostgreSQL Real DB Integration: Response Repository & Lifecycle", () => {
   let pool: Pool | null = null;
   let dbAvailable = false;
   let db: ReturnType<typeof createDb>;
@@ -33,16 +45,24 @@ describe("PostgreSQL Real DB Integration: Response Repository & Lifecycle", () =
   };
 
   beforeAll(async () => {
+    if (!TEST_DB_URL) return;
+    const candidatePool = new Pool({ connectionString: TEST_DB, connectionTimeoutMillis: 5000 });
     try {
-      pool = new Pool({ connectionString: TEST_DB_URL, connectionTimeoutMillis: 5000 });
-      await pool.query("SELECT 1");
+      await verifyConnectedTestDatabaseIdentity(
+        async (sqlText) => (await candidatePool.query(sqlText)).rows,
+        TEST_DB,
+      );
+      pool = candidatePool;
       dbAvailable = true;
-      db = createDb(TEST_DB_URL);
+      db = createDb(TEST_DB);
       apologyRepo = new PostgresRepository(db);
       responseRepo = new ResponseRepository(db);
       lifecycleStore = new PostgresLifecycleStore(db);
-    } catch {
+    } catch (err) {
+      await candidatePool.end().catch(() => undefined);
+      pool = null;
       dbAvailable = false;
+      throw err;
     }
   });
 
@@ -80,7 +100,7 @@ describe("PostgreSQL Real DB Integration: Response Repository & Lifecycle", () =
       linkDurationDays: 3,
     });
     if (status === "published") {
-      const pub = await apologyRepo.publish(parent.id, "owner-real-db", 3);
+      const pub = await apologyRepo.publish(parent.id, "owner-real-db");
       return { id: parent.id, token: pub.accessToken };
     }
     return { id: parent.id, token: "" };

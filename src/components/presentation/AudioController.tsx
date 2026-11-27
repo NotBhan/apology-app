@@ -11,6 +11,9 @@ export interface AudioControllerProps {
   volume: number;
   /** Playback only begins after a deliberate recipient gesture. */
   armed: boolean;
+  /** Optional controlled mute state synchronized with PresentationApi. */
+  muted?: boolean;
+  onMuteChange?: (muted: boolean) => void;
   className?: string;
   tone?: { text: string; surface: string; border: string };
 }
@@ -23,13 +26,25 @@ export function AudioController({
   src,
   volume,
   armed,
+  muted: controlledMuted,
+  onMuteChange,
   className,
   tone,
 }: AudioControllerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
-  const [muted, setMuted] = useState(false);
+  const [internalMuted, setInternalMuted] = useState(false);
   const [blocked, setBlocked] = useState(false);
+  const muted = controlledMuted ?? internalMuted;
+
+  const toggleMuted = useCallback(() => {
+    const next = !muted;
+    if (onMuteChange) {
+      onMuteChange(next);
+    } else {
+      setInternalMuted(next);
+    }
+  }, [muted, onMuteChange]);
 
   useEffect(() => {
     if (!src) return;
@@ -124,10 +139,10 @@ export function AudioController({
 
       <button
         type="button"
-        onClick={() => setMuted((value) => !value)}
+        onClick={toggleMuted}
         aria-label={muted ? "Unmute music" : "Mute music"}
         aria-pressed={muted}
-        className="grid h-8 w-8 place-items-center rounded-full transition active:scale-95"
+        className="grid h-9 w-9 place-items-center rounded-full transition active:scale-95"
         style={{ color: tone?.text ?? "#33203f" }}
       >
         <Icon name={muted ? "volume-off" : "volume-on"} size={15} />

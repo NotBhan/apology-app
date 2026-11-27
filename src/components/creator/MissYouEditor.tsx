@@ -537,11 +537,16 @@ export function MissYouEditor({
         const res = await fetch(`/api/drafts/${activeId}/publish`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ durationDays: 7 }),
+          body: JSON.stringify({}),
         });
         const out = await res.json();
         if (!res.ok) throw new Error(out.error ?? "Could not publish.");
-        setPublished(out.path as string);
+        if (typeof out.path !== "string" || !out.path) {
+          throw new Error(
+            "This experience is already published and its link is still live. Revoke it from Manage first if you want to issue a new link.",
+          );
+        }
+        setPublished(out.path);
         window.sessionStorage.removeItem(STORAGE_KEY);
       } else {
         setSaveSuccess(true);
@@ -1291,7 +1296,7 @@ export function MissYouEditor({
           </div>
           {!isResponse && (
             <p className="text-center text-[11px] text-[#8a7a9c]">
-              Private link stays active for 7 days — manage or delete it anytime.
+              Private link stays active until you revoke or delete it.
             </p>
           )}
         </aside>

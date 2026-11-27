@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import type { PhotoAsset } from "@/types/apology";
 import { cn } from "@/lib/cn";
@@ -24,7 +24,9 @@ export function MemoryGallery({
 }: MemoryGalleryProps) {
   if (photos.length === 0) return null;
   if (style === "slideshow") {
-    return <Slideshow photos={photos} className={className} animate={animate} />;
+    return (
+      <Slideshow photos={photos} className={className} animate={animate} onSeenAll={onSeenAll} />
+    );
   }
   if (style === "scrapbook") {
     return (
@@ -170,38 +172,87 @@ function Slideshow({
   photos,
   className,
   animate,
+  onSeenAll,
 }: {
   photos: PhotoAsset[];
   className?: string;
   animate: boolean;
+  onSeenAll?: () => void;
 }) {
   const reduce = useReducedMotion();
   const [index, setIndex] = useState(0);
   const [visitedIndices, setVisitedIndices] = useState<Set<number>>(() => new Set([0]));
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
+  const reportedAll = useRef(false);
   const still = reduce || !animate;
 
-  const go = useCallback(
-    (delta: number) => {
-      setIndex((current) => {
-        const nextIdx = (current + delta + photos.length) % photos.length;
-        setVisitedIndices((prev) => {
-          if (prev.has(nextIdx)) return prev;
-          const next = new Set(prev);
-          next.add(nextIdx);
-          return next;
-        });
-        return nextIdx;
+  const visit = useCallback(
+    (targetIdx: number) => {
+      const bounded = ((targetIdx % photos.length) + photos.length) % photos.length;
+      setIndex(bounded);
+      setVisitedIndices((prev) => {
+        if (prev.has(bounded)) return prev;
+        const next = new Set(prev);
+        next.add(bounded);
+        return next;
       });
     },
     [photos.length],
   );
+
+  const go = useCallback(
+    (delta: number) => {
+      visit(index + delta);
+    },
+    [visit, index],
+  );
+
+  useEffect(() => {
+    if (!reportedAll.current && visitedIndices.size >= photos.length) {
+      reportedAll.current = true;
+      onSeenAll?.();
+    }
+  }, [visitedIndices.size, photos.length, onSeenAll]);
 
   const safeIndex = Math.min(index, Math.max(0, photos.length - 1));
   const photo = photos[safeIndex];
   if (!photo) return null;
 
   return (
-    <div className={cn("flex w-full flex-col items-center gap-4", className)}>
+    <div
+      tabIndex={0}
+      role="region"
+      aria-roledescription="carousel"
+      aria-label={`Memory photos, ${safeIndex + 1} of ${photos.length}`}
+      onKeyDown={(event) => {
+        if (event.key === "ArrowLeft") {
+          event.preventDefault();
+          event.stopPropagation();
+          go(-1);
+        } else if (event.key === "ArrowRight") {
+          event.preventDefault();
+          event.stopPropagation();
+          go(1);
+        }
+      }}
+      onTouchStart={(event) => {
+        const touch = event.touches[0];
+        swipeStart.current = { x: touch.clientX, y: touch.clientY };
+      }}
+      onTouchEnd={(event) => {
+        const start = swipeStart.current;
+        swipeStart.current = null;
+        if (!start) return;
+        const touch = event.changedTouches[0];
+        const dx = touch.clientX - start.x;
+        const dy = touch.clientY - start.y;
+        if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)) return;
+        event.stopPropagation();
+        if (dx < 0) go(1);
+        else go(-1);
+      }}
+      className={cn("flex w-full flex-col items-center gap-4 outline-none focus-visible:ring-2 focus-visible:ring-[var(--t-primary)] rounded-2xl", className)}
+    >
       <div className="relative w-full max-w-[320px] overflow-hidden rounded-2xl bg-black/5 shadow-[0_18px_40px_-22px_rgba(0,0,0,0.6)]">
         <div className="relative aspect-[4/5]">
           {photos.map((slidePhoto, slideIdx) => {
@@ -238,33 +289,45 @@ function Slideshow({
         </p>
       ) : null}
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={() => go(-1)}
           aria-label="Previous photo"
-          className="grid h-9 w-9 place-items-center rounded-full border text-sm"
+          className="grid h-10 w-10 place-items-center rounded-full border text-sm transition active:scale-95"
           style={{ borderColor: "var(--t-border)", color: "var(--t-text)" }}
         >
           <Icon name="chevron-left" size={14} />
         </button>
-        <div className="flex gap-1.5" aria-hidden>
-          {photos.map((item, dot) => (
-            <span
-              key={item.id}
-              className="h-1.5 w-1.5 rounded-full transition-opacity"
-              style={{
-                background: "var(--t-primary)",
-                opacity: dot === safeIndex ? 1 : 0.25,
-              }}
-            />
-          ))}
+        <div className="flex items-center gap-1" role="tablist" aria-label="Choose photo">
+          {photos.map((item, dot) => {
+            const active = dot === safeIndex;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                aria-label={`Photo ${dot + 1} of ${photos.length}`}
+                onClick={() => visit(dot)}
+                className="grid h-9 w-6 place-items-center rounded-full"
+              >
+                <span
+                  className={cn("h-2 rounded-full transition-all", active ? "w-4" : "w-2")}
+                  style={{
+                    background: "var(--t-primary)",
+                    opacity: active ? 1 : 0.3,
+                  }}
+                />
+              </button>
+            );
+          })}
         </div>
         <button
           type="button"
           onClick={() => go(1)}
           aria-label="Next photo"
-          className="grid h-9 w-9 place-items-center rounded-full border text-sm"
+          className="grid h-10 w-10 place-items-center rounded-full border text-sm transition active:scale-95"
           style={{ borderColor: "var(--t-border)", color: "var(--t-text)" }}
         >
           <Icon name="chevron-right" size={14} />

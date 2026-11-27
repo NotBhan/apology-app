@@ -495,4 +495,62 @@ describe("birthday editor, authentication flows and regression coverage", () => 
     expect(screen.getByTestId("auth-status-signed-in")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /sign in to your account/i })).not.toBeInTheDocument();
   });
+
+  it("8. Preserves focalPoint when editing photo caption, persists Stage 4 customization on save, and handles fullPreview Escape", async () => {
+    const user = userEvent.setup();
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({ draft: { id: "draft-bday-custom", experienceType: "birthday" } }),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    render(
+      <BirthdayEditor
+        signedIn={true}
+        initialValues={{
+          recipientName: "Riya",
+          senderName: "Arjun",
+          headline: "Happy Birthday Riya",
+          message: "Celebrating every year with you!",
+          photos: [{ url: "https://example.com/cake.jpg", caption: "Old caption" }],
+        }}
+      />,
+    );
+
+    // Choose Top focal point, then edit caption -> focalPoint must remain
+    await user.click(screen.getByRole("button", { name: "Focus photo 1 Top" }));
+    const captionInput = screen.getByDisplayValue("Old caption");
+    await user.clear(captionInput);
+    await user.type(captionInput, "Updated caption");
+
+    // Pick cake customization, envelope style, and soundtrack
+    await user.click(screen.getByRole("button", { name: "3 Tiers" }));
+    await user.click(screen.getByRole("button", { name: "Rich Cocoa" }));
+    await user.click(screen.getByRole("button", { name: "Open card" }));
+    await user.click(screen.getByRole("button", { name: "Soft & Warm" }));
+
+    // Open full-screen walkthrough preview and dismiss with Escape returning focus
+    const previewTrigger = screen.getByRole("button", { name: /full screen walkthrough/i });
+    await user.click(previewTrigger);
+    expect(screen.getByRole("dialog", { name: /recipient walkthrough preview/i })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: /recipient walkthrough preview/i })).not.toBeInTheDocument();
+    expect(previewTrigger).toHaveFocus();
+
+    // Save to account and inspect outgoing payload
+    await user.click(screen.getByRole("button", { name: "Save to my account" }));
+    const body = JSON.parse((mockFetch.mock.calls[0]?.[1] as { body: string }).body);
+    expect(body.content.audio).toBe("soft");
+    expect(body.content.photos[0]).toEqual({
+      url: "https://example.com/cake.jpg",
+      caption: "Updated caption",
+      focalPoint: "50% 25%",
+    });
+    expect(body.content.customization.visual.cake).toEqual({
+      tiers: 3,
+      flavor: "chocolate",
+    });
+    expect(body.content.customization.interaction.envelopeStyle).toBe("open-letter");
+  });
 });

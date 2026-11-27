@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import type { StickerPack } from "@/sticker-packs/types";
 import { StickerRenderer } from "@/components/presentation/StickerRenderer";
 import { cn } from "@/lib/cn";
@@ -12,6 +12,8 @@ interface PackCardProps {
 }
 
 export function PackCard({ pack, selected, onSelect }: PackCardProps) {
+  const reduce = useReducedMotion();
+
   return (
     <button
       type="button"
@@ -29,7 +31,12 @@ export function PackCard({ pack, selected, onSelect }: PackCardProps) {
         style={{ background: `linear-gradient(155deg, ${pack.accent}1f, #ffffff 72%)` }}
       >
         <div className="absolute inset-[10%]">
-          <StickerRenderer packId={pack.id} state="apologizing" animate className="h-full w-full" />
+          <StickerRenderer
+            packId={pack.id}
+            state="apologizing"
+            animate={!reduce && selected}
+            className="h-full w-full"
+          />
         </div>
         {selected ? (
           <motion.span

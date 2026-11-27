@@ -100,19 +100,28 @@ function Ghosts({ opacity }: { opacity: number }) {
   );
 }
 
-export default function Skin({ sceneId, focus = 0, paused, className }: ThemeSkinProps) {
+export default function Skin({
+  sceneId,
+  focus = 0,
+  paused,
+  decorationsEnabled = true,
+  decorationDensity = "balanced",
+  className,
+}: ThemeSkinProps) {
   const scene = sceneId ?? "opening";
   const room = ROOM[scene] ?? ROOM.opening;
   const shade = Math.min(1, room.vignette + focus * 0.22);
+  const petals =
+    decorationDensity === "minimal" ? PETALS.slice(0, 3) : decorationDensity === "lush" ? PETALS : PETALS.slice(0, 5);
 
   return (
     <div className={`absolute inset-0 overflow-hidden pointer-events-none ${className ?? ""}`} aria-hidden data-scene={scene}>
       <style>{KEYFRAMES}</style>
 
-      {/* the room: floor, back wall, dust */}
-      <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, #1b0c10 0%, #2a1418 44%, #140a0c 100%)" }} />
-      <div className="absolute inset-0" style={{ background: "radial-gradient(86% 58% at 26% 6%, rgba(120,52,60,0.32) 0%, transparent 68%)" }} />
-      <div className="absolute inset-x-0 bottom-0 h-[46vh]" style={{ background: "radial-gradient(120% 74% at 50% 118%, rgba(122,43,51,0.34) 0%, transparent 72%)", opacity: 0.6 + room.glow * 0.4, transition: SLOW }} />
+      {/* the room: respects theme bg / overrides */}
+      <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, var(--t-bg) 0%, var(--t-bg-alt) 58%, var(--t-bg) 100%)" }} />
+      <div className="absolute inset-0" style={{ background: "radial-gradient(86% 58% at 26% 6%, var(--t-secondary) 0%, transparent 68%)", opacity: 0.22 }} />
+      <div className="absolute inset-x-0 bottom-0 h-[46vh]" style={{ background: "radial-gradient(120% 74% at 50% 118%, var(--t-accent) 0%, transparent 72%)", opacity: 0.24 + room.glow * 0.2, transition: SLOW }} />
 
       {/* one shaft of daylight, never more */}
       <div
@@ -132,26 +141,28 @@ export default function Skin({ sceneId, focus = 0, paused, className }: ThemeSki
       />
       <div className="absolute" style={{ top: "-10vh", left: "39%", width: 110, height: "120vh", transform: `rotate(${room.tilt + 2}deg)`, background: "linear-gradient(180deg, rgba(255,236,224,0.16) 0%, transparent 78%)", filter: "blur(30px)", opacity: room.shaft * 0.8, transition: SLOW }} />
 
-      {/* vignette, heavy and always heavier on the letter */}
-      <div className="absolute inset-0" style={{ background: "radial-gradient(120% 92% at 50% 44%, transparent 22%, rgba(12,5,7,0.55) 68%, rgba(9,4,5,0.94) 100%)", opacity: shade, transition: SLOW }} />
-      <div className="absolute inset-0" style={{ boxShadow: `inset 0 0 ${120 + room.vignette * 90}px ${24 + room.vignette * 44}px rgba(12,6,8,0.9)`, transition: "box-shadow 2200ms cubic-bezier(0.4, 0, 0.2, 1)" }} />
+      {/* subtle edge vignette that adapts to theme bg-alt */}
+      <div className="absolute inset-0" style={{ background: "radial-gradient(120% 92% at 50% 44%, transparent 28%, var(--t-bg-alt) 100%)", opacity: shade * 0.72, transition: SLOW }} />
 
-      {/* rose petals, few and very slow */}
-      {PETALS.map(([left, delay, dur, size, drift, opacity], i) => (
-        <Petal key={i} left={left} delay={delay} dur={dur} size={size} drift={drift} opacity={opacity} paused={paused} />
-      ))}
+      {decorationsEnabled ? (
+        <>
+          {petals.map(([left, delay, dur, size, drift, opacity], i) => (
+            <Petal key={i} left={left} delay={delay} dur={dur} size={size} drift={drift} opacity={opacity} paused={paused} />
+          ))}
 
-      {room.rules.map((top, i) => (
-        <Rule key={i} top={top} width={room.ruleW} opacity={0.1 + (i === 0 ? 0.07 : 0)} />
-      ))}
-      <Seal opacity={room.seal} />
-      <Ghosts opacity={room.frames * 0.5} />
-      {room.margin > 0 && (
-        <div className="absolute left-[12%] top-[12%] bottom-[12%]" style={{ width: 1, background: "linear-gradient(180deg, transparent, rgba(244,230,228,0.24) 30%, rgba(244,230,228,0.24) 70%, transparent)", opacity: room.margin, transition: SLOW }} />
-      )}
+          {room.rules.map((top, i) => (
+            <Rule key={i} top={top} width={room.ruleW} opacity={0.1 + (i === 0 ? 0.07 : 0)} />
+          ))}
+          <Seal opacity={room.seal} />
+          <Ghosts opacity={room.frames * 0.5} />
+          {room.margin > 0 && (
+            <div className="absolute left-[12%] top-[12%] bottom-[12%]" style={{ width: 1, background: "linear-gradient(180deg, transparent, var(--t-border) 30%, var(--t-border) 70%, transparent)", opacity: room.margin * 1.4, transition: SLOW }} />
+          )}
+        </>
+      ) : null}
 
-      {/* low candle wash, breathing very slowly */}
-      <div className="absolute" style={{ left: "8%", bottom: "10%", width: "46vw", height: "26vh", background: "radial-gradient(60% 60% at 50% 60%, rgba(201,112,122,0.3) 0%, transparent 70%)", filter: "blur(18px)", "--b": String(0.34 + room.glow * 0.4), opacity: 0.34 + room.glow * 0.4, transition: SLOW, ...(paused ? {} : { animation: "rg-lift 15s ease-in-out infinite" }) } as CSSVars} />
+      {/* low candle wash */}
+      <div className="absolute" style={{ left: "8%", bottom: "10%", width: "46vw", height: "26vh", background: "radial-gradient(60% 60% at 50% 60%, var(--t-secondary) 0%, transparent 70%)", filter: "blur(18px)", "--b": String(0.18 + room.glow * 0.16), opacity: 0.18 + room.glow * 0.16, transition: SLOW, ...(paused ? {} : { animation: "rg-lift 15s ease-in-out infinite" }) } as CSSVars} />
     </div>
   );
 }

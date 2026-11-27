@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Pool } from "pg";
+import { verifyConnectedTestDatabaseIdentity } from "@/test/db-safety";
 
 /**
  * PostgreSQL Integration Test Suite for Lifecycle Concurrency & Fencing.
@@ -12,20 +13,37 @@ import { Pool } from "pg";
  * 4. Parent deletion racing with a child worker that completed S3 deletion resolves safely.
  */
 
-const TEST_DB_URL =
-  process.env.TEST_DATABASE_URL || "postgresql://postgres:postgres@localhost:54329/postgres";
+/**
+ * Destructive integration suite.
+ *
+ * It truncates every content table before each test, so it must only run
+ * against an explicit throwaway database. `TEST_DATABASE_URL` is required;
+ * there is no production fallback, because the previous localhost default
+ * could never actually protect a developer whose `DATABASE_URL` was exported
+ * by the shell. Skipped when no test database is configured.
+ */
+const TEST_DB_URL = process.env.TEST_DATABASE_URL;
+const TEST_DB_BUILT = TEST_DB_URL!;
 
-describe("PostgreSQL Lifecycle Concurrency & Fencing (Real DB)", () => {
+describe.skipIf(!TEST_DB_URL)("PostgreSQL Lifecycle Concurrency & Fencing (Real DB)", () => {
   let pool: Pool | null = null;
   let dbAvailable = false;
 
   beforeAll(async () => {
+    if (!TEST_DB_URL) return;
+    const candidatePool = new Pool({ connectionString: TEST_DB_BUILT, connectionTimeoutMillis: 3000 });
     try {
-      pool = new Pool({ connectionString: TEST_DB_URL, connectionTimeoutMillis: 3000 });
-      await pool.query("SELECT 1");
+      await verifyConnectedTestDatabaseIdentity(
+        async (sqlText) => (await candidatePool.query(sqlText)).rows,
+        TEST_DB_BUILT,
+      );
+      pool = candidatePool;
       dbAvailable = true;
-    } catch {
+    } catch (err) {
+      await candidatePool.end().catch(() => undefined);
+      pool = null;
       dbAvailable = false;
+      throw err;
     }
   });
 

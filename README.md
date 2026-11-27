@@ -1,12 +1,13 @@
 # Koi Koi — personalised apology experiences
 
 A mobile-first app for making a private, animated apology: pick a world, write
-three messages, seal a letter, send one unguessable link that expires in 1–7
-days.
+three messages, seal a letter, send one unguessable link that stays live until
+the sender revokes or deletes it.
 
 Neon PostgreSQL for data, Filebase (S3) for private media, Next.js on Vercel
-Hobby. Expiry is enforced on every read; physical deletion is orchestrated by a
-scheduled Neon Function. There is no cron route, no worker and no Firebase.
+Hobby. Access is decided by publication status on every read; physical deletion
+is orchestrated by a scheduled Neon Function. There is no cron route, no worker
+and no Firebase.
 
 Two separate experiences share one data model and one scene engine:
 
@@ -31,8 +32,8 @@ uploads are stored under `.data/`.
 | `/create` | Start a new apology |
 | `/create/[draftId]` | Wizard (names → situation → words → theme → characters → customise → publish) |
 | `/preview/[draftId]` | Full recipient experience in a phone frame, creator controls outside |
-| `/letter/[token]` | Published, recipient-facing experience (until it expires) |
-| `/manage` | List letters, see time remaining, renew, revoke or delete |
+| `/letter/[token]` | Published, recipient-facing experience (live until revoked or deleted) |
+| `/manage` | List letters, share, revoke or delete |
 | `/privacy` | What is stored, for how long, and how deletion works |
 
 ## Validation
@@ -62,10 +63,11 @@ media access, symbol audit, security headers, error boundary, envelope.
   only its SHA-256 hash. Recipients get read access through a 20-byte random
   token and can only ever see `PublishedApology`.
 - **No indexing**: `robots: { index: false }` is set globally and per route.
-- **Temporary links**: a sender picks a 1–7 day window at publish time. The
-  deadline is computed server-side and stored as `expiresAt`; an expired token
-  behaves exactly like an unknown one (404), so it reveals nothing. Publishing
-  again renews the same token for a fresh window.
+- **Permanent links**: publishing mints one 32-byte token and stores only its
+  SHA-256 hash. The link stays live until the sender revokes or deletes it —
+  there is no TTL, no expiry check and no scheduled sweep. Re-publishing an
+  already-published record keeps the token it issued, so a link that was already
+  sent keeps working; only a revoked record mints a new one.
 - **Deletion**: a Neon `schedule` trigger runs `neon/functions/cleanup.ts`,
   which deletes the Filebase objects and then the rows. Media is bound to its
   apology, so a dead link takes its photos with it. See

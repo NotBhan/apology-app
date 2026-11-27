@@ -1,10 +1,8 @@
 import { constantTimeEqual } from "@/lib/id";
 import { requireApiCreator } from "@/lib/security/creator";
 import { getRepository } from "@/lib/storage";
-import { linkDurationDaysSchema } from "@/lib/validation/apology";
 import { validateDraftForPublish } from "@/lib/validation/publish";
-import { DEFAULT_LINK_DAYS, normalizeDurationDays } from "@/lib/expiry";
-import { jsonError, jsonOk, readJsonBody, repositoryErrorResponse } from "@/lib/api/responses";
+import { jsonError, jsonOk, repositoryErrorResponse } from "@/lib/api/responses";
 import { enforceRateLimit, rateLimitHeaders } from "@/lib/security/postgres-rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -15,15 +13,17 @@ const LETTER_PATH_PREFIX = "/letter";
 type PublishRouteContext = { params: Promise<{ draftId: string }> };
 
 /**
- * Publishes a draft and returns `{ token, path, expiresAt }` to the owner only.
+ * Publishes a draft and returns `{ token, path, alreadyPublished }` to the owner.
  *
- * The body may carry `{ durationDays }` (1–7). Anything outside that window is
- * rejected rather than clamped, so a caller never silently gets a different
- * lifetime than it asked for.
+ * Published links are permanent. The first publish mints the token; a repeat
+ * publish of an already-published record keeps the token the recipient already
+ * has, because only the hash is stored and the plaintext cannot be recovered.
+ * In that case `token`/`path` are empty and `alreadyPublished` is true — the
+ * link that was already sent keeps working rather than being replaced.
  *
- * The stored content is re-validated against `draftPayloadSchema` first, so a
- * draft that is still missing any of its three messages (or a name) cannot be
- * shared by a stale tab or a direct API call.
+ * The stored content is re-validated against the owning module's schema first,
+ * so a draft that is still incomplete cannot be shared by a stale tab or a
+ * direct API call.
  */
 export async function POST(request: Request, context: PublishRouteContext) {
   const { draftId } = await context.params;
@@ -31,21 +31,6 @@ export async function POST(request: Request, context: PublishRouteContext) {
   const limit = await enforceRateLimit(request, "publish");
   if (!limit.allowed) {
     return jsonError(429, "Too many requests. Try again shortly.", undefined, rateLimitHeaders(limit));
-  }
-
-
-
-  const body = await readJsonBody(request);
-  const requested =
-    body.ok && body.data && typeof body.data === "object"
-      ? (body.data as { durationDays?: unknown }).durationDays
-      : undefined;
-
-  const duration = linkDurationDaysSchema.safeParse(requested ?? DEFAULT_LINK_DAYS);
-  if (!duration.success) {
-    return jsonError(400, "Choose a link lifetime between 1 and 7 days.", {
-      durationDays: duration.error.issues[0]?.message ?? "Invalid lifetime.",
-    });
   }
 
   try {
@@ -68,14 +53,13 @@ export async function POST(request: Request, context: PublishRouteContext) {
       return jsonError(400, validation.error, validation.fields);
     }
 
-    const published = await repository.publish(draftId, owner.hash, duration.data);
+    const published = await repository.publish(draftId, owner.hash);
     const token = published.accessToken;
 
     return jsonOk({
       token,
-      path: `${LETTER_PATH_PREFIX}/${encodeURIComponent(token)}`,
-      expiresAt: published.expiresAt,
-      durationDays: normalizeDurationDays(duration.data),
+      path: token ? `${LETTER_PATH_PREFIX}/${encodeURIComponent(token)}` : "",
+      alreadyPublished: !token,
     });
   } catch (error) {
     return repositoryErrorResponse(error);

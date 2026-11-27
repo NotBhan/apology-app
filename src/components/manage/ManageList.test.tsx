@@ -278,8 +278,7 @@ describe("ManageList response resolution", () => {
       data: {
         token: "mock-published-token-123",
         path: "/letter/mock-published-token-123",
-        expiresAt: "2026-11-28T10:00:00.000Z",
-        durationDays: 3,
+        alreadyPublished: false,
       },
     });
 
@@ -295,7 +294,45 @@ describe("ManageList response resolution", () => {
     expect(shareBtn).toBeInTheDocument();
 
     await user.click(shareBtn);
-    expect(publishDraftAction).toHaveBeenCalledWith("draft-apology-1", 3);
+    expect(publishDraftAction).toHaveBeenCalledWith("draft-apology-1");
     expect(await screen.findByRole("dialog", { name: /Share with QR/i })).toBeInTheDocument();
+  });
+
+  it("shows a published letter as Live and never as Expired", () => {
+    render(
+      <ManageList
+        drafts={[{ ...apologyDraft, status: "published", expiresAt: undefined }]}
+        tombstones={[]}
+        pendingDeletionIds={[]}
+      />,
+    );
+
+    expect(screen.getByText("Live")).toBeInTheDocument();
+    expect(screen.queryByText(/Expired/i)).not.toBeInTheDocument();
+    // The destructive action must not be hidden from a live link.
+    expect(screen.getByRole("button", { name: /Revoke link/i })).toBeInTheDocument();
+    // A permanent link is never "renewed".
+    expect(screen.queryByRole("button", { name: /Renew/i })).not.toBeInTheDocument();
+  });
+
+  it("does not offer to replace the link when the server preserved the existing token", async () => {
+    const user = userEvent.setup();
+    const { publishDraftAction } = await import("@/app/create/actions");
+    vi.mocked(publishDraftAction).mockResolvedValueOnce({
+      ok: true,
+      data: { token: "", path: "", alreadyPublished: true },
+    });
+
+    render(
+      <ManageList drafts={[apologyDraft]} tombstones={[]} pendingDeletionIds={[]} />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Share/i }));
+
+    expect(
+      await screen.findByText(/already live and unchanged/i),
+    ).toBeInTheDocument();
+    // No QR dialog is shown for a link whose plaintext is unrecoverable.
+    expect(screen.queryByRole("dialog", { name: /Share with QR/i })).not.toBeInTheDocument();
   });
 });

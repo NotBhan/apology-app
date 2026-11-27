@@ -7,7 +7,7 @@
 #
 #   ./scripts/acceptance/run.sh
 #
-# Requires: DATABASE_URL, FILEBASE_* , and `neon` CLI (>= 4.21) linked to the
+# Requires: TEST_DATABASE_URL, FILEBASE_TEST_BUCKET, FILEBASE_* , and `neon` CLI (>= 4.21) linked to the
 # project, plus `openssl` and `curl`.
 
 set -euo pipefail
@@ -29,12 +29,12 @@ note "host: $(uname -srm)"
 note "node: $(node --version)"
 
 # ---------------------------------------------------------------- preflight
-require DATABASE_URL
+require TEST_DATABASE_URL
+require FILEBASE_TEST_BUCKET
 require FILEBASE_ACCESS_KEY
 require FILEBASE_SECRET_KEY
-require FILEBASE_BUCKET
-note "database: configured"
-note "storage bucket: ${FILEBASE_BUCKET}"
+note "database: isolated test database configured"
+note "storage bucket: ${FILEBASE_TEST_BUCKET}"
 note "storage endpoint: ${FILEBASE_ENDPOINT:-https://s3.filebase.io}"
 note "storage region: ${FILEBASE_REGION:-auto}"
 

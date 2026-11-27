@@ -7,41 +7,24 @@ import type { ApologyDraft } from "@/types/apology";
 import { getTheme } from "@/themes/registry";
 import { getStickerPack } from "@/sticker-packs/registry";
 import { resolveSituationLabel } from "@/content/situations";
-import {
-  MAX_LINK_DAYS,
-  MIN_LINK_DAYS,
-  computeExpiresAt,
-  formatDuration,
-  formatExpiry,
-} from "@/lib/expiry";
 import { Button } from "@/components/ui/Button";
-import { cn } from "@/lib/cn";
 
 interface PublishStepProps {
   draft: ApologyDraft;
   publishedToken?: string;
-  publishedExpiresAt?: string;
   publishing: boolean;
   error?: string | null;
-  onDurationChange: (days: number) => void;
   onPublish: () => void;
   onPreview: () => void;
   onBack: () => void;
   isResponse?: boolean;
 }
 
-const DAY_OPTIONS = Array.from(
-  { length: MAX_LINK_DAYS - MIN_LINK_DAYS + 1 },
-  (_, index) => MIN_LINK_DAYS + index,
-);
-
 export function PublishStep({
   draft,
   publishedToken,
-  publishedExpiresAt,
   publishing,
   error,
-  onDurationChange,
   onPublish,
   onPreview,
   onBack,
@@ -50,7 +33,6 @@ export function PublishStep({
   const [copied, setCopied] = useState(false);
   const theme = getTheme(draft.themeId);
   const pack = getStickerPack(draft.stickerPackId);
-  const duration = draft.linkDurationDays;
 
   const [showQr, setShowQr] = useState(false);
 
@@ -58,9 +40,6 @@ export function PublishStep({
     publishedToken && typeof window !== "undefined"
       ? `${window.location.origin}/letter/${publishedToken}`
       : "";
-
-  // Shown before publishing so the sender sees the exact deadline up front.
-  const projectedExpiry = computeExpiresAt(duration);
 
   async function copyLink() {
     if (!shareUrl) return;
@@ -85,7 +64,7 @@ export function PublishStep({
         </h1>
         <p className="text-[0.86rem] leading-relaxed text-[#7c6892]">
           {publishedToken
-            ? "This link is private and temporary. Only someone with it can open the letter, and only until it expires."
+            ? "This link is private. Only someone with it can open the letter, and it stays live until you revoke or delete it."
             : "Walk through the whole experience first. You can change anything afterwards."}
         </p>
       </header>
@@ -107,60 +86,33 @@ export function PublishStep({
                 : "Theme default"
           }
         />
+        {draft.customization.interaction?.envelopeStyle &&
+        draft.customization.interaction.envelopeStyle !== "wax-seal" ? (
+          <Row
+            label="Note style"
+            value={
+              draft.customization.interaction.envelopeStyle === "ribbon"
+                ? "Silk ribbon"
+                : "Open stationery"
+            }
+          />
+        ) : null}
+        {draft.customization.visual?.fontPairing &&
+        draft.customization.visual.fontPairing !== "theme" ? (
+          <Row label="Typography" value={draft.customization.visual.fontPairing} />
+        ) : null}
       </dl>
 
       {!publishedToken ? (
-        isResponse ? (
-          <section className="space-y-1.5 rounded-2xl border border-[#ece2f6] bg-white p-4">
-            <p className="text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-[#7c6892]">
-              Permanent Response Link
-            </p>
-            <p className="text-[0.74rem] leading-relaxed text-[#8a7a9c]">
-              Your response stays accessible until you explicitly revoke or delete it.
-            </p>
-          </section>
-        ) : (
-          <section className="space-y-2.5 rounded-2xl border border-[#ece2f6] bg-white p-4">
-            <div className="flex items-baseline justify-between gap-3">
-              <p className="text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-[#7c6892]">
-                Link stays live for
-              </p>
-              <span className="text-[0.72rem] text-[#8a7a9c]">
-                {MIN_LINK_DAYS}–{MAX_LINK_DAYS} days
-              </span>
-            </div>
-
-            <div role="radiogroup" aria-label="Link lifetime in days" className="flex gap-1.5">
-              {DAY_OPTIONS.map((option) => {
-                const active = option === duration;
-                return (
-                  <button
-                    key={option}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    aria-label={formatDuration(option)}
-                    onClick={() => onDurationChange(option)}
-                    className={cn(
-                      "h-10 flex-1 rounded-xl border text-[0.8rem] font-semibold transition active:scale-95",
-                      active
-                        ? "border-[#6d3fa8] bg-[#6d3fa8] text-white"
-                        : "border-[#ece2f6] bg-white text-[#6b5580] hover:border-[#d9c8ec]",
-                    )}
-                  >
-                    {option}
-                  </button>
-                );
-              })}
-            </div>
-
-            <p className="text-[0.74rem] leading-relaxed text-[#8a7a9c]">
-              Expires{" "}
-              <span className="font-semibold text-[#4b2f6b]">{formatExpiry(projectedExpiry)}</span>.
-              After that the link stops opening for anyone — you can publish again for a fresh window.
-            </p>
-          </section>
-        )
+        <section className="space-y-1.5 rounded-2xl border border-[#ece2f6] bg-white p-4">
+          <p className="text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-[#7c6892]">
+            {isResponse ? "Permanent response link" : "Permanent link"}
+          </p>
+          <p className="text-[0.74rem] leading-relaxed text-[#8a7a9c]">
+            Your {isResponse ? "response" : "link"} stays live until you explicitly revoke or
+            delete it. It never expires on its own, and you can remove it from Manage at any time.
+          </p>
+        </section>
       ) : null}
 
       {error ? (
@@ -178,7 +130,7 @@ export function PublishStep({
               Private link
             </p>
             <span className="rounded-full bg-white px-2 py-0.5 text-[0.62rem] font-semibold text-[#5b3f7d]">
-              expires {formatExpiry(publishedExpiresAt ?? projectedExpiry)}
+              permanent
             </span>
           </div>
           <p className="break-all rounded-xl bg-white px-3 py-2 text-[0.78rem] text-[#33203f]">
@@ -208,8 +160,8 @@ export function PublishStep({
             />
           ) : null}
           <p className="text-[0.68rem] leading-relaxed text-[#8a7a9c]">
-            Live for {formatDuration(duration)}. You can revoke it earlier from Manage, and an
-            expired link can be renewed by publishing again.
+            Stays live until you revoke or delete it. Revoking from Manage stops the link
+            immediately; the letter and its files stay until you delete them.
           </p>
         </motion.div>
       ) : null}
@@ -221,7 +173,7 @@ export function PublishStep({
               Preview the experience
             </Button>
             <Button size="lg" full onClick={onPublish} disabled={publishing}>
-              {publishing ? "Publishing…" : isResponse ? "Publish Response" : `Publish for ${formatDuration(duration)}`}
+              {publishing ? "Publishing…" : isResponse ? "Publish Response" : "Publish & get link"}
             </Button>
           </>
         ) : (

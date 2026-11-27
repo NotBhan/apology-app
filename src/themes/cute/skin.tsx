@@ -181,27 +181,45 @@ function Stage({ scene, paused }: { scene: string; paused?: boolean }) {
   }
 }
 
-export default function Skin({ sceneId, paused, className }: ThemeSkinProps) {
+export default function Skin({
+  sceneId,
+  paused,
+  decorationsEnabled = true,
+  decorationDensity = "balanced",
+  className,
+}: ThemeSkinProps) {
   const scene = sceneId ?? "opening";
+  const pillList = decorationDensity === "minimal" ? PILLS.slice(0, 4) : PILLS;
+
   return (
     <div className={`absolute inset-0 overflow-hidden pointer-events-none ${className ?? ""}`} aria-hidden data-scene={scene}>
       <style>{KEYFRAMES}</style>
-      <div className="absolute inset-0" style={{ background: "radial-gradient(120% 92% at 14% 0%, #ffe3ef 0%, rgba(255,227,239,0) 62%), radial-gradient(100% 82% at 88% 104%, #ffe8d4 0%, rgba(255,232,212,0) 60%), linear-gradient(180deg,#fff2f8 0%,#fff0f6 100%)" }} />
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(120% 92% at 14% 0%, var(--t-surface-alt) 0%, transparent 62%), radial-gradient(100% 82% at 88% 104%, var(--t-bg-alt) 0%, transparent 60%), linear-gradient(180deg, var(--t-bg) 0%, var(--t-bg-alt) 100%)",
+        }}
+      />
 
-      <Blob x={-10} y={-9} w={40} h={32} fill="blush" r={-8} blur={1} />
-      <Blob x={68} y={-14} w={44} h={34} fill="cream" r={10} />
-      <Blob x={81} y={52} w={30} h={26} fill="pink" r={-14} blur={2} />
+      {decorationsEnabled ? (
+        <>
+          <Blob x={-10} y={-9} w={40} h={32} fill="blush" r={-8} blur={1} />
+          <Blob x={68} y={-14} w={44} h={34} fill="cream" r={10} />
+          <Blob x={81} y={52} w={30} h={26} fill="pink" r={-14} blur={2} />
 
-      <Stage scene={scene} paused={paused} />
+          <Stage scene={scene} paused={paused} />
 
-      <div className="absolute inset-x-0 bottom-0 h-[10vh] opacity-75" style={{ backgroundImage: "repeating-linear-gradient(115deg, rgba(255,158,196,0.55) 0 16px, rgba(255,255,255,0.62) 16px 32px)", maskImage: "linear-gradient(to top,#000 12%,transparent)", WebkitMaskImage: "linear-gradient(to top,#000 12%,transparent)", ...(paused ? {} : { animation: "cq-candy 6s linear infinite" }) }} />
-      <div className="absolute inset-x-0 bottom-[9vh] h-[26px] opacity-80" style={{ backgroundImage: "radial-gradient(circle at 13px 26px, #ffc9dd 0 13px, transparent 13px)", backgroundSize: "26px 26px", backgroundRepeat: "repeat-x" }} />
+          <div className="absolute inset-x-0 bottom-0 h-[10vh] opacity-65" style={{ backgroundImage: "repeating-linear-gradient(115deg, var(--t-secondary) 0 16px, rgba(255,255,255,0.4) 16px 32px)", maskImage: "linear-gradient(to top,#000 12%,transparent)", WebkitMaskImage: "linear-gradient(to top,#000 12%,transparent)", ...(paused ? {} : { animation: "cq-candy 6s linear infinite" }) }} />
+          <div className="absolute inset-x-0 bottom-[9vh] h-[26px] opacity-65" style={{ backgroundImage: "radial-gradient(circle at 13px 26px, var(--t-secondary) 0 13px, transparent 13px)", backgroundSize: "26px 26px", backgroundRepeat: "repeat-x" }} />
 
-      {!paused && PILLS.map(([x, w, delay, dur, fill, drift], i) => (
-        <div key={i} className="absolute" style={{ left: `${x}%`, bottom: "-6%", width: w, height: w * 0.86, borderRadius: 999, background: FILL[fill], opacity: 0.8, "--dx": `${drift}px`, "--o": "0.7", animation: `cc-rise ${dur}s linear ${delay}s infinite` } as CSSVars} />
-      ))}
+          {!paused && pillList.map(([x, w, delay, dur, fill, drift], i) => (
+            <div key={i} className="absolute" style={{ left: `${x}%`, bottom: "-6%", width: w, height: w * 0.86, borderRadius: 999, background: FILL[fill], opacity: 0.8, "--dx": `${drift}px`, "--o": "0.7", animation: `cc-rise ${dur}s linear ${delay}s infinite` } as CSSVars} />
+          ))}
+        </>
+      ) : null}
 
-      <div className="absolute inset-x-0 bottom-0 h-[42vh]" style={{ background: "linear-gradient(to top, rgba(196,43,114,0.10), transparent)" }} />
+      <div className="absolute inset-x-0 bottom-0 h-[42vh]" style={{ background: "linear-gradient(to top, var(--t-bg-alt), transparent)", opacity: 0.45 }} />
     </div>
   );
 }

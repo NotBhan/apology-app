@@ -150,4 +150,55 @@ describe("buildScenes", () => {
       }
     }
   });
+
+  it("switches to LetterScene and omits envelope when open-letter mode is selected", () => {
+    const romantic = THEME_LIST.find((theme) => theme.id === "romantic")!;
+    const scenes = buildScenes(
+      makeDraft({
+        themeId: "romantic",
+        customization: {
+          audio: { source: "default", volume: 0.5 },
+          photos: [],
+          memoryStyle: "polaroid",
+          interaction: { envelopeStyle: "open-letter" },
+        },
+      }),
+      romantic,
+    );
+    const ids = scenes.map((scene) => scene.id);
+    expect(ids).toContain("letter");
+    expect(ids).not.toContain("envelope");
+  });
+
+  it("applies custom opening copy, scene headings, closing copy, and memory visibility toggle", () => {
+    const romantic = THEME_LIST.find((theme) => theme.id === "romantic")!;
+    const scenes = buildScenes(
+      makeDraft({
+        customization: {
+          audio: { source: "default", volume: 0.5 },
+          photos: [{ id: "p1", url: "/api/uploads/p1" }],
+          memoryStyle: "polaroid",
+          content: {
+            openingTitle: "Read this tonight",
+            openingSubtitle: "Only when you are ready",
+            openingCta: "Begin",
+            closingHeadline: "Thank you for reading",
+            closingBody: "Always rooting for you.",
+            sceneHeadings: { hurt: "My mistake" },
+            showMemoryScene: false,
+          },
+        },
+      }),
+      romantic,
+    );
+
+    const opening = scenes.find((s) => s.id === "opening");
+    expect(opening?.title).toBe("Read this tonight");
+    expect(opening?.body).toBe("Only when you are ready");
+    expect(opening?.ctaLabel).toBe("Begin");
+    expect(scenes.find((s) => s.id === "hurt")?.title).toBe("My mistake");
+    expect(scenes.find((s) => s.id === "closing")?.title).toBe("Thank you for reading");
+    expect(scenes.find((s) => s.id === "closing")?.body).toBe("Always rooting for you.");
+    expect(scenes.some((s) => s.id === "memory")).toBe(false);
+  });
 });

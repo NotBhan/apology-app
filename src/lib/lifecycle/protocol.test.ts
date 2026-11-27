@@ -14,12 +14,17 @@ function setup() {
   return { backend, objects };
 }
 
-/** A published, expired apology with two uploaded assets. */
-function expiredApology(ctx: ReturnType<typeof setup>, patch: { pending?: boolean } = {}) {
+/**
+ * A published apology whose author has requested deletion, with two uploaded
+ * assets.
+ *
+ * The record is deleted because explicit intent exists, never because time
+ * passed: published links are permanent.
+ */
+function deletedApology(ctx: ReturnType<typeof setup>, patch: { pending?: boolean } = {}) {
   const record = makeRecord({
     ownerKeyHash: OWNER,
     status: "published",
-    expiresAt: new Date(NOW.getTime() - 60_000).toISOString(),
   });
   ctx.backend.state.apologies.set(record.id, record);
 
@@ -40,6 +45,9 @@ function expiredApology(ctx: ReturnType<typeof setup>, patch: { pending?: boolea
     ctx.objects.objects.set(asset.objectKey, { bytes: new Uint8Array([1]), contentType: "image/png" });
   }
 
+  // Durable intent: the only way a published record becomes a candidate.
+  void ctx.backend.repository.requestDeletionByOwner(record.id, OWNER);
+
   return record;
 }
 
@@ -58,7 +66,7 @@ describe("deletion protocol", () => {
     });
 
   it("deletes every object, then the rows, then writes a tombstone", async () => {
-    const record = expiredApology(ctx);
+    const record = deletedApology(ctx);
 
     const report = await run();
 
@@ -70,13 +78,13 @@ describe("deletion protocol", () => {
     expect(ctx.backend.state.tombstones[0]).toMatchObject({
       apologyId: record.id,
       assetsDeleted: 2,
-      reason: "expired",
+      reason: "manual",
     });
     expect(ctx.backend.state.jobs.get(record.id)?.state).toBe("completed");
   });
 
   it("never stores personal content in the job or tombstone", async () => {
-    const record = expiredApology(ctx);
+    const record = deletedApology(ctx);
     await run();
 
     const serialised = JSON.stringify([
@@ -90,7 +98,7 @@ describe("deletion protocol", () => {
   });
 
   it("retries without deleting rows when a per-key delete fails", async () => {
-    const record = expiredApology(ctx);
+    const record = deletedApology(ctx);
     ctx.objects.deleteErrors.set("apologies/x/b.png", "AccessDenied");
 
     const report = await run();
@@ -103,7 +111,7 @@ describe("deletion protocol", () => {
   });
 
   it("retries when the provider reports success but the object survives", async () => {
-    const record = expiredApology(ctx);
+    const record = deletedApology(ctx);
 
     const lying: ObjectStore = {
       async put() {},
@@ -126,7 +134,7 @@ describe("deletion protocol", () => {
   });
 
   it("retries when the transport throws", async () => {
-    const record = expiredApology(ctx);
+    const record = deletedApology(ctx);
     ctx.objects.failDeleteWith = Object.assign(new Error("timeout"), { name: "TimeoutError" });
 
     const report = await run();
@@ -135,7 +143,7 @@ describe("deletion protocol", () => {
   });
 
   it("is idempotent: a second run has nothing to do", async () => {
-    expiredApology(ctx);
+    deletedApology(ctx);
     await run();
     const second = await run();
 
@@ -144,7 +152,7 @@ describe("deletion protocol", () => {
   });
 
   it("does not double-process under concurrent runs", async () => {
-    expiredApology(ctx);
+    deletedApology(ctx);
 
     const [first, second] = await Promise.all([run(), run()]);
     const deleted = first.deleted + second.deleted;
@@ -159,7 +167,6 @@ describe("deletion protocol", () => {
     const record = makeRecord({
       ownerKeyHash: OWNER,
       status: "published",
-      expiresAt: new Date(NOW.getTime() - 60_000).toISOString(),
     });
     ctx.backend.state.apologies.set(record.id, record);
     ctx.backend.state.assets.set(record.id, [
@@ -174,6 +181,8 @@ describe("deletion protocol", () => {
         createdAt: new Date(NOW.getTime() - 1000).toISOString(),
       },
     ]);
+    // The author deleted the letter while the upload was still in flight.
+    void ctx.backend.repository.requestDeletionByOwner(record.id, OWNER);
 
     const report = await run();
 
@@ -183,7 +192,7 @@ describe("deletion protocol", () => {
   });
 
   it("reaps a stale reservation on a later run and then finishes", async () => {
-    const record = expiredApology(ctx, { pending: true });
+    const record = deletedApology(ctx, { pending: true });
     ctx.objects.objects.set("apologies/x/a.png", { bytes: new Uint8Array([1]), contentType: "image/png" });
 
     const report = await run();
@@ -194,7 +203,7 @@ describe("deletion protocol", () => {
   });
 
   it("finishes a job whose apology row is already gone", async () => {
-    const record = expiredApology(ctx);
+    const record = deletedApology(ctx);
     // Simulate a crash after row deletion, before completion.
     ctx.backend.state.apologies.delete(record.id);
     ctx.backend.state.jobs.set(record.id, {
@@ -202,7 +211,7 @@ describe("deletion protocol", () => {
       ownerKeyHash: OWNER,
       objectKeys: ["apologies/x/a.png", "apologies/x/b.png"],
       state: "processing",
-      reason: "expired",
+      reason: "manual",
       attemptCount: 1,
     });
 
@@ -214,7 +223,7 @@ describe("deletion protocol", () => {
   });
 
   it("does not strand a job if the run dies after deleting objects", async () => {
-    const record = expiredApology(ctx);
+    const record = deletedApology(ctx);
 
     // The function terminates after DeleteObjects but before finalise — the
     // worst realistic crash window, because the objects are already gone.
@@ -251,7 +260,7 @@ describe("deletion protocol", () => {
   });
 
   it("resumes after a crash that happened before any object was deleted", async () => {
-    const record = expiredApology(ctx);
+    const record = deletedApology(ctx);
     ctx.objects.failDeleteWith = Object.assign(new Error("503"), { name: "SlowDown" });
 
     const first = await run();
@@ -270,15 +279,22 @@ describe("deletion protocol", () => {
     expect(ctx.backend.state.apologies.has(record.id)).toBe(false);
   });
 
-  it("leaves a live letter untouched", async () => {
+  it("never touches a published letter, however long it has been live", async () => {
+    // No expiry field of any kind: a permanent link that has been published for
+    // years is still not a deletion candidate.
     const record = makeRecord({
       ownerKeyHash: OWNER,
       status: "published",
-      expiresAt: new Date(NOW.getTime() + 86_400_000).toISOString(),
+      publishedAt: new Date(NOW.getTime() - 5 * 365 * 86_400_000).toISOString(),
     });
     ctx.backend.state.apologies.set(record.id, record);
 
-    const report = await run();
+    const report = await runCleanup({
+      store: ctx.backend.lifecycle,
+      objects: ctx.objects,
+      now: () => new Date(NOW.getTime() + 10 * 365 * 86_400_000),
+    });
+
     expect(report.scanned).toBe(0);
     expect(ctx.backend.state.apologies.has(record.id)).toBe(true);
   });

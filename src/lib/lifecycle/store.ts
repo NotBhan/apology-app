@@ -13,11 +13,13 @@ import type {
  * Nothing here performs object I/O.
  */
 export interface LifecycleStore {
-  /** Expired apologies plus any job that is not yet `completed`. */
+  /**
+   * Every job that is not yet `completed` and whose lease has lapsed.
+   *
+   * Nothing else can become a deletion candidate: published links have no
+   * expiry, so the worker only ever acts on explicit, durable intent.
+   */
   listCandidates(now: Date, limit: number): Promise<Candidate[]>;
-
-  /** Atomic intent for an expiry candidate: job first, then status. */
-  requestDeletionForExpiry(apologyId: string, now: Date): Promise<boolean>;
 
   /** Lease compare-and-set. `null` means another worker holds it, or it is done. */
   claim(apologyId: string, now: Date, leaseMs: number): Promise<DeletionJob | null>;

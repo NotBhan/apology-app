@@ -48,6 +48,7 @@ export function PresentationEngine({
 }: PresentationEngineProps) {
   const scenes = useMemo(() => buildScenes(content, theme), [content, theme]);
   const [index, setIndex] = useState(0);
+  const [direction, setDirection] = useState<1 | -1>(1);
   const [armed, setArmed] = useState(false);
   const [muted, setMuted] = useState(false);
   const [envelopeOpened, setEnvelopeOpened] = useState(false);
@@ -66,17 +67,24 @@ export function PresentationEngine({
   const audioSrc = useMemo(() => resolveAudioSrc(theme, content.customization), [theme, content]);
   const volume = useMemo(() => resolveVolume(content.customization), [content]);
 
-  const animate = !reduce && visible;
+  const motionPreset = content.customization.interaction?.motionPreset ?? "gentle";
+  const animate = !reduce && visible && motionPreset !== "still";
+  const requestedTransition = content.customization.interaction?.transitionStyle;
+  const transitionPreset =
+    !requestedTransition || requestedTransition === "theme"
+      ? theme.motion.transition
+      : requestedTransition;
 
   const goTo = useCallback(
     (target: number) => {
       const bounded = Math.max(0, Math.min(scenes.length - 1, target));
+      setDirection(bounded >= index ? 1 : -1);
       setIndex(bounded);
       setEnvelopeOpened(false);
       const nextState = scenes[bounded]?.characterState ?? "idle";
       setCharacterState(nextState);
     },
-    [scenes],
+    [scenes, index],
   );
 
   const next = useCallback(() => {
@@ -90,6 +98,7 @@ export function PresentationEngine({
 
   const restart = useCallback(() => {
     setArmed(true);
+    setDirection(-1);
     setIndex(0);
     setEnvelopeOpened(false);
     setCharacterState(scenes[0]?.characterState ?? "apologizing");
@@ -112,6 +121,8 @@ export function PresentationEngine({
     });
   }, [onApiReady, next, back, restart, goTo, index, scenes.length, scene, audioSrc, volume, muted]);
 
+  const lockedEnvelope = scene?.type === "envelope" && !envelopeOpened;
+
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
@@ -119,17 +130,17 @@ export function PresentationEngine({
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "ArrowRight") {
         event.preventDefault();
-        next();
+        if (!lockedEnvelope && !isLast) next();
       }
       if (event.key === "ArrowLeft") {
         event.preventDefault();
-        back();
+        if (index > 0) back();
       }
     };
 
     stage.addEventListener("keydown", onKey);
     return () => stage.removeEventListener("keydown", onKey);
-  }, [next, back]);
+  }, [next, back, lockedEnvelope, isLast, index]);
 
   const onTouchStart = (event: React.TouchEvent) => {
     const touch = event.touches[0];
@@ -144,7 +155,7 @@ export function PresentationEngine({
     const dy = touch.clientY - start.y;
     touchStart.current = null;
     if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy)) return;
-    if (dx < 0 && !isLast && scene?.type !== "envelope") next();
+    if (dx < 0 && !isLast && !lockedEnvelope) next();
     if (dx > 0 && index > 0) back();
   };
 
@@ -172,12 +183,14 @@ export function PresentationEngine({
         aria-label={`Apology from ${content.senderName} to ${content.recipientName}`}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
-        className="relative isolate flex h-full min-h-0 w-full flex-col outline-none"
+        className="relative isolate flex h-full min-h-0 w-full flex-col outline-none focus-visible:ring-2 focus-visible:ring-[var(--t-primary)] focus-visible:ring-inset"
       >
         <ThemeCanvas
           themeId={theme.id}
           sceneId={scene.id}
           paused={!animate}
+          decorationsEnabled={content.customization.visual?.decorationsEnabled ?? true}
+          decorationDensity={content.customization.visual?.decorationDensity ?? "balanced"}
           className="absolute inset-0"
         />
 
@@ -201,7 +214,7 @@ export function PresentationEngine({
                 type="button"
                 onClick={back}
                 aria-label="Previous scene"
-                className="grid h-8 w-8 place-items-center rounded-full border"
+                className="grid h-10 w-10 place-items-center rounded-full border transition active:scale-95 focus-visible:ring-2 focus-visible:ring-[var(--t-primary)]"
                 style={{
                   borderColor: "color-mix(in oklab, var(--t-border) 80%, transparent)",
                   color: "var(--t-text)",
@@ -221,9 +234,11 @@ export function PresentationEngine({
           </div>
 
           <AudioController
-            src={armed && !muted ? audioSrc : muted ? undefined : audioSrc}
+            src={audioSrc}
             volume={volume}
             armed={armed && !muted}
+            muted={muted}
+            onMuteChange={setMuted}
             tone={{
               text: "var(--t-text)",
               surface: "color-mix(in oklab, var(--t-surface) 62%, transparent)",
@@ -251,7 +266,12 @@ export function PresentationEngine({
 
         {/* Scene */}
         <div className="relative z-20 flex min-h-0 flex-1 flex-col overflow-y-auto no-scrollbar">
-          <SceneTransition sceneKey={scene.id} preset={theme.motion.transition}>
+          <SceneTransition
+            sceneKey={scene.id}
+            preset={transitionPreset}
+            direction={direction}
+            motionPreset={motionPreset}
+          >
             <SceneRenderer
               scene={scene}
               content={content}

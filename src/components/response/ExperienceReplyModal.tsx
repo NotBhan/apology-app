@@ -83,7 +83,7 @@ export function ExperienceReplyModal({
       async save(_id, payload) {
         return payload as ApologyDraft;
       },
-      async publish(_id, durationDays) {
+      async publish() {
         const payloadToPublish = apologyDraftRef.current ?? initialApologyDraft;
         const result = await sendExperienceReply(apologyId, {
           experienceType: "apology",
@@ -99,8 +99,6 @@ export function ExperienceReplyModal({
         return {
           token: result.publicToken,
           path: result.publicUrl,
-          expiresAt: "",
-          durationDays,
         };
       },
       async uploadAudio() {

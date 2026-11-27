@@ -11,6 +11,7 @@ interface RevealProps {
   className?: string;
   /** Seconds before the reveal starts. */
   delay?: number;
+  animate?: boolean;
   as?: "p" | "span" | "h2";
 }
 
@@ -18,12 +19,19 @@ interface RevealProps {
  * One reveal primitive for every theme. The theme picks the *mode*; the
  * implementation stays consistent so motion feels authored, not accidental.
  */
-export function MessageReveal({ text, mode, className, delay = 0, as = "p" }: RevealProps) {
+export function MessageReveal({
+  text,
+  mode,
+  className,
+  delay = 0,
+  animate = true,
+  as = "p",
+}: RevealProps) {
   const reduce = useReducedMotion();
   const words = useMemo(() => text.split(/(\s+)/), [text]);
   const Tag = motion[as];
 
-  if (reduce) {
+  if (reduce || !animate) {
     const Plain = as;
     return <Plain className={className}>{text}</Plain>;
   }

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import type { ApologyDraft } from "@/types/apology";
 import type { ApologyTheme } from "@/types/theme";
 import {
@@ -19,6 +19,7 @@ interface PreviewClientProps {
 }
 
 export function PreviewClient({ draft, theme }: PreviewClientProps) {
+  const reduce = useReducedMotion();
   const [api, setApi] = useState<PresentationApi | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
@@ -28,9 +29,15 @@ export function PreviewClient({ draft, theme }: PreviewClientProps) {
     setPublishError(null);
     setPublishing(true);
     try {
-      const result = await publishDraftAction(draft.id, draft.linkDurationDays);
+      const result = await publishDraftAction(draft.id);
       if (result.ok && result.data) {
-        setSharePath(result.data.path);
+        if (result.data.path) {
+          setSharePath(result.data.path);
+        } else {
+          setPublishError(
+            "This letter is already published. The link you sent is still live — revoke and republish to issue a new one.",
+          );
+        }
       } else {
         setPublishError(result.error ?? "Could not generate link.");
       }
@@ -105,7 +112,7 @@ export function PreviewClient({ draft, theme }: PreviewClientProps) {
                   onClick={() => api?.goTo(index)}
                   aria-label={`Go to scene ${index + 1}`}
                   aria-current={api?.index === index}
-                  className={`h-7 w-7 rounded-full text-[0.68rem] font-semibold transition ${
+                  className={`h-9 w-9 rounded-full text-[0.72rem] font-semibold transition ${
                     api?.index === index
                       ? "bg-[#6d3fa8] text-white"
                       : "bg-[#f2ecfa] text-[#7c6892] hover:bg-[#e9e0f6]"
@@ -163,8 +170,8 @@ export function PreviewClient({ draft, theme }: PreviewClientProps) {
 
           {api ? (
             <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
+              initial={reduce ? false : { opacity: 0 }}
+              animate={reduce ? undefined : { opacity: 1 }}
               className="text-[0.62rem] text-[#a394b4]"
             >
               Keyboard: ← → to move between scenes.

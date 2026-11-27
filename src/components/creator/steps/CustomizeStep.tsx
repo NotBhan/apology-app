@@ -7,6 +7,7 @@ import type { ApologyTheme } from "@/types/theme";
 import { MusicPanel } from "@/components/customization/MusicPanel";
 import { PhotosPanel } from "@/components/customization/PhotosPanel";
 import { ColorsPanel } from "@/components/customization/ColorsPanel";
+import { StyleAndMotionPanel } from "@/components/customization/StyleAndMotionPanel";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 
@@ -21,6 +22,7 @@ interface CustomizeStepProps {
     blob: Blob,
     meta: { width: number; height: number; type: string },
   ) => Promise<PhotoAsset>;
+  onRemoveAsset?: (assetId: string) => Promise<void>;
   onNext: () => void;
   onBack: () => void;
 }
@@ -37,6 +39,7 @@ export function CustomizeStep({
   onChange,
   onUploadAudio,
   onUploadPhoto,
+  onRemoveAsset,
   onNext,
   onBack,
 }: CustomizeStepProps) {
@@ -117,6 +120,7 @@ export function CustomizeStep({
             themeDefaultTrackId={theme.defaultMusic}
             onChange={(audio) => onChange({ audio })}
             onUpload={onUploadAudio}
+            onRemoveAsset={onRemoveAsset}
           />
         ) : null}
 
@@ -127,15 +131,28 @@ export function CustomizeStep({
             onChange={(photos) => onChange({ photos })}
             onMemoryStyleChange={(memoryStyle) => onChange({ memoryStyle })}
             onUpload={onUploadPhoto}
+            onRemoveAsset={onRemoveAsset}
           />
         ) : null}
 
         {tab === "colours" ? (
-          <ColorsPanel
-            theme={theme}
-            value={customization.colors ?? {}}
-            onChange={(colors) => onChange({ colors })}
-          />
+          <div className="space-y-6">
+            <ColorsPanel
+              theme={theme}
+              value={customization.colors ?? {}}
+              onChange={(colors) => onChange({ colors })}
+            />
+            <StyleAndMotionPanel
+              visual={customization.visual ?? {}}
+              interaction={customization.interaction ?? {}}
+              onVisualChange={(patch) =>
+                onChange({ visual: { ...customization.visual, ...patch } })
+              }
+              onInteractionChange={(patch) =>
+                onChange({ interaction: { ...customization.interaction, ...patch } })
+              }
+            />
+          </div>
         ) : null}
       </div>
 

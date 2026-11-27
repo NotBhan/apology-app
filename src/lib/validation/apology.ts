@@ -3,6 +3,11 @@ import { SITUATION_KEYS } from "@/types/apology";
 import { CHARACTER_STATES, STICKER_PACK_IDS } from "@/types/sticker";
 import { THEME_IDS } from "@/types/theme";
 import { DEFAULT_LINK_DAYS, MAX_LINK_DAYS, MIN_LINK_DAYS } from "@/lib/expiry";
+import {
+  apologyContentSchema,
+  apologyInteractionSchema,
+  visualCustomizationSchema,
+} from "./customization";
 
 const trimmed = (min: number, max: number, label: string) =>
   z
@@ -54,17 +59,25 @@ export const customizationSchema = z.object({
       primary: hexColor.optional(),
       secondary: hexColor.optional(),
       accent: hexColor.optional(),
+      text: hexColor.optional(),
+      surface: hexColor.optional(),
     })
     .optional(),
   audio: audioChoiceSchema,
   photos: z.array(photoAssetSchema).max(5, "Up to 5 photos."),
   memoryStyle: z.enum(["polaroid", "scrapbook", "slideshow"]),
+  content: apologyContentSchema.optional(),
+  visual: visualCustomizationSchema.optional(),
+  interaction: apologyInteractionSchema.optional(),
 });
 
 /**
- * The link window is the one field a client may set about publishing. The
- * computed `expiresAt` is deliberately absent from this schema, so a crafted
- * request cannot extend or immortalise a link.
+ * Legacy link-window field.
+ *
+ * Published links are permanent, so this value never gates access and is never
+ * persisted on a published row. It survives only so older drafts, older clients
+ * and `draftPayloadSchema` remain parseable; the computed `expiresAt` is absent
+ * from this schema by design, so a crafted request can never introduce one.
  */
 export const linkDurationDaysSchema = z
   .number()

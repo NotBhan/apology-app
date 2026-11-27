@@ -8,10 +8,18 @@ import {
   birthdayContentSchema,
   BIRTHDAY_PHOTO_LAYOUTS,
   type BirthdayContent,
+  type BirthdayCustomization,
   type BirthdayPhotoLayout,
   type BirthdayThemeId,
 } from "@/experiences/birthday/schema";
-import { BIRTHDAY_THEMES, resolveBirthdayTheme } from "@/experiences/birthday/themes";
+import { resolveBirthdayConfig } from "@/experiences/birthday/resolve";
+import { BIRTHDAY_THEMES } from "@/experiences/birthday/themes";
+import {
+  BirthdayCakeAndInteractionPanel,
+  BirthdayContentAndAudioPanel,
+  BirthdayVisualCustomizePanel,
+  type CustomizationUpdater,
+} from "@/components/creator/BirthdayCustomizerPanels";
 import { ShareQrDialog } from "@/components/share/ShareQrDialog";
 import { Icon } from "@/components/ui/icons";
 import { compressImage } from "@/lib/image";
@@ -32,6 +40,18 @@ export function getBirthdayPhotoCaption(item: BirthdayEditorPhotoItem): string {
   return typeof item === "string" ? "" : item.caption || "";
 }
 
+export function getBirthdayPhotoFocalPoint(item: BirthdayEditorPhotoItem): string {
+  return typeof item === "string" ? "50% 50%" : item.focalPoint || "50% 50%";
+}
+
+const FOCAL_POINT_OPTIONS = [
+  { label: "Center", value: "50% 50%" },
+  { label: "Top", value: "50% 25%" },
+  { label: "Bottom", value: "50% 75%" },
+  { label: "Left", value: "25% 50%" },
+  { label: "Right", value: "75% 50%" },
+] as const;
+
 export interface BirthdayEditorValues {
   recipientName: string;
   senderName: string;
@@ -43,6 +63,8 @@ export interface BirthdayEditorValues {
   candleCount: number;
   photoLayout: BirthdayPhotoLayout;
   photos: BirthdayEditorPhotoItem[];
+  audio?: "none" | "celebration" | "soft";
+  customization?: BirthdayCustomization;
 }
 
 const EMPTY: BirthdayEditorValues = {
@@ -56,6 +78,8 @@ const EMPTY: BirthdayEditorValues = {
   candleCount: 3,
   photoLayout: "theme-adaptive",
   photos: [],
+  audio: "none",
+  customization: {},
 };
 
 function loadDraft(): BirthdayEditorValues | null {
@@ -78,11 +102,19 @@ function loadDraft(): BirthdayEditorValues | null {
           : "theme-adaptive",
       photos: Array.isArray(parsed.photos)
         ? (parsed.photos as BirthdayEditorPhotoItem[]).filter((p) => {
-            if (typeof p === "string") return Boolean(p.trim());
-            if (p && typeof p === "object" && typeof p.url === "string") return Boolean(p.url.trim());
-            return false;
-          })
+          if (typeof p === "string") return Boolean(p.trim());
+          if (p && typeof p === "object" && typeof p.url === "string") return Boolean(p.url.trim());
+          return false;
+        })
         : [],
+      audio:
+        parsed.audio === "celebration" || parsed.audio === "soft" || parsed.audio === "none"
+          ? parsed.audio
+          : "none",
+      customization:
+        parsed.customization && typeof parsed.customization === "object"
+          ? parsed.customization
+          : {},
     };
   } catch {
     return null;
@@ -130,8 +162,11 @@ export function BirthdayEditor({
   const [values, setValues] = useState<BirthdayEditorValues>(() => ({
     ...EMPTY,
     ...initialValues,
+    wish: initialValues?.wish ?? "",
     photoLayout: initialValues?.photoLayout ?? "theme-adaptive",
     photos: initialValues?.photos ?? [],
+    audio: initialValues?.audio ?? "none",
+    customization: initialValues?.customization ?? {},
   }));
   const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -144,6 +179,39 @@ export function BirthdayEditor({
   const [includeAge, setIncludeAge] = useState(() => typeof initialValues?.age === "number");
   const [activeStage, setActiveStage] = useState<number>(1);
   const [fullPreview, setFullPreview] = useState(false);
+  const fullPreviewRef = useRef<HTMLDivElement | null>(null);
+  const fullPreviewTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const exitPreviewRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!fullPreview) return;
+    exitPreviewRef.current?.focus();
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setFullPreview(false);
+        fullPreviewTriggerRef.current?.focus();
+      } else if (e.key === "Tab" && fullPreviewRef.current) {
+        const focusables = fullPreviewRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        );
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [fullPreview]);
 
   // Authentication state: "loading" | "authenticated" | "unauthenticated"
   const authState: "loading" | "authenticated" | "unauthenticated" = useMemo(() => {
@@ -168,8 +236,6 @@ export function BirthdayEditor({
     };
   }, []);
 
-  const currentTheme = resolveBirthdayTheme(values.themeId);
-
   const previewContent: BirthdayContent = useMemo(() => ({
     recipientName: values.recipientName.trim() || "Aria",
     senderName: values.senderName.trim() || "Leo",
@@ -183,8 +249,15 @@ export function BirthdayEditor({
     candleCount: values.candleCount,
     photoLayout: values.photoLayout,
     photos: values.photos || [],
-    audio: "none",
+    audio: values.audio ?? "none",
+    customization: values.customization,
   }), [values, includeAge]);
+
+  const resolvedPreviewConfig = useMemo(
+    () => resolveBirthdayConfig(previewContent),
+    [previewContent],
+  );
+  const currentTheme = resolvedPreviewConfig.theme;
 
   useEffect(() => {
     if (isResponse || initialDraftId) return;
@@ -206,6 +279,14 @@ export function BirthdayEditor({
 
   function set<K extends keyof BirthdayEditorValues>(key: K, value: BirthdayEditorValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateCustomization(updater: CustomizationUpdater) {
+    setValues((current) => {
+      const prev = current.customization ?? {};
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      return { ...current, customization: next };
+    });
   }
 
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -297,7 +378,8 @@ export function BirthdayEditor({
               candleCount: values.candleCount,
               wish: values.wish.trim() ? values.wish.trim() : undefined,
               age: includeAge && values.age ? values.age : undefined,
-              audio: "none",
+              audio: values.audio ?? "none",
+              customization: values.customization,
             },
           }),
           signal: controller.signal,
@@ -359,7 +441,8 @@ export function BirthdayEditor({
             candleCount: values.candleCount,
             wish: values.wish.trim() ? values.wish.trim() : undefined,
             age: includeAge && values.age ? values.age : undefined,
-            audio: "none",
+            audio: values.audio ?? "none",
+            customization: values.customization,
           },
         }),
         signal: controller.signal,
@@ -411,8 +494,17 @@ export function BirthdayEditor({
     const list = [...(values.photos || [])];
     const current = list[index];
     if (!current) return;
-    const url = typeof current === "string" ? current : current.url;
-    list[index] = { url, caption: caption.slice(0, 120) };
+    const base = typeof current === "string" ? { url: current } : { ...current };
+    list[index] = { ...base, caption: caption.slice(0, 120) };
+    set("photos", list);
+  }
+
+  function handleUpdatePhotoFocalPoint(index: number, focalPoint: string) {
+    const list = [...(values.photos || [])];
+    const current = list[index];
+    if (!current) return;
+    const base = typeof current === "string" ? { url: current } : { ...current };
+    list[index] = { ...base, focalPoint };
     set("photos", list);
   }
 
@@ -431,7 +523,8 @@ export function BirthdayEditor({
     candleCount: values.candleCount,
     photoLayout: values.photoLayout,
     photos: values.photos || [],
-    audio: "none",
+    audio: values.audio ?? "none",
+    customization: values.customization,
   });
 
   function scrollToStage(num: number, id: string) {
@@ -511,11 +604,16 @@ export function BirthdayEditor({
         const res = await fetch(`/api/drafts/${activeId}/publish`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ durationDays: 1 }),
+          body: JSON.stringify({}),
         });
         const out = await res.json();
         if (!res.ok) throw new Error(out.error ?? "Could not publish.");
-        setPublished(out.path as string);
+        if (typeof out.path !== "string" || !out.path) {
+          throw new Error(
+            "This gift is already published and its link is still live. Revoke it from Manage first if you want to issue a new link.",
+          );
+        }
+        setPublished(out.path);
         window.sessionStorage.removeItem(STORAGE_KEY);
       } else {
         setSaveSuccess(true);
@@ -534,11 +632,10 @@ export function BirthdayEditor({
       {restored ? (
         <div
           role="status"
-          className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-2.5 text-xs ${
-            authState === "authenticated"
-              ? "border-purple-200 bg-purple-50/80 text-purple-900"
-              : "border-amber-200 bg-amber-50/80 text-amber-900"
-          }`}
+          className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-2.5 text-xs ${authState === "authenticated"
+            ? "border-purple-200 bg-purple-50/80 text-purple-900"
+            : "border-amber-200 bg-amber-50/80 text-amber-900"
+            }`}
         >
           <span>
             {authState === "authenticated" ? (
@@ -562,11 +659,10 @@ export function BirthdayEditor({
             type="button"
             onClick={() => setRestored(false)}
             aria-label="Dismiss notice"
-            className={`font-bold cursor-pointer ${
-              authState === "authenticated"
-                ? "text-purple-700 hover:text-purple-900"
-                : "text-amber-700 hover:text-amber-900"
-            }`}
+            className={`font-bold cursor-pointer ${authState === "authenticated"
+              ? "text-purple-700 hover:text-purple-900"
+              : "text-amber-700 hover:text-amber-900"
+              }`}
           >
             ×
           </button>
@@ -586,17 +682,15 @@ export function BirthdayEditor({
                 <button
                   type="button"
                   onClick={() => scrollToStage(s.num, s.id)}
-                  className={`flex w-full items-center justify-center gap-1 sm:gap-1.5 rounded-full px-1.5 sm:px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
-                    isActive
-                      ? "bg-[#e8590c] text-white shadow-sm scale-[1.02]"
-                      : "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50"
-                  }`}
+                  className={`flex w-full items-center justify-center gap-1 sm:gap-1.5 rounded-full px-1.5 sm:px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${isActive
+                    ? "bg-[#e8590c] text-white shadow-sm scale-[1.02]"
+                    : "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50"
+                    }`}
                   aria-current={isActive ? "step" : undefined}
                 >
                   <span
-                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                      isActive ? "bg-white text-[#e8590c]" : "bg-stone-100 text-stone-600"
-                    }`}
+                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${isActive ? "bg-white text-[#e8590c]" : "bg-stone-100 text-stone-600"
+                      }`}
                   >
                     {s.num}
                   </span>
@@ -694,11 +788,11 @@ export function BirthdayEditor({
                 <input
                   type="number"
                   min={1}
-                  max={130}
+                  max={150}
                   value={values.age ?? ""}
                   onChange={(e) => {
                     const val = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
-                    set("age", val && !Number.isNaN(val) ? Math.max(1, Math.min(130, val)) : undefined);
+                    set("age", val && !Number.isNaN(val) ? Math.max(1, Math.min(150, val)) : undefined);
                   }}
                   placeholder="e.g. 10"
                   className="w-24 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm font-semibold text-stone-900 transition focus:border-[#e8590c] focus:outline-none focus:ring-1 focus:ring-[#e8590c] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
@@ -711,11 +805,10 @@ export function BirthdayEditor({
                     key={preset}
                     type="button"
                     onClick={() => set("age", preset)}
-                    className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition cursor-pointer ${
-                      values.age === preset
-                        ? "bg-[#e8590c] text-white"
-                        : "bg-stone-200/60 text-stone-700 hover:bg-stone-200"
-                    }`}
+                    className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition cursor-pointer ${values.age === preset
+                      ? "bg-[#e8590c] text-white"
+                      : "bg-stone-200/60 text-stone-700 hover:bg-stone-200"
+                      }`}
                   >
                     {preset}
                   </button>
@@ -752,11 +845,10 @@ export function BirthdayEditor({
                 key={theme.id}
                 type="button"
                 onClick={() => set("themeId", theme.id)}
-                className={`group relative flex flex-col text-left rounded-xl p-4 border transition-all cursor-pointer ${
-                  isSelected
-                    ? "shadow-sm scale-[1.01]"
-                    : "border-stone-200 hover:border-stone-300 hover:bg-stone-50/50"
-                }`}
+                className={`group relative flex flex-col text-left rounded-xl p-4 border transition-all cursor-pointer ${isSelected
+                  ? "shadow-sm scale-[1.01]"
+                  : "border-stone-200 hover:border-stone-300 hover:bg-stone-50/50"
+                  }`}
                 style={{
                   background: isSelected ? theme.palette.surface : undefined,
                   borderColor: isSelected ? theme.palette.primary : undefined,
@@ -819,6 +911,12 @@ export function BirthdayEditor({
             );
           })}
         </div>
+
+        <BirthdayVisualCustomizePanel
+          customization={values.customization ?? {}}
+          resolved={resolvedPreviewConfig}
+          onChange={updateCustomization}
+        />
       </section>
 
       {/* Stage 3: Words & Wish */}
@@ -922,11 +1020,10 @@ export function BirthdayEditor({
                     type="button"
                     onClick={() => set("photoLayout", styleOption.id as BirthdayPhotoLayout)}
                     aria-pressed={isSelected}
-                    className={`flex flex-col text-left p-2.5 sm:p-3 rounded-xl border transition-all cursor-pointer ${
-                      isSelected
-                        ? "border-[#e8590c] bg-orange-50/60 shadow-xs ring-1 ring-[#e8590c]"
-                        : "border-stone-200 bg-stone-50/80 hover:border-stone-300 hover:bg-stone-100"
-                    }`}
+                    className={`flex flex-col text-left p-2.5 sm:p-3 rounded-xl border transition-all cursor-pointer ${isSelected
+                      ? "border-[#e8590c] bg-orange-50/60 shadow-xs ring-1 ring-[#e8590c]"
+                      : "border-stone-200 bg-stone-50/80 hover:border-stone-300 hover:bg-stone-100"
+                      }`}
                   >
                     <span className={`text-xs font-bold ${isSelected ? "text-[#e8590c]" : "text-stone-800"}`}>
                       {styleOption.label}
@@ -960,6 +1057,7 @@ export function BirthdayEditor({
                           <OptimizedPhoto
                             src={url}
                             alt={caption || `Moment ${idx + 1}`}
+                            focalPoint={getBirthdayPhotoFocalPoint(item)}
                             priority
                             className="object-cover"
                           />
@@ -991,8 +1089,8 @@ export function BirthdayEditor({
                         </div>
                       </div>
 
-                      {/* Caption Input */}
-                      <div className="flex-1 min-w-0 space-y-1">
+                      {/* Caption & Focal Point */}
+                      <div className="flex-1 min-w-0 space-y-1.5">
                         <div className="flex items-center justify-between">
                           <label
                             htmlFor={`photo-caption-${idx}`}
@@ -1010,6 +1108,27 @@ export function BirthdayEditor({
                           maxLength={120}
                           className="w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs text-stone-800 placeholder:text-stone-400 transition focus:border-[#e8590c] focus:outline-none focus:ring-1 focus:ring-[#e8590c]"
                         />
+                        <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                          <span className="text-[10px] font-medium text-stone-500 mr-0.5">Focus:</span>
+                          {FOCAL_POINT_OPTIONS.map((fp) => {
+                            const active = getBirthdayPhotoFocalPoint(item) === fp.value;
+                            return (
+                              <button
+                                key={fp.value}
+                                type="button"
+                                aria-pressed={active}
+                                aria-label={`Focus photo ${idx + 1} ${fp.label}`}
+                                onClick={() => handleUpdatePhotoFocalPoint(idx, fp.value)}
+                                className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition cursor-pointer ${active
+                                  ? "bg-[#e8590c] text-white"
+                                  : "bg-white border border-stone-200 text-stone-600 hover:bg-stone-100"
+                                  }`}
+                              >
+                                {fp.label}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
 
                       {/* Remove Button */}
@@ -1046,9 +1165,8 @@ export function BirthdayEditor({
                 />
                 <label
                   htmlFor="birthday-photo-upload-input"
-                  className={`inline-flex items-center gap-1.5 rounded-xl border border-dashed border-stone-300 bg-stone-50/70 px-3.5 py-2 text-xs font-semibold text-stone-700 transition hover:bg-stone-100 hover:border-stone-400 cursor-pointer ${
-                    uploadingPhoto ? "opacity-60 pointer-events-none" : ""
-                  }`}
+                  className={`inline-flex items-center gap-1.5 rounded-xl border border-dashed border-stone-300 bg-stone-50/70 px-3.5 py-2 text-xs font-semibold text-stone-700 transition hover:bg-stone-100 hover:border-stone-400 cursor-pointer ${uploadingPhoto ? "opacity-60 pointer-events-none" : ""
+                    }`}
                 >
                   <Icon name="image" size={14} className="text-stone-500" />
                   <span>{uploadingPhoto ? (photoStageLabel ?? "Uploading...") : "Upload photo"}</span>
@@ -1125,11 +1243,10 @@ export function BirthdayEditor({
                   type="button"
                   onClick={() => set("candleCount", num)}
                   aria-pressed={isSelected}
-                  className={`flex h-11 w-11 items-center justify-center rounded-xl font-bold text-sm transition-all cursor-pointer ${
-                    isSelected
-                      ? "bg-[#e8590c] text-white shadow-md scale-105"
-                      : "border border-stone-200 bg-stone-50 text-stone-700 hover:border-stone-300 hover:bg-stone-100"
-                  }`}
+                  className={`flex h-11 w-11 items-center justify-center rounded-xl font-bold text-sm transition-all cursor-pointer ${isSelected
+                    ? "bg-[#e8590c] text-white shadow-md scale-105"
+                    : "border border-stone-200 bg-stone-50 text-stone-700 hover:border-stone-300 hover:bg-stone-100"
+                    }`}
                 >
                   {num}
                 </button>
@@ -1153,8 +1270,25 @@ export function BirthdayEditor({
           >
             Cake Preview ({currentTheme.name})
           </p>
-          <BirthdayCake theme={currentTheme} candleCount={values.candleCount} />
+          <BirthdayCake
+            theme={currentTheme}
+            candleCount={values.candleCount}
+            candleMode={resolvedPreviewConfig.interaction.candleMode}
+            ctaLabel={resolvedPreviewConfig.content.cakeCta}
+          />
         </div>
+
+        <BirthdayContentAndAudioPanel
+          customization={values.customization ?? {}}
+          audio={values.audio ?? "none"}
+          onChange={updateCustomization}
+          onAudioChange={(nextAudio) => set("audio", nextAudio)}
+        />
+
+        <BirthdayCakeAndInteractionPanel
+          customization={values.customization ?? {}}
+          onChange={updateCustomization}
+        />
       </section>
 
       {/* Stage 5: Preview & Send */}
@@ -1179,6 +1313,7 @@ export function BirthdayEditor({
               Interactive Preview {parsed.success ? "• Ready to send" : "• Live Draft"}
             </span>
             <button
+              ref={fullPreviewTriggerRef}
               type="button"
               onClick={() => setFullPreview(true)}
               className="inline-flex items-center gap-1.5 rounded-full border border-stone-300 bg-white px-3.5 py-1 text-xs font-semibold text-stone-700 shadow-sm hover:bg-stone-50 transition cursor-pointer"
@@ -1313,16 +1448,27 @@ export function BirthdayEditor({
       {/* Full-screen Walkthrough Modal */}
       {fullPreview && (
         <div
+          ref={fullPreviewRef}
           role="dialog"
           aria-modal="true"
           aria-label="Recipient Walkthrough Preview"
           className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/85 backdrop-blur-sm flex flex-col items-center p-3 sm:p-6"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setFullPreview(false);
+              fullPreviewTriggerRef.current?.focus();
+            }
+          }}
         >
           <div className="sticky top-3 z-50 mb-4 flex items-center justify-between gap-4 rounded-full bg-white/95 backdrop-blur-md px-5 py-2 shadow-xl border border-stone-200 w-full max-w-[620px]">
             <span className="text-xs font-semibold text-stone-700">Recipient Walkthrough Preview</span>
             <button
+              ref={exitPreviewRef}
               type="button"
-              onClick={() => setFullPreview(false)}
+              onClick={() => {
+                setFullPreview(false);
+                fullPreviewTriggerRef.current?.focus();
+              }}
               aria-label="Exit preview"
               className="rounded-full bg-stone-900 px-3.5 py-1 text-xs font-semibold text-white hover:bg-stone-800 transition cursor-pointer"
             >

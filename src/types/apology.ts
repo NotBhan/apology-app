@@ -1,5 +1,24 @@
 import type { ThemeId } from "./theme";
 import type { StickerPackId } from "./sticker";
+import type {
+  ApologyContentCustomization,
+  ApologyInteractionCustomization,
+  VisualCustomization,
+} from "./customization";
+
+export type {
+  ApologyContentCustomization,
+  ApologyInteractionCustomization,
+  DecorationDensity,
+  EnvelopeStyle,
+  FontPairing,
+  MotionPreset,
+  RevealStyle,
+  TextAlignment,
+  TextSize,
+  TransitionStyle,
+  VisualCustomization,
+} from "./customization";
 
 export type DraftStatus = "draft" | "published" | "revoked" | "deleted";
 
@@ -47,10 +66,15 @@ export interface ApologyCustomization {
     primary?: string;
     secondary?: string;
     accent?: string;
+    text?: string;
+    surface?: string;
   };
   audio: AudioChoice;
   photos: PhotoAsset[];
   memoryStyle: "polaroid" | "scrapbook" | "slideshow";
+  content?: ApologyContentCustomization;
+  visual?: VisualCustomization;
+  interaction?: ApologyInteractionCustomization;
 }
 
 export interface ApologyDraft {
@@ -68,12 +92,12 @@ export interface ApologyDraft {
   themeId: ThemeId;
   stickerPackId: StickerPackId;
   customization: ApologyCustomization;
-  /** Window the sender chose at publish time, in days (1–7). */
+  /** Legacy publish-window field (1–7). Never persisted on a published row. */
   linkDurationDays: number;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
-  /** Server-computed at publish; never accepted from a client. */
+  /** Legacy only. Published links are permanent; this is ignored on read. */
   expiresAt?: string;
   status: DraftStatus;
 }

@@ -88,16 +88,18 @@ describe("I Miss You — End-to-End Persistence, Asset Serving & Shared Routes",
         return r;
       },
     ),
-    publish: vi.fn(async (id: string, ownerKey: string, durationDays: number) => {
+    publish: vi.fn(async (id: string, ownerKey: string) => {
       const r = store.get(id);
       if (!r || r.ownerKeyHash !== ownerKey) throw new Error("FORBIDDEN");
-      const token = "pub-miss-" + id;
+      // Same contract as production: a live record keeps the token it issued.
+      const minted = r.status !== "published";
+      if (minted) {
+        const token = "pub-miss-" + id;
+        r.accessToken = token;
+        tokensToId.set(token, id);
+      }
       r.status = "published";
-      r.accessToken = token;
-      r.linkDurationDays = durationDays;
-      r.publishedAt = new Date().toISOString();
-      r.expiresAt = new Date(Date.now() + durationDays * 86_400_000).toISOString();
-      tokensToId.set(token, id);
+      r.publishedAt = r.publishedAt ?? new Date().toISOString();
       return r;
     }),
     getPublishedByToken: vi.fn(async (token: string): Promise<PublishedApology | undefined> => {
@@ -208,7 +210,6 @@ describe("I Miss You — End-to-End Persistence, Asset Serving & Shared Routes",
         new Request(`http://localhost/api/drafts/${draft.id}/publish`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ durationDays: 7 }),
         }),
         { params: Promise.resolve({ draftId: draft.id }) },
       );
@@ -237,7 +238,6 @@ describe("I Miss You — End-to-End Persistence, Asset Serving & Shared Routes",
       new Request(`http://localhost/api/drafts/${draft.id}/publish`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ durationDays: 7 }),
       }),
       { params: Promise.resolve({ draftId: draft.id }) },
     );
@@ -274,7 +274,7 @@ describe("I Miss You — End-to-End Persistence, Asset Serving & Shared Routes",
     expect(blockedRes.status).toBe(404);
 
     // Once published, unauthenticated recipient CAN load the image with private no-store redirect
-    await mockRepo.publish(draft.id, OWNER_KEY, 7);
+    await mockRepo.publish(draft.id, OWNER_KEY);
     vi.mocked(getCreator).mockResolvedValueOnce(undefined);
     const liveRes = await assetGetRoute(
       new Request(`http://localhost/api/uploads/${assetId}`),

@@ -1,4 +1,5 @@
 import type { ComponentType } from "react";
+import type { DecorationDensity } from "@/types/customization";
 import type { ApologyTheme } from "@/types/theme";
 
 export interface ThemeSkinProps {
@@ -8,6 +9,10 @@ export interface ThemeSkinProps {
   focus?: number;
   /** Pause ambient motion (inactive scene / reduced motion / hidden tab). */
   paused?: boolean;
+  /** Optional creator override to soften or hide decorative layers. */
+  decorationsEnabled?: boolean;
+  /** Optional density level controlling decorative element counts. */
+  decorationDensity?: DecorationDensity;
   className?: string;
 }
 

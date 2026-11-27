@@ -3,7 +3,6 @@ import Link from "next/link";
 import { requirePageCreator } from "@/lib/security/creator";
 import { signOutAction } from "@/lib/auth/actions";
 import { getRepository, getResponseRepository } from "@/lib/storage";
-import { isExpired } from "@/lib/expiry";
 import type { PublishedResponse } from "@/types/response";
 import { ManageList } from "@/components/manage/ManageList";
 
@@ -33,11 +32,12 @@ export default async function ManagePage() {
       }),
   );
 
-  // Only expired or already-queued letters can be mid-cleanup.
+  // Only rows whose deletion is already queued can be mid-cleanup. A published
+  // link is never "possibly expiring": it is live until explicitly revoked.
   const pendingDeletionIds = (
     await Promise.all(
       drafts
-        .filter((draft) => draft.status === "deleted" || isExpired(draft.expiresAt))
+        .filter((draft) => draft.status === "deleted")
         .map(async (draft) => ((await repository.isDeletionPending(draft.id)) ? draft.id : null)),
     )
   ).filter((id): id is string => Boolean(id));

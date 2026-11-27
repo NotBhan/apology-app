@@ -69,10 +69,15 @@ export interface ApologyRepository {
   saveDraft(id: string, ownerKeyHash: string, payload: DraftPayload): Promise<ApologyRecord>;
 
   /**
-   * Publishes or renews. Mints a **new** link token every time, because only
-   * hashes are stored; the plaintext is returned once, on the result.
+   * Publishes a draft, or re-publishes an already-published one.
+   *
+   * The first publish mints a link token. Re-publishing a live record keeps the
+   * token it already issued, so an already-sent link is never invalidated by a
+   * later Share, Renew or Preview action; in that case `accessToken` is empty,
+   * because only the hash is stored and the plaintext cannot be recovered.
+   * A revoked record gets a fresh token.
    */
-  publish(id: string, ownerKeyHash: string, durationDays: number): Promise<ApologyRecord>;
+  publish(id: string, ownerKeyHash: string): Promise<ApologyRecord>;
 
   revoke(id: string, ownerKeyHash: string): Promise<ApologyRecord>;
 

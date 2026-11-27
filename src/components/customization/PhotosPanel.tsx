@@ -13,6 +13,7 @@ interface PhotosPanelProps {
   onChange: (photos: PhotoAsset[]) => void;
   onMemoryStyleChange: (style: "polaroid" | "scrapbook" | "slideshow") => void;
   onUpload: (blob: Blob, meta: { width: number; height: number; type: string }) => Promise<PhotoAsset>;
+  onRemoveAsset?: (assetId: string) => Promise<void>;
 }
 
 const MAX_PHOTOS = 5;
@@ -23,11 +24,13 @@ export function PhotosPanel({
   onChange,
   onMemoryStyleChange,
   onUpload,
+  onRemoveAsset,
 }: PhotosPanelProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const [statusLabel, setStatusLabel] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -79,8 +82,31 @@ export function PhotosPanel({
     onChange(photos.map((photo) => (photo.id === id ? { ...photo, ...patch } : photo)));
   }
 
-  function remove(id: string) {
+  async function remove(id: string) {
+    const target = photos.find((photo) => photo.id === id);
+    setError(null);
+    if (target?.url.startsWith("/api/uploads/") && onRemoveAsset) {
+      setRemovingId(id);
+      try {
+        await onRemoveAsset(id);
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "Could not remove photo.");
+        setRemovingId(null);
+        return;
+      }
+      setRemovingId(null);
+    }
     onChange(photos.filter((photo) => photo.id !== id));
+  }
+
+  function movePhoto(fromIndex: number, delta: number) {
+    const toIndex = fromIndex + delta;
+    if (toIndex < 0 || toIndex >= photos.length) return;
+    const copy = [...photos];
+    const [moved] = copy.splice(fromIndex, 1);
+    if (!moved) return;
+    copy.splice(toIndex, 0, moved);
+    onChange(copy);
   }
 
   return (
@@ -163,35 +189,73 @@ export function PhotosPanel({
                     className="w-full rounded-xl border border-[#ece2f6] px-3 py-1.5 text-[0.78rem] text-[#33203f] outline-none focus:border-[#b18ade]"
                   />
 
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[0.62rem] uppercase tracking-[0.12em] text-[#a394b4]">
+                  <div className="flex flex-wrap items-center gap-1">
+                    <span className="mr-1 text-[0.62rem] uppercase tracking-[0.12em] text-[#a394b4]">
                       focus
                     </span>
-                    {["20% 20%", "50% 20%", "80% 20%", "50% 50%", "50% 80%"].map((focal) => (
-                      <button
-                        key={focal}
-                        type="button"
-                        onClick={() => update(photo.id, { focalPoint: focal })}
-                        aria-label={`Set focus ${focal}`}
-                        aria-pressed={(photo.focalPoint ?? "50% 50%") === focal}
-                        className={cn(
-                          "h-4 w-4 rounded-full border transition",
-                          (photo.focalPoint ?? "50% 50%") === focal
-                            ? "border-[#6d3fa8] bg-[#6d3fa8]/70"
-                            : "border-[#d8c9e8] bg-white",
-                        )}
-                      />
-                    ))}
+                    {[
+                      { focal: "20% 20%", label: "Top-left" },
+                      { focal: "50% 20%", label: "Top" },
+                      { focal: "80% 20%", label: "Top-right" },
+                      { focal: "50% 50%", label: "Center" },
+                      { focal: "50% 80%", label: "Bottom" },
+                    ].map(({ focal, label }) => {
+                      const active = (photo.focalPoint ?? "50% 50%") === focal;
+                      return (
+                        <button
+                          key={focal}
+                          type="button"
+                          onClick={() => update(photo.id, { focalPoint: focal })}
+                          aria-label={`Set focus ${label} (${focal})`}
+                          aria-pressed={active}
+                          className="grid h-9 w-8 place-items-center rounded-lg hover:bg-[#f7f1ff]"
+                        >
+                          <span
+                            className={cn(
+                              "h-4 w-4 rounded-full border transition",
+                              active
+                                ? "scale-110 border-[#6d3fa8] bg-[#6d3fa8] ring-2 ring-[#e7dcf7]"
+                                : "border-[#d8c9e8] bg-white",
+                            )}
+                          />
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => remove(photo.id)}
-                  className="self-start rounded-full px-2 py-1 text-[0.68rem] text-[#a8556b] hover:bg-[#fdf1f3]"
-                >
-                  Remove
-                </button>
+                <div className="flex flex-col items-end justify-between gap-1">
+                  <button
+                    type="button"
+                    onClick={() => void remove(photo.id)}
+                    disabled={removingId === photo.id}
+                    className="rounded-full px-2.5 py-1 text-[0.68rem] font-semibold text-[#a8556b] hover:bg-[#fdf1f3] disabled:opacity-45"
+                  >
+                    {removingId === photo.id ? "Removing…" : "Remove"}
+                  </button>
+                  {photos.length > 1 ? (
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => movePhoto(index, -1)}
+                        disabled={index === 0}
+                        aria-label={`Move photo ${index + 1} up`}
+                        className="grid h-8 w-8 place-items-center rounded-lg border border-[#ece2f6] text-[0.72rem] font-semibold text-[#5b3f7d] disabled:opacity-35"
+                      >
+                        Up
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => movePhoto(index, 1)}
+                        disabled={index === photos.length - 1}
+                        aria-label={`Move photo ${index + 1} down`}
+                        className="grid h-8 w-8 place-items-center rounded-lg border border-[#ece2f6] text-[0.72rem] font-semibold text-[#5b3f7d] disabled:opacity-35"
+                      >
+                        Dn
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </Reorder.Item>
           ))}

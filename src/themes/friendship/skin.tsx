@@ -155,7 +155,13 @@ function PlainCard({ paused }: { paused: boolean }) {
   );
 }
 
-export default function Skin({ sceneId, paused = false, className }: ThemeSkinProps) {
+export default function Skin({
+  sceneId,
+  paused = false,
+  decorationsEnabled = true,
+  decorationDensity = "balanced",
+  className,
+}: ThemeSkinProps) {
   const scene = sceneId ?? "opening";
   const opening = scene === "opening";
   const memory = scene === "memory";
@@ -164,36 +170,41 @@ export default function Skin({ sceneId, paused = false, className }: ThemeSkinPr
   const closing = scene === "closing";
   const answering = scene === "response";
   const quiet = !opening && !memory && !letter && !kraft && !closing && !answering;
-  const frames = FRAMES[scene] ?? [];
-  const tapes = TAPES[scene] ?? [];
+  const frames = decorationDensity === "minimal" ? (FRAMES[scene] ?? []).slice(0, 2) : (FRAMES[scene] ?? []);
+  const tapes = decorationDensity === "minimal" ? (TAPES[scene] ?? []).slice(0, 2) : (TAPES[scene] ?? []);
   const sketches = SKETCHES[scene] ?? SKETCHES.default;
+  const confetti = decorationDensity === "minimal" ? CONFETTI.slice(0, 4) : CONFETTI;
 
   return (
     <div className={["pointer-events-none absolute inset-0 overflow-hidden", className].filter(Boolean).join(" ")} aria-hidden>
-      <div className="absolute inset-0" style={{ background: "linear-gradient(158deg, #fffaea 0%, var(--t-bg) 42%, var(--t-bg-alt) 100%)" }} />
-      <div className="absolute inset-0" style={{ backgroundImage: GRID, opacity: 0.85 }} />
-      <div className="absolute inset-0" style={{ background: "radial-gradient(120% 92% at 8% 4%, rgba(255, 255, 255, 0.85), transparent 58%)" }} />
-      {(opening || closing) && <div className="absolute right-[6%] top-[4%]"><SunDoodle /></div>}
-      {frames.map((frame) => <Polaroid key={`${frame.left}-${frame.top}`} frame={frame} paused={paused} />)}
-      {tapes.map((tape) => <Tape key={`${tape.left}-${tape.top}`} tape={tape} />)}
-      {letter && <PlainCard paused={paused} />}
-      {kraft && <><div className="absolute inset-0" style={{ background: "radial-gradient(90% 70% at 50% 74%, rgba(198, 154, 107, 0.34), transparent 70%)" }} /><KraftEnvelope paused={paused} /></>}
-      {closing && (
-        <svg viewBox="0 0 24 24" width="88" height="88" fill="none" stroke="var(--t-accent)" strokeWidth="1.7" strokeLinejoin="round" className="absolute left-[14%] top-[52%]" style={{ transform: "rotate(-8deg)" }}>
-          <path d="M12 20.4C6.4 16.7 3 13.4 3 9.7 3 7.1 5.1 5 7.6 5c1.6 0 3.1.8 4.1 2.1.9-1.3 2.4-2.1 4.1-2.1 2.5 0 4.6 2.1 4.6 4.7 0 3.7-3.4 7-9.4 10.7z" />
-        </svg>
-      )}
-      {(answering || quiet) && STARBURSTS.map((star) => (
-        <div key={star.left} className="absolute" style={{ left: star.left, top: star.top, opacity: quiet ? 0.6 : 1 }}><Starburst size={star.s} tone={star.tone} paused={paused} /></div>
-      ))}
-      {answering && <div className="absolute left-1/2 top-1/2 h-[58vh] w-[58vh] -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ background: "radial-gradient(closest-side, rgba(240, 147, 47, 0.28), transparent 72%)" }} />}
-      {sketches.map((sketch) => <Squiggle key={sketch.d} sketch={sketch} />)}
-      {(opening || memory || answering || quiet) && CONFETTI.map((bit) => {
-        const body = { left: `${bit.x}%`, top: `${bit.y}%`, width: bit.s, height: bit.s, borderRadius: bit.s % 3 === 0 ? "50%" : 2, background: bit.tone, opacity: 0.75 };
-        const anim = paused ? { animation: "none", transform: `rotate(${bit.r}deg)` } : cv({ animation: `cc-float ${bit.dur}s ease-in-out ${bit.delay}s infinite`, "--r": `${bit.r}deg`, "--float-y": `${10 + bit.s}px` });
-        return <div key={`${bit.x}-${bit.y}`} className="absolute" style={{ ...body, ...anim }} />;
-      })}
-      <div className="absolute inset-0" style={{ background: "radial-gradient(115% 88% at 50% 50%, transparent 46%, rgba(255, 233, 196, 0.75) 100%)", opacity: 0.9 }} />
+      <div className="absolute inset-0" style={{ background: "linear-gradient(158deg, var(--t-bg) 0%, var(--t-bg) 42%, var(--t-bg-alt) 100%)" }} />
+      {decorationsEnabled ? (
+        <>
+          <div className="absolute inset-0" style={{ backgroundImage: GRID, opacity: decorationDensity === "minimal" ? 0.45 : 0.72 }} />
+          <div className="absolute inset-0" style={{ background: "radial-gradient(120% 92% at 8% 4%, var(--t-surface), transparent 58%)", opacity: 0.45 }} />
+          {(opening || closing) && <div className="absolute right-[6%] top-[4%]"><SunDoodle /></div>}
+          {frames.map((frame) => <Polaroid key={`${frame.left}-${frame.top}`} frame={frame} paused={paused} />)}
+          {tapes.map((tape) => <Tape key={`${tape.left}-${tape.top}`} tape={tape} />)}
+          {letter && <PlainCard paused={paused} />}
+          {kraft && <><div className="absolute inset-0" style={{ background: "radial-gradient(90% 70% at 50% 74%, var(--t-accent), transparent 70%)", opacity: 0.18 }} /><KraftEnvelope paused={paused} /></>}
+          {closing && (
+            <svg viewBox="0 0 24 24" width="88" height="88" fill="none" stroke="var(--t-accent)" strokeWidth="1.7" strokeLinejoin="round" className="absolute left-[14%] top-[52%]" style={{ transform: "rotate(-8deg)" }}>
+              <path d="M12 20.4C6.4 16.7 3 13.4 3 9.7 3 7.1 5.1 5 7.6 5c1.6 0 3.1.8 4.1 2.1.9-1.3 2.4-2.1 4.1-2.1 2.5 0 4.6 2.1 4.6 4.7 0 3.7-3.4 7-9.4 10.7z" />
+            </svg>
+          )}
+          {(answering || quiet) && STARBURSTS.map((star) => (
+            <div key={star.left} className="absolute" style={{ left: star.left, top: star.top, opacity: quiet ? 0.6 : 1 }}><Starburst size={star.s} tone={star.tone} paused={paused} /></div>
+          ))}
+          {answering && <div className="absolute left-1/2 top-1/2 h-[58vh] w-[58vh] -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ background: "radial-gradient(closest-side, var(--t-accent), transparent 72%)", opacity: 0.22 }} />}
+          {sketches.map((sketch) => <Squiggle key={sketch.d} sketch={sketch} />)}
+          {(opening || memory || answering || quiet) && confetti.map((bit) => {
+            const body = { left: `${bit.x}%`, top: `${bit.y}%`, width: bit.s, height: bit.s, borderRadius: bit.s % 3 === 0 ? "50%" : 2, background: bit.tone, opacity: 0.75 };
+            const anim = paused ? { animation: "none", transform: `rotate(${bit.r}deg)` } : cv({ animation: `cc-float ${bit.dur}s ease-in-out ${bit.delay}s infinite`, "--r": `${bit.r}deg`, "--float-y": `${10 + bit.s}px` });
+            return <div key={`${bit.x}-${bit.y}`} className="absolute" style={{ ...body, ...anim }} />;
+          })}
+        </>
+      ) : null}
+      <div className="absolute inset-0" style={{ background: "radial-gradient(115% 88% at 50% 50%, transparent 46%, var(--t-bg-alt) 100%)", opacity: 0.65 }} />
     </div>
   );
 }
